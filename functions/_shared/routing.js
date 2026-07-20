@@ -23,129 +23,73 @@
  * once for the whole project — see README.md.
  */
 
-// PKR market — 9 platforms, brand new deployment (does NOT reuse the old
-// INR chatId/topicId/sheetId values, which belong to a different
-// production Cloudflare Pages project / Telegram bot / KV+R2 namespace).
-// Every chatId/topicId/sheetId below is a placeholder ("") until the real
-// PKR Telegram groups+topics and Google Sheets exist — see the file header
-// comment above for how to obtain each one. Sheet logging simply no-ops
-// (not an error) for any brand/module still left at sheetId: "".
 export const BRANDS = {
   crickex: {
     name: "Crickex",
-    sheetId: "",
+    sheetId: "10vMJWW7XLbvRV47Q_tqqTV_U13oA_3VGpHSo-df9I54",
     telegram: {
-      default: { chatId: "", topicId: null },
-      qa: { chatId: "", topicId: null },
-      account_issue: { chatId: "", topicId: null },
-      risk_issue: { chatId: "", topicId: null },
-      promotion_request: { chatId: "", topicId: null },
-      daily_report: { chatId: "", topicId: null },
-      genie_issue: { chatId: "", topicId: null },
+      default: { chatId: "-1004488354399", topicId: null },
+      qa: { chatId: "-1004488354399", topicId: 3 },
+      account_issue: { chatId: "-1004488354399", topicId: 10 },
+      risk_issue: { chatId: "-1004488354399", topicId: 17 },
+      promotion_request: { chatId: "-1003844665813", topicId: 30 },
+      daily_report: { chatId: "-1004488354399", topicId: 22 },
+      genie_issue: { chatId: "-1004488354399", topicId: 24 },
     },
   },
   betjili: {
     name: "Betjili",
-    sheetId: "",
+    sheetId: "1jEIomHdq9BBiwI8AcpWCB0IJolcHYWw1tlT3DR8WzeQ",
     telegram: {
-      default: { chatId: "", topicId: null },
-      qa: { chatId: "", topicId: null },
-      account_issue: { chatId: "", topicId: null },
-      risk_issue: { chatId: "", topicId: null },
-      promotion_request: { chatId: "", topicId: null },
-      daily_report: { chatId: "", topicId: null },
-      genie_issue: { chatId: "", topicId: null },
+      default: { chatId: "-1004488354399", topicId: null },
+      qa: { chatId: "-1004488354399", topicId: 3 },
+      account_issue: { chatId: "-1004488354399", topicId: 10 },
+      risk_issue: { chatId: "-1004488354399", topicId: 17 },
+      promotion_request: { chatId: "-1003844665813", topicId: 30 },
+      daily_report: { chatId: "-1004488354399", topicId: 22 },
+      genie_issue: { chatId: "-1004488354399", topicId: 24 },
     },
   },
   mostplay: {
     name: "Mostplay",
-    sheetId: "",
+    sheetId: "1Phq6Fsw4ouoJumW2iz54y2YnfQzDp8hBdRL3h-cu5M4",
     telegram: {
-      default: { chatId: "", topicId: null },
-      qa: { chatId: "", topicId: null },
-      account_issue: { chatId: "", topicId: null },
-      risk_issue: { chatId: "", topicId: null },
-      promotion_request: { chatId: "", topicId: null },
-      daily_report: { chatId: "", topicId: null },
-      genie_issue: { chatId: "", topicId: null },
+      default: { chatId: "-1004488354399", topicId: null },
+      qa: { chatId: "-1004488354399", topicId: 3 },
+      account_issue: { chatId: "-1004488354399", topicId: 10 },
+      risk_issue: { chatId: "-1004488354399", topicId: 17 },
+      promotion_request: { chatId: "-1003844665813", topicId: 30 },
+      daily_report: { chatId: "-1004488354399", topicId: 22 },
+      genie_issue: { chatId: "-1004488354399", topicId: 24 },
     },
   },
-  jeetwin: {
-    name: "Jeetwin",
-    sheetId: "",
+  betvisa: {
+    name: "BetVisa",
+    // The long ID in the sheet's URL: https://docs.google.com/spreadsheets/d/<THIS PART>/edit
+    // Leave "" to disable sheet logging entirely for this brand.
+    sheetId: "17wXVfUS8QywtiT8AiHxBr3iycKnWCR5vAJbCcboLJUs",
     telegram: {
-      default: { chatId: "", topicId: null },
-      qa: { chatId: "", topicId: null },
-      account_issue: { chatId: "", topicId: null },
-      risk_issue: { chatId: "", topicId: null },
-      promotion_request: { chatId: "", topicId: null },
-      daily_report: { chatId: "", topicId: null },
-      genie_issue: { chatId: "", topicId: null },
+      // Used when a module has no specific entry below.
+      default: { chatId: "-1004488354399", topicId: null },
+      qa: { chatId: "-1004488354399", topicId: 3 },
+      account_issue: { chatId: "-1004488354399", topicId: 10 },
+      risk_issue: { chatId: "-1004488354399", topicId: 17 },
+      promotion_request: { chatId: "-1003844665813", topicId: 30 },
+      daily_report: { chatId: "-1004488354399", topicId: 22 },
+      genie_issue: { chatId: "-1004488354399", topicId: 24 },
     },
   },
-  sbj66: {
-    name: "Sbj66",
-    sheetId: "",
+  jeetway: {
+    name: "Jeetway",
+    sheetId: "1tQdhnCwSl-ybwlIFGcK2oPVaApnU9vsloHboaFtsb_4",
     telegram: {
-      default: { chatId: "", topicId: null },
-      qa: { chatId: "", topicId: null },
-      account_issue: { chatId: "", topicId: null },
-      risk_issue: { chatId: "", topicId: null },
-      promotion_request: { chatId: "", topicId: null },
-      daily_report: { chatId: "", topicId: null },
-      genie_issue: { chatId: "", topicId: null },
-    },
-  },
-  heybaji: {
-    name: "Heybaji",
-    sheetId: "",
-    telegram: {
-      default: { chatId: "", topicId: null },
-      qa: { chatId: "", topicId: null },
-      account_issue: { chatId: "", topicId: null },
-      risk_issue: { chatId: "", topicId: null },
-      promotion_request: { chatId: "", topicId: null },
-      daily_report: { chatId: "", topicId: null },
-      genie_issue: { chatId: "", topicId: null },
-    },
-  },
-  superbaji: {
-    name: "Superbaji",
-    sheetId: "",
-    telegram: {
-      default: { chatId: "", topicId: null },
-      qa: { chatId: "", topicId: null },
-      account_issue: { chatId: "", topicId: null },
-      risk_issue: { chatId: "", topicId: null },
-      promotion_request: { chatId: "", topicId: null },
-      daily_report: { chatId: "", topicId: null },
-      genie_issue: { chatId: "", topicId: null },
-    },
-  },
-  kv8: {
-    name: "KV8",
-    sheetId: "",
-    telegram: {
-      default: { chatId: "", topicId: null },
-      qa: { chatId: "", topicId: null },
-      account_issue: { chatId: "", topicId: null },
-      risk_issue: { chatId: "", topicId: null },
-      promotion_request: { chatId: "", topicId: null },
-      daily_report: { chatId: "", topicId: null },
-      genie_issue: { chatId: "", topicId: null },
-    },
-  },
-  darazplay: {
-    name: "Darazplay",
-    sheetId: "",
-    telegram: {
-      default: { chatId: "", topicId: null },
-      qa: { chatId: "", topicId: null },
-      account_issue: { chatId: "", topicId: null },
-      risk_issue: { chatId: "", topicId: null },
-      promotion_request: { chatId: "", topicId: null },
-      daily_report: { chatId: "", topicId: null },
-      genie_issue: { chatId: "", topicId: null },
+      default: { chatId: "-1004488354399", topicId: null },
+      qa: { chatId: "-1004488354399", topicId: 3 },
+      account_issue: { chatId: "-1004488354399", topicId: 10 },
+      risk_issue: { chatId: "-1004488354399", topicId: 17 },
+      promotion_request: { chatId: "-1003844665813", topicId: 30 },
+      daily_report: { chatId: "-1004488354399", topicId: 22 },
+      genie_issue: { chatId: "-1004488354399", topicId: 24 },
     },
   },
 };
@@ -218,6 +162,11 @@ export const RISK_ISSUE_FIELD_EMOJI = {
   aadharPan: "🪪",
   cancelType: "📌",
   issueDescription: "📝",
+  bankAccountNo: "🔢",
+  bankAccountHolderName: "🧑",
+  bankIfscCode: "🏷️",
+  bankBranch: "🏢",
+  bankName: "🏦",
 };
 
 /**
@@ -255,18 +204,64 @@ export const ACCOUNT_ISSUE_FIELD_STYLE = {
  * is which column the generate-next-TID button reads (usually same as
  * startColumn, since TID is column A on these sheets).
  */
-// PKR market: the old INR "<brandId>|<promotion>" combinations (BetVisa/
-// Crickex/Betjili/Mostplay/Jeetway Birthday Bonus, Betjili/Mostplay/Jeetway
-// Review Bonus) pointed at real INR production sheets and brand ids that no
-// longer exist in this deployment (jeetway/betvisa were dropped, PKR uses
-// jeetwin/sbj66/heybaji/superbaji/kv8/darazplay instead) — removed rather
-// than left dangling. Add an entry here per PKR brand+promotion combination
-// once each is confirmed, using "<brandId>|<promotion value>" as the key,
-// e.g. "crickex|Birthday Bonus": { sheetId: "...", tab: "...", ... } — see
-// the comment above this block for what each field means. Until an entry
-// exists here, that combination's TID button just shows "not configured
-// yet" and sheet logging is skipped; Telegram still sends normally.
-export const PROMOTION_SHEET_CONFIG = {};
+export const PROMOTION_SHEET_CONFIG = {
+  "betvisa|Birthday Bonus": {
+    sheetId: "1_aLEvpJoVqyFAHMhYfzIQMvAv_TxaLx55MsxLHiby0w",
+    tab: "BV Birthday Bonus",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "promotion", "nid", "tier", "amount", "brand", "pic"],
+  },
+  "crickex|Birthday Bonus": {
+    sheetId: "1dAtM3Q5eSR2lmtlEs33fl1sq5d5H9AC-938_Ky5C9c4",
+    tab: "Birthday Bonus 2026",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brand", "nid", "pic"],
+  },
+  "betjili|Birthday Bonus": {
+    sheetId: "1O6LeDa1Gs7EiAfqGF_lY6hpCieREOzc9L8x33bbBW1Y",
+    tab: "BJ Birthday Bonus",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brand", "nid", "pic"],
+  },
+  "betjili|Review Bonus": {
+    sheetId: "1O6LeDa1Gs7EiAfqGF_lY6hpCieREOzc9L8x33bbBW1Y",
+    tab: "FB Review Bonus",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "username", "date", "amount", "promotion", "brand", "pic"],
+  },
+  "mostplay|Birthday Bonus": {
+    sheetId: "1loAloFiu55xkhIm_77uBvLPPWBX8fw6UbVLcNdXdDx0",
+    tab: "MP Birthday Bonus",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brand", "nid", "pic"],
+  },
+  "mostplay|Facebook Review Free Bonus": {
+    sheetId: "1loAloFiu55xkhIm_77uBvLPPWBX8fw6UbVLcNdXdDx0",
+    tab: "Facebook Review Free Bonus",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "username", "date", "amount", "promotion", "brand", "pic"],
+  },
+  "jeetway|Birthday Bonus": {
+    sheetId: "1ouR19qfDPfr580BjfH52mrTKLUqeq1r_2tdm1ueoi3w",
+    tab: "JW Birthday Bonus",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "promotion", "nid", "tier", "amount", "brand", "pic"],
+  },
+  "jeetway|Review Bonus": {
+    sheetId: "1ouR19qfDPfr580BjfH52mrTKLUqeq1r_2tdm1ueoi3w",
+    tab: "FB Review Bonus",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "username", "date", "amount", "promotion", "brand", "pic"],
+  },
+};
 
 /**
  * Promotion Request only: the Telegram message rows, now the SAME for
@@ -305,13 +300,16 @@ const PROMOTION_ROWS_UNIFIED = [
   { label: "To be added", key: { fixed: "Manually" } },
 ];
 
-// PKR market: same reasoning as PROMOTION_SHEET_CONFIG above — the old
-// INR brand+promotion keys were removed since those brand ids no longer
-// exist here. PROMOTION_ROWS_UNIFIED itself is untouched and ready to
-// reuse — just add "<brandId>|<promotion value>": PROMOTION_ROWS_UNIFIED
-// per PKR combination once confirmed (or a custom row array instead, if a
-// PKR promotion needs a different Telegram message format).
-export const PROMOTION_MESSAGE_TEMPLATE = {};
+export const PROMOTION_MESSAGE_TEMPLATE = {
+  "crickex|Birthday Bonus": PROMOTION_ROWS_UNIFIED,
+  "betjili|Birthday Bonus": PROMOTION_ROWS_UNIFIED,
+  "mostplay|Birthday Bonus": PROMOTION_ROWS_UNIFIED,
+  "betvisa|Birthday Bonus": PROMOTION_ROWS_UNIFIED,
+  "jeetway|Birthday Bonus": PROMOTION_ROWS_UNIFIED,
+  "betjili|Review Bonus": PROMOTION_ROWS_UNIFIED,
+  "mostplay|Facebook Review Free Bonus": PROMOTION_ROWS_UNIFIED,
+  "jeetway|Review Bonus": PROMOTION_ROWS_UNIFIED,
+};
 
 /**
  * Optional per-module Telegram message template — just the field rows, no
@@ -343,6 +341,7 @@ export const MESSAGE_TEMPLATE = {
         { emoji: "👤", label: "PIC", key: "pic" },
       ],
       default: [
+        { emoji: "🎮", label: "Brand / Platform", key: "brand" },
         { emoji: "📅", label: "Date", key: "date" },
         { emoji: "🆔", label: "UID", key: "uid" },
         { emoji: "📱", label: "Number", key: "number" },

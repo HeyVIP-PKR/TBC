@@ -298,19 +298,87 @@ beyond the one reference tab. Unchanged this session.
 
 ## Account system
 
+### 🔒 Security fix — plaintext password in localStorage replaced with
+signed session tokens (2026-07-20)
+
+**Incident:** a coworker (IT) found the login password in plaintext via
+browser DevTools (F12 → Application → Local Storage) within about a
+minute of looking. Root cause: the original design (see the account
+locking section below, and the old DESIGN NOTE this replaced) stored the
+agent's actual password in `localStorage` and re-sent it on every
+request via `X-Agent-User`/`X-Agent-Pass` headers — this was independent
+of server-side hash strength; the password itself sat in the clear in
+the browser, readable by anyone with access to an already-logged-in
+device.
+
+**Fix — signed session tokens, ported from a same-day INR fix:**
+- Login now issues a signed token (HMAC-SHA256 over
+  `{username, tokenVersion, iat, exp}`, signed with a new Cloudflare
+  secret `SESSION_TOKEN_SECRET`) instead of the account handing back
+  anything password-shaped — see `issueToken()`/`verifyToken()` in
+  `functions/_shared/accounts.js`.
+- The browser stores ONLY this token (`localStorage`'s `agentAuth.token`,
+  never `.password` again) and sends it as `X-Agent-Token` on every
+  request instead of `X-Agent-User`/`X-Agent-Pass`.
+- Every account record gained a `tokenVersion` field, bumped by
+  `saveAccount()` on password change and by `setAccountLocked()` on both
+  lock AND unlock — `verifyRequest()` rejects any token whose embedded
+  version doesn't match the account's current one, so an old token
+  becomes worthless the instant a password changes or the account gets
+  locked/unlocked, same guarantee the old plaintext-resend design had.
+- Tokens hard-expire after 12h regardless (`TOKEN_TTL_MS`), independent
+  of the client-side 2h idle timeout already in `authguard.js`.
+- Self-service password change (`account/change-password.js`) issues a
+  fresh token in the same response, so changing your own password
+  doesn't immediately log you out (the change itself just bumped
+  `tokenVersion`, which would otherwise invalidate the very token the
+  request came in on).
+
+**Files touched** (ported file-for-file from an INR-side fix, diffed
+line-by-line against this PKR fork before merging — no PKR-specific
+divergence was lost): `functions/_shared/accounts.js`,
+`functions/api/auth/login.js`, `functions/api/account/change-password.js`,
+`public/assets/authguard.js`, `public/login.html`,
+`public/accounts-admin.html`, `public/index.html`, plus doc-comment-only
+touches (no logic change) in `functions/api/threads.js` and
+`functions/api/threads/[id].js`.
+
+**Before deploying this: add the new secret.** Cloudflare project →
+Settings → Environment variables → Production → add
+`SESSION_TOKEN_SECRET` (any long random string, type Secret). Without
+this, `issueToken()`/`verifyToken()` throw/fail closed rather than
+silently signing with a guessable key — meaning login will outright fail
+until this secret exists, not silently misbehave.
+
+**After deploying:** every already-logged-in browser gets logged out
+once (old `agentAuth.password` in localStorage doesn't map to anything
+this version reads) — expected, not a bug, no account data is affected,
+just log back in once.
+
+**What this fix does NOT cover** (still needs separate handling, a token
+fix can't substitute for it): the actual password the coworker already
+saw needs changing (same as any other exposed credential), and it's
+worth treating every other secret that could plausibly have been visible
+on that same device/session as exposed too and rotating it —
+`TELEGRAM_BOT_TOKEN`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`,
+`TELEGRAM_WEBHOOK_SECRET`, `BRAND_EDIT_PASSWORD`. None of those were
+touched by this fix; it only closes the specific plaintext-in-localStorage
+hole.
+
 ### 🆕 Account locking — manual + two auto-lock triggers (built this
 session)
 
 A `locked` boolean (plus `lockedAt`, `lockedReason`) now lives on every
 account record. A locked account is rejected everywhere — login
 (`api/auth/login.js`) AND every already-open browser session on every
-subsequent request (`verifyRequest()` in `_shared/accounts.js`, since
-this system has no session/token — see the design note at the top of
-that file — a browser that was logged in before the lock would otherwise
-keep working via its cached credentials). The locked check runs BEFORE
-the password hash in both places, which also saves real CPU time on
-every request against a known-locked account (see the PBKDF2/CPU-limit
-writeup above).
+subsequent request (`verifyRequest()` in `_shared/accounts.js` — since
+locking bumps `tokenVersion`, see the session-token security fix above,
+a browser holding a token issued before the lock stops working on its
+very next request even though the token itself hasn't expired). The
+locked check runs BEFORE the tokenVersion/signature checks in
+`verifyRequest()`, which also saves real CPU time on every request
+against a known-locked account (see the PBKDF2/CPU-limit writeup above,
+which is about login's own hash check, a separate cost from this).
 
 **Three ways an account gets locked:**
 1. **Manual** — SuperAdmin only (no delegation to Admin/Senior, unlike
@@ -760,6 +828,16 @@ of the current 6-second poll).
 ---
 
 ## Still pending / needs input before it can be finished (PKR)
+
+0. **Session token security fix not yet deployed.** `SESSION_TOKEN_SECRET`
+   needs adding to Cloudflare Production secrets before the next deploy
+   (login fails without it — see the security fix writeup under "Account
+   system" above), and the password a coworker saw in plaintext (plus,
+   out of caution, `TELEGRAM_BOT_TOKEN`/
+   `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`/`TELEGRAM_WEBHOOK_SECRET`/
+   `BRAND_EDIT_PASSWORD`) still need rotating — the token fix stops
+   passwords from leaking THIS way going forward, it doesn't undo
+   exposure that already happened.
 
 **Done so far** (moved here from the old checklist so this section stays
 an accurate snapshot, not a stale plan): GitHub repo created and code

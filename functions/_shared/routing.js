@@ -231,7 +231,7 @@ export const ACCOUNT_ISSUE_FIELD_STYLE = {
   registerWrongNumber: { emoji: "❌", label: "Wrong Number" },
   playerCorrectNumber: { emoji: "✅", label: "Correct Number" },
   addNumber: { emoji: "➕" },
-  nid: { emoji: "🆔" }, // "Aadhar-Pan Card Number" field, used for Add Mobile Number Verify
+  nid: { emoji: "🆔" }, // "CNIC Card Number" field (key kept as "nid" internally), used for Add Mobile Number Verify
   removeNumber: { emoji: "➖" },
   gmail: { emoji: "📧" },
   removeGmail: { emoji: "🗑" },

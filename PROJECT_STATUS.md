@@ -761,43 +761,77 @@ of the current 6-second poll).
 
 ## Still pending / needs input before it can be finished (PKR)
 
-1. **Sign up for the 4 accounts** — GitHub, Cloudflare, Google Cloud
-   (service account for Sheets), Telegram bot via @BotFather. GitHub org
-   (`HeyVIP-PKR`) and repo (`TBC`) are done; the rest are not started.
-2. **Upload this code to `HeyVIP-PKR/TBC`**, then create the Cloudflare
-   Pages project connected to it.
-3. **Create a new KV namespace and R2 bucket** under the PKR Cloudflare
-   account, fill their real id/name into `wrangler.toml` (currently blank
-   placeholders — see top section), re-upload.
-4. **Set Cloudflare secrets**: `TELEGRAM_BOT_TOKEN`,
-   `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`,
-   `BRAND_EDIT_PASSWORD` (bootstrap-only, see Account system section
-   below), `TELEGRAM_WEBHOOK_SECRET` (self-chosen, alphanumeric only).
-5. **For each of the 9 brands**: create/get the Telegram group + topics,
-   get chatId/topicId (see routing.js file header for how), fill into
-   `routing.js`; create/duplicate a Google Sheet, share it with the
-   service account email, fill its `sheetId` into `routing.js`.
-6. **Promotion Request module** — needs real PKR business rules (which
-   brands use it, promotion names, fixed amounts, tier/deposit tables) —
-   see top section for exactly what's still stale/INR-specific in
-   `schemas.js`. `routing.js`'s `PROMOTION_SHEET_CONFIG`/
-   `PROMOTION_MESSAGE_TEMPLATE` are empty and ready for new entries once
-   the above is known.
-7. **Brand logos** — no image files yet for any of the 9 PKR brands;
-   optional, falls back gracefully to initials (see top section).
-8. **Promo Code Search** — same unresolved items as the INR build this was
+**Done so far** (moved here from the old checklist so this section stays
+an accurate snapshot, not a stale plan): GitHub repo created and code
+uploaded (`HeyVIP-PKR/TBC`); Cloudflare Pages project deployed and live
+(`pkrcsteam-tbc.pages.dev`, deploys green); R2 bucket
+(`pkr-issuescreenshot`) and KV namespace (`pkr-ticket-threads`, id
+`c8ca68f7781a4f1b88d0997af023aec7`) created and wired into
+`wrangler.toml`; Cloudflare secrets set (`TELEGRAM_BOT_TOKEN`,
+`GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`,
+`BRAND_EDIT_PASSWORD`, `TELEGRAM_WEBHOOK_SECRET`); Google Cloud service
+account created (`pkr-tbc@tonal-unity-503006-u6.iam.gserviceaccount.com`);
+first superadmin account bootstrapped and login confirmed working;
+Telegram webhook set (`setWebhook` returned `ok:true`); TG Group/Channel
+admin panel confirmed showing all 9 PKR brands correctly. Various
+INR→PKR content swaps done: topbar/title wordmarks, `CURRENCY_LABEL`
+(→"PKR" suffix on brand names in Telegram messages), QA module's
+`default` template gained a Brand/Platform row, Aadhar/Pan Card fields
+relabeled to CNIC Card Number. KV `list()` daily-quota fix ported
+(2-minute server cache + 800/day hard cap in `threads.js`, sidebar
+polling split to 6s/30s in `threads.html`).
+
+1. **Deploy the standalone `cron-worker`** — a separate Cloudflare Workers
+   project (not part of this Pages project/zip), ported from the INR
+   build's `list()`-quota fix. Refreshes the TG Reply Threads sidebar
+   cache every 2 minutes on its own schedule instead of relying on a page
+   request to notice the cache is stale. `wrangler.toml` inside it is
+   already pointed at PKR's real KV namespace
+   (`c8ca68f7781a4f1b88d0997af023aec7`) — see its own `README.md` for the
+   one-time web-UI deploy steps (new Worker, paste in `worker.js`, bind
+   `THREADS_KV`, add a `*/2 * * * *` Cron Trigger). Not deploying this
+   isn't a functional blocker — `threads.js`'s own request-triggered
+   fallback (2-minute throttle + 800/day hard cap) keeps the sidebar
+   working either way — but leaving it undeployed means the sidebar
+   relies on that fallback alone rather than the cleaner, gap-free
+   dedicated schedule.
+2. **For each of the 9 brands, get real Telegram chatId/topicId and fill
+   them into the TG Group/Channel admin panel** (`index.html` → Account
+   Management → TG Group Channel — changes apply immediately, no redeploy
+   needed, so `routing.js`'s own DEFAULT values can stay blank). None of
+   the 9 brands have real values set yet — one attempted chatId turned
+   out to belong to the INR production group by mistake and was correctly
+   NOT used. Get chatId via the bot's `getUpdates` API after posting in
+   each group/topic (see `routing.js` file header for the exact method).
+3. **For each brand that needs sheet logging, create/duplicate a Google
+   Sheet, share it with the service account email
+   (`pkr-tbc@tonal-unity-503006-u6.iam.gserviceaccount.com`, Editor
+   access), and fill its `sheetId` into `routing.js`.** Currently all 9
+   brands have `sheetId: ""` — Telegram sends fine, sheet logging just
+   no-ops until this is done.
+4. **Promotion Request module** — still needs real PKR business rules
+   (which brands use it, promotion names, fixed amounts, tier/deposit
+   tables) — `schemas.js`'s `promotion_request` module fields
+   (`fixedAmounts`, `optionsByBrand`, Tier Level/Number-of-Deposits
+   selectors) still reference the old INR brands/amounts untouched, and
+   `routing.js`'s `PROMOTION_SHEET_CONFIG`/`PROMOTION_MESSAGE_TEMPLATE`
+   are empty and ready for new entries once the above is known.
+5. **Brand logos** — Crickex/Betjili/Mostplay reuse the INR PNGs
+   (confirmed same brand); the other 6 (Jeetwin/Sbj66/Heybaji/Superbaji/
+   KV8/Darazplay) have no logo file yet — optional, falls back gracefully
+   to initials (see top section).
+6. **Promo Code Search** — same unresolved items as the INR build this was
    forked from: "Start On" column has no source data (always "—"); "all 11
    tabs share the same A–N layout" is unverified beyond one reference tab;
    also worth confirming with the business owner that the existing
    `"Retention Team (PKR)"` tab is the one this dashboard should search.
-9. **`GET /api/screenshot/<key>` and `GET /api/brand-config`** — no login
+7. **`GET /api/screenshot/<key>` and `GET /api/brand-config`** — no login
    gate, pre-existing from the INR build, flagged for awareness only.
-10. **Not yet live-tested** — none of this has run against a real
-    Cloudflare deployment yet (nothing is deployed). Everything below this
-    point in the document describes the INR build's architecture and
-    history, which this PKR fork inherited unchanged — worth a fresh
-    end-to-end test pass once PKR is actually deployed, same as was done
-    for INR.
+8. **Not yet live-tested end-to-end** — login works, but submit → Telegram
+   → sheet logging → reply sync hasn't been tested against real data yet
+   since no brand has real chatId/sheetId filled in. Worth a full pass
+   once at least one brand (e.g. Crickex) has real values, before rolling
+   out to agents.
 
 ## Recurring non-code gotcha (still true)
 GitHub web upload can cause duplicate files or misplaced content if the

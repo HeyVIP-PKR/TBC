@@ -1,14 +1,20 @@
-name = "telegram-issue-hub"
+name = "pkr-issue-hub"
 pages_build_output_dir = "public"
 
+# PKR market — brand new bucket, must NOT reuse the INR build's
+# "inr-issuescreenshot" bucket (would mix PKR and INR ticket screenshots
+# together). Created under the HeyVIP-PKR Cloudflare account.
 [[r2_buckets]]
 binding = "SCREENSHOTS_BUCKET"
-bucket_name = "inr-issuescreenshot"
+bucket_name = "pkr-issuescreenshot"
 
-# TG Reply Threads feature — bound to the "inr-ticket-threads" KV namespace.
+# TG Reply Threads feature. PKR market — brand new namespace, must NOT
+# reuse the INR build's "inr-ticket-threads" namespace (would mix PKR and
+# INR tickets/accounts/routing overrides together in one KV store). Created
+# under the HeyVIP-PKR Cloudflare account.
 [[kv_namespaces]]
 binding = "THREADS_KV"
-id = "4821238464004b8289e4ded5a467d582"
+id = "c8ca68f7781a4f1b88d0997af023aec7"
 
 [vars]
 # Non-secret local defaults for `wrangler pages dev`. Real deployments set

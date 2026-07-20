@@ -12,8 +12,12 @@ const BRANDS = [
   { id: "crickex", name: "Crickex" },
   { id: "betjili", name: "Betjili" },
   { id: "mostplay", name: "Mostplay" },
-  { id: "betvisa", name: "BetVisa" },
-  { id: "jeetway", name: "Jeetway" },
+  { id: "jeetwin", name: "Jeetwin" },
+  { id: "sbj66", name: "Sbj66" },
+  { id: "heybaji", name: "Heybaji" },
+  { id: "superbaji", name: "Superbaji" },
+  { id: "kv8", name: "KV8" },
+  { id: "darazplay", name: "Darazplay" },
 ];
 
 // Every module gets the same attachment slot (screenshots/PDFs, shown as a
@@ -236,31 +240,7 @@ const MODULES = [
       },
       {
         key: "issueDescription", label: "Issue Description", type: "textarea", required: false,
-        showIf: { field: "issueType", oneOf: ["Others Bonus Related Issue", "VIP Level Update Issue", "KYC Issues", "Remove Back Account", "Others Issues"] },
-      },
-      {
-        key: "bankAccountNo", label: "Account NO", type: "text", required: true,
-        showIf: { field: "issueType", oneOf: ["Verify Bank Detail"] },
-      },
-      {
-        key: "bankAccountHolderName", label: "Account Holder Name", type: "text", required: true,
-        showIf: { field: "issueType", oneOf: ["Verify Bank Detail"] },
-      },
-      {
-        key: "bankIfscCode", label: "IFSC Code", type: "text", required: true,
-        showIf: { field: "issueType", oneOf: ["Verify Bank Detail"] },
-      },
-      {
-        key: "bankBranch", label: "Branch", type: "text", required: true,
-        showIf: { field: "issueType", oneOf: ["Verify Bank Detail"] },
-      },
-      {
-        key: "bankName", label: "Bank Name", type: "text", required: true,
-        showIf: { field: "issueType", oneOf: ["Verify Bank Detail"] },
-      },
-      {
-        key: "remark", label: "Remark", type: "textarea", required: false,
-        showIf: { field: "issueType", oneOf: ["Verify Bank Detail"] },
+        showIf: { field: "issueType", oneOf: ["Others Bonus Related Issue", "VIP Level Update Issue", "KYC Issues", "Remove Back Account", "Verify Bank Detail", "Others Issues"] },
       },
     ],
   },

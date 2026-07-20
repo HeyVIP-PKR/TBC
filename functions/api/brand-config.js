@@ -25,12 +25,21 @@
  */
 import { verifyRequest } from "../_shared/accounts.js";
 
+// PKR market: 3 of the 9 brands (Crickex/Betjili/Mostplay) are the same
+// actual brand/logo as the INR build this was forked from — confirmed by
+// the business owner — so their existing PNGs were kept and re-mapped
+// here. The other 6 (jeetwin/sbj66/heybaji/superbaji/kv8/darazplay) have
+// no logo file yet; the old betvisa.png/jeetway.png files were deleted
+// entirely since those brands don't exist in this deployment. readConfig()
+// below already handles a brand with no logoUrl gracefully (falls back to
+// initials + a color), so the missing 6 aren't blocking anything. To add a
+// real logo for one of them: drop the image at
+// public/assets/img/brands/<brandId>.png and add a line here, e.g.
+// jeetwin: "/assets/img/brands/jeetwin.png".
 const DEFAULT_LOGOS = {
   crickex: "/assets/img/brands/crickex.png",
   betjili: "/assets/img/brands/betjili.png",
   mostplay: "/assets/img/brands/mostplay.png",
-  betvisa: "/assets/img/brands/betvisa.png",
-  jeetway: "/assets/img/brands/jeetway.png",
 };
 
 export async function onRequestGet(context) {

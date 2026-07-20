@@ -20,10 +20,20 @@ touched or is affected by anything below.
   `functions/` folders themselves into "Add file → Upload files", not
   their contents — wrong drag depth has repeatedly caused duplicate/
   misplaced files on the INR project, watch for the same here).
-- **Cloudflare:** not yet set up — no Pages project, no KV namespace, no R2
-  bucket, no secrets configured yet. See the account-setup checklist from
-  the conversation this doc came from for the full signup steps
-  (GitHub → Cloudflare → Google Cloud service account → Telegram bot).
+- **Cloudflare:** Pages project created (`tbc`, connected to `HeyVIP-PKR/TBC`,
+  build output directory set to `public`). R2 bucket `pkr-issuescreenshot`
+  and KV namespace `pkr-ticket-threads` (id
+  `c8ca68f7781a4f1b88d0997af023aec7`) both created and filled into
+  `wrangler.toml` — no longer blank placeholders. First deploy attempt
+  failed as expected (before these existed); next push to GitHub with the
+  updated `wrangler.toml` should deploy successfully. Secrets
+  (`TELEGRAM_BOT_TOKEN`, `GOOGLE_SERVICE_ACCOUNT_EMAIL`,
+  `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`, `BRAND_EDIT_PASSWORD`,
+  `TELEGRAM_WEBHOOK_SECRET`) not set yet.
+- **Google Cloud:** project + service account created
+  (`pkr-tbc@tonal-unity-503006-u6.iam.gserviceaccount.com`), JSON key not
+  yet confirmed downloaded — once it is, its `client_email`/`private_key`
+  go into the two Cloudflare secrets above.
 - **Brands:** the 9 PKR platforms are in place as placeholders in both
   `public/assets/schemas.js` and `functions/_shared/routing.js`:
   Crickex, Betjili, Mostplay, Jeetwin, Sbj66, Heybaji, Superbaji, KV8,
@@ -96,14 +106,10 @@ Channel"). To be deployed on Cloudflare Pages (not deployed yet).
   for **Production** bindings — the dashboard's "+ Add" button for
   Production gets disabled (Preview still works via dashboard). To add/change
   a binding, edit `wrangler.toml` and re-upload; Cloudflare auto-applies it
-  to Production on the next deploy. **Before first deploy:** `wrangler.toml`
-  has its `bucket_name` and KV `id` deliberately left blank (was previously
-  the INR build's real bucket/namespace, cleared out so PKR can't
-  accidentally write into INR's data) — create a new R2 bucket and a new
-  KV namespace under this PKR Cloudflare account first, then fill their
-  real names/ids into `wrangler.toml` before deploying, or the deploy will
-  fail on the empty binding (a deploy failure here is expected and safe —
-  it means the placeholder wasn't filled in yet, not a bug).
+  to Production on the next deploy. `wrangler.toml`'s `bucket_name` and KV
+  `id` are now filled in with the real PKR R2 bucket / KV namespace
+  (created under the `HeyVIP-PKR` Cloudflare account, separate from the
+  INR build's) — no longer blank placeholders, ready for the next deploy.
 
 
 ## Architecture

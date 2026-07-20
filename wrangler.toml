@@ -3,20 +3,18 @@ pages_build_output_dir = "public"
 
 # PKR market — brand new bucket, must NOT reuse the INR build's
 # "inr-issuescreenshot" bucket (would mix PKR and INR ticket screenshots
-# together). Create a new R2 bucket under this Cloudflare account first
-# (R2 → Create bucket), then put its real name here before first deploy.
+# together). Created under the HeyVIP-PKR Cloudflare account.
 [[r2_buckets]]
 binding = "SCREENSHOTS_BUCKET"
-bucket_name = ""
+bucket_name = "pkr-issuescreenshot"
 
 # TG Reply Threads feature. PKR market — brand new namespace, must NOT
 # reuse the INR build's "inr-ticket-threads" namespace (would mix PKR and
-# INR tickets/accounts/routing overrides together in one KV store). Create
-# a new KV namespace under this Cloudflare account first (Workers & Pages
-# → KV → Create), then put its real namespace id here before first deploy.
+# INR tickets/accounts/routing overrides together in one KV store). Created
+# under the HeyVIP-PKR Cloudflare account.
 [[kv_namespaces]]
 binding = "THREADS_KV"
-id = ""
+id = "c8ca68f7781a4f1b88d0997af023aec7"
 
 [vars]
 # Non-secret local defaults for `wrangler pages dev`. Real deployments set

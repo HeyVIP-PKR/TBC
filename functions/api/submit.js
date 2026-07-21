@@ -311,6 +311,14 @@ function buildMessageFromTemplate({ template, meta, brandName, fieldMap, reporte
       if (!value) return; // skip entirely — no placeholder line for optional raw notes
       lines.push(`${item.emoji} ${escapeHtml(value)}`);
     } else {
+      // Opt-in per-row flag — skip a normally-labeled row entirely (no
+      // "Label: -" / "Label: undefined" line, and no blank line for its
+      // slot either) when there's nothing to show. Off by default so
+      // templates that WANT an explicit placeholder for missing fields
+      // (e.g. daily_report's `emptyPlaceholder: "Nil"`) keep working
+      // exactly as before — this only changes behavior for rows that
+      // explicitly opt in.
+      if (item.skipIfEmpty && !value) return;
       lines.push(`${item.emoji} <b>${escapeHtml(item.label)}:</b> ${escapeHtml(value || emptyPlaceholder)}`);
     }
     if (spacing === "loose" && i < rows.length - 1 && !item.tight) lines.push("");

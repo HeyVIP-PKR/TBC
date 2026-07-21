@@ -365,7 +365,7 @@ export const MESSAGE_TEMPLATE = {
           { emoji: "👤", label: "Username", key: "uid", tight: true },
           { emoji: "🎁", label: "Bonus Code", key: "bonusCode", tight: true },
           { emoji: "📌", label: "Cancel Type", key: "cancelType" },
-          { emoji: "📝", label: "Remark", key: "remark" },
+          { emoji: "📝", label: "Remark", key: "remark", skipIfEmpty: true },
           { emoji: "💬", key: "autoRemark", raw: true },
           { emoji: "👷", label: "PIC", key: "pic" },
         ],

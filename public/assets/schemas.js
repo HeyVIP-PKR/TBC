@@ -253,13 +253,37 @@ const MODULES = [
     description: "Bonus request",
     reporterLabel: "Processed by",
     attachments: DEFAULT_ATTACHMENTS,
-    // Brand+Promotion combos with a single fixed amount (no Tier/Deposits
-    // selector needed) — Amount auto-locks to this the moment both are
-    // picked. Keyed by "<brandId>|<promotion value>".
+    // Brand+Promotion combos with a single fixed amount (no Tier/Deposits/
+    // Rank selector needed) — Amount auto-locks to this the moment both
+    // Brand and Promotion are picked. Keyed by "<brandId>|<promotion value>".
+    // Confirmed with the business owner this session (screenshot of the
+    // real reference Google Sheet + a full brand-by-brand rules list) —
+    // see PROMOTION_SHEET_CONFIG in functions/_shared/routing.js for the
+    // matching per-combo Sheet/tab this writes into.
+    //
+    // Not every combo below is a flat number — 3 of them (Betjili/Mostplay
+    // Birthday Bonus, Jeetwin Birthday Bonus, Darazplay Birthday Bonus)
+    // are tiered instead, handled by the "deposits"/"tier"/"playerRank"
+    // select fields further down (each has its own per-brand amount table
+    // and auto-fills Amount the same way once picked). SBJ66's "Download
+    // SBJ66 APP & Claim Cash" was given with no amount at all — left out
+    // of this table on purpose, so Amount just stays a normal editable
+    // field for that one combo (the agent types it in manually).
     fixedAmounts: {
       "crickex|Birthday Bonus": 1000,
-      "betjili|Review Bonus": 150,
+      "betjili|Facebook Review Free Bonus": 200,
+      "betjili|Rs 500 Free Cash On App Download-PKR": 500,
       "mostplay|Facebook Review Free Bonus": 200,
+      "mostplay|Download & Claim": 200,
+      "jeetwin|Download JeetWin APP & Claim Cash": 300,
+      "heybaji|Birthday Bonus": 1000,
+      "heybaji|Download HeyBaji APP & Claim Cash": 299,
+      "superbaji|Birthday Bonus": 2000,
+      "superbaji|Download SuberBaji APP & Claim Cash": 200,
+      "sbj66|Birthday Bonus": 2000,
+      "kv8|Birthday Bonus": 1500,
+      "kv8|Download KV8 APP & Claim 199 Cash": 199,
+      "darazplay|Rs.200 Download DarazPlay App": 200,
     },
     fields: [
       {
@@ -268,63 +292,40 @@ const MODULES = [
         // Brands/promotions not listed here yet just show no options until added.
         optionsByBrand: {
           crickex: ["Birthday Bonus"],
-          betjili: ["Birthday Bonus", "Review Bonus"],
-          mostplay: ["Birthday Bonus", "Facebook Review Free Bonus"],
-          betvisa: ["Birthday Bonus"],
-          jeetway: ["Birthday Bonus", "Review Bonus"],
+          betjili: ["Birthday Bonus", "Facebook Review Free Bonus", "Rs 500 Free Cash On App Download-PKR"],
+          mostplay: ["Birthday Bonus", "Facebook Review Free Bonus", "Download & Claim"],
+          jeetwin: ["Birthday Bonus", "Download JeetWin APP & Claim Cash"],
+          heybaji: ["Birthday Bonus", "Download HeyBaji APP & Claim Cash"],
+          superbaji: ["Birthday Bonus", "Download SuberBaji APP & Claim Cash"],
+          sbj66: ["Birthday Bonus", "Download SBJ66 APP & Claim Cash"],
+          kv8: ["Birthday Bonus", "Download KV8 APP & Claim 199 Cash"],
+          darazplay: ["Birthday Bonus", "Rs.200 Download DarazPlay App"],
         },
       },
       { key: "date", label: "Date", type: "date", required: true, defaultToday: true },
       { key: "username", label: "Username", type: "text", required: true, placeholder: "Player username..." },
       {
-        key: "tid", label: "TID", type: "text", required: true, placeholder: "e.g. BVXXXBB1020",
+        key: "tid", label: "TID", type: "text", required: true, placeholder: "e.g. CXPKRBD0029",
         generate: true, // shows a button that fetches the next TID from the sheet
       },
       {
-        key: "nid", label: "NID No", type: "text", required: false,
-        showIf: { field: "promotion", oneOf: ["Birthday Bonus"] },
-      },
-      {
-        key: "tier", label: "Tier Level", type: "select", required: false,
-        showIf: [
-          { field: "promotion", oneOf: ["Birthday Bonus"] },
-          { field: "brand", oneOf: ["betvisa", "jeetway"] },
-        ],
-        // Selecting a tier auto-fills + locks the Amount field below.
-        autoFillsInto: "amount",
-        optionsByBrand: {
-          betvisa: [
-            { value: "Bronze", amount: 300 },
-            { value: "Silver", amount: 1000 },
-            { value: "Gold", amount: 2000 },
-            { value: "Platinum", amount: 3000 },
-            { value: "Diamond", amount: 4000 },
-            { value: "Legend", amount: 5000 },
-          ],
-          jeetway: [
-            { value: "Silver", amount: 1000 },
-            { value: "Gold", amount: 2000 },
-            { value: "Platinum", amount: 3000 },
-            { value: "Diamond", amount: 4000 },
-            { value: "Legend", amount: 5000 },
-          ],
-        },
-      },
-      {
+        // Betjili's and Mostplay's Birthday Bonus both use a "Number of
+        // Deposits" tier, but with two DIFFERENT amount tables — same
+        // field, brand-specific options (optionsByBrand), same pattern
+        // "promotion" itself uses above.
         key: "deposits", label: "Number of Deposits", type: "select", required: false,
         showIf: [
           { field: "promotion", oneOf: ["Birthday Bonus"] },
           { field: "brand", oneOf: ["betjili", "mostplay"] },
         ],
-        // Selecting a deposit count auto-fills + locks the Amount field below.
         autoFillsInto: "amount",
         optionsByBrand: {
           betjili: [
-            { value: "10 Deposits", amount: 1000 },
-            { value: "20 Deposits", amount: 2000 },
-            { value: "30 Deposits", amount: 3000 },
-            { value: "40 Deposits", amount: 4000 },
-            { value: "50 Deposits", amount: 5000 },
+            { value: "10 Deposits", amount: 3000 },
+            { value: "20 Deposits", amount: 6000 },
+            { value: "30 Deposits", amount: 9000 },
+            { value: "40 Deposits", amount: 12000 },
+            { value: "50 Deposits", amount: 15000 },
           ],
           mostplay: [
             { value: "10 Deposits", amount: 1000 },
@@ -332,6 +333,40 @@ const MODULES = [
             { value: "30 Deposits", amount: 2000 },
           ],
         },
+      },
+      {
+        // Jeetwin-only tier selector for its Birthday Bonus.
+        key: "tier", label: "Tier Level", type: "select", required: false,
+        showIf: [
+          { field: "promotion", oneOf: ["Birthday Bonus"] },
+          { field: "brand", oneOf: ["jeetwin"] },
+        ],
+        autoFillsInto: "amount",
+        options: [
+          { value: "Bronze", amount: 1000 },
+          { value: "Silver", amount: 1000 },
+          { value: "Gold", amount: 2000 },
+          { value: "Platinum", amount: 3000 },
+          { value: "Diamond", amount: 4000 },
+          { value: "Legend", amount: 5000 },
+        ],
+      },
+      {
+        // Darazplay-only rank selector for its Birthday Bonus — same
+        // auto-fill mechanism as Tier Level/Number of Deposits above,
+        // just a different field name matching what Darazplay actually
+        // calls these tiers.
+        key: "playerRank", label: "Player Rank", type: "select", required: false,
+        showIf: [
+          { field: "promotion", oneOf: ["Birthday Bonus"] },
+          { field: "brand", oneOf: ["darazplay"] },
+        ],
+        autoFillsInto: "amount",
+        options: [
+          { value: "Beginner/Player", amount: 1000 },
+          { value: "Pro-Player/Expert/Master", amount: 1500 },
+          { value: "Above Grand master", amount: 2500 },
+        ],
       },
       { key: "amount", label: "Amount", type: "number", required: true, placeholder: "e.g. 200.00" },
     ],

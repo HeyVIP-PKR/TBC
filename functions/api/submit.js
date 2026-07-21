@@ -237,6 +237,15 @@ function resolveColumnValues(columns, { fieldMap, brand, reporter, screenshotLin
     if (col === null) return "-";
     if (typeof col === "string") {
       if (col === "brand") return brand.name || "-";
+      // Promotion Request's own reference sheet format (confirmed with the
+      // business owner via screenshot) wants "<Brand> PKR" in its Platform
+      // column — unlike every other module's Sheet, which intentionally
+      // keeps the plain brand name (see the CURRENCY_LABEL note near the
+      // top of this file: that "PKR" suffix rule was for Telegram message
+      // rows specifically, NOT Sheet columns, in general). This is an
+      // opt-in key, only used where a sheet actually wants that suffix —
+      // it doesn't change the plain "brand" behavior above for anyone else.
+      if (col === "brandCurrency") return brandCurrencyLabel(brand.name) || "-";
       if (col === "pic") return reporter || "-";
       if (col === "screenshotLink") return (screenshotLink || attachmentLinks.join(", ")) || "-";
       if (col === "dateFormatted") return formatDateDDMMYYYY(fieldMap.reportDate || fieldMap.date) || "-";

@@ -255,18 +255,151 @@ export const ACCOUNT_ISSUE_FIELD_STYLE = {
  * is which column the generate-next-TID button reads (usually same as
  * startColumn, since TID is column A on these sheets).
  */
-// PKR market: the old INR "<brandId>|<promotion>" combinations (BetVisa/
-// Crickex/Betjili/Mostplay/Jeetway Birthday Bonus, Betjili/Mostplay/Jeetway
-// Review Bonus) pointed at real INR production sheets and brand ids that no
-// longer exist in this deployment (jeetway/betvisa were dropped, PKR uses
-// jeetwin/sbj66/heybaji/superbaji/kv8/darazplay instead) — removed rather
-// than left dangling. Add an entry here per PKR brand+promotion combination
-// once each is confirmed, using "<brandId>|<promotion value>" as the key,
-// e.g. "crickex|Birthday Bonus": { sheetId: "...", tab: "...", ... } — see
-// the comment above this block for what each field means. Until an entry
-// exists here, that combination's TID button just shows "not configured
-// yet" and sheet logging is skipped; Telegram still sends normally.
-export const PROMOTION_SHEET_CONFIG = {};
+// PKR market: 19 confirmed brand+promotion combinations, filled in this
+// session from the business owner's reference sheet screenshot (column
+// order: TID, Date, Username, Amount, Remarks, Platform, PIC — all
+// starting at column A, all sheets one tab per promotion). "Remarks"
+// holds the promotion name itself (the "promotion" field's value, e.g.
+// "Birthday Bonus"), not a free-text note — that's what the reference
+// sheet showed. "Platform" uses "brandCurrency" (not plain "brand") to
+// get the confirmed "<Brand> PKR" format in that column, matching the
+// screenshot exactly (see resolveColumnValues in submit.js for what that
+// key does and how it differs from plain "brand").
+export const PROMOTION_SHEET_CONFIG = {
+  "crickex|Birthday Bonus": {
+    sheetId: "1DyPqvlNWlSKBwNmw84hK8jNcSpFtyTSI421DSNc6r68",
+    tab: "Birthday Bonus",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
+  },
+  "betjili|Birthday Bonus": {
+    sheetId: "1t72vFMdTYosUChQtmtz_MUkqNRqt20MBTDYqI5HSsuE",
+    tab: "Birthday Bonus",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
+  },
+  "betjili|Facebook Review Free Bonus": {
+    sheetId: "1t72vFMdTYosUChQtmtz_MUkqNRqt20MBTDYqI5HSsuE",
+    tab: "Facebook Review Free Bonus",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
+  },
+  "betjili|Rs 500 Free Cash On App Download-PKR": {
+    sheetId: "1t72vFMdTYosUChQtmtz_MUkqNRqt20MBTDYqI5HSsuE",
+    tab: "Download & Claim",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
+  },
+  "mostplay|Birthday Bonus": {
+    sheetId: "11UkGw0n1k7WlPCxsI6F4edBNWgvSyUKEpEGVuGmVvck",
+    tab: "Birthday Bonus",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
+  },
+  "mostplay|Facebook Review Free Bonus": {
+    sheetId: "11UkGw0n1k7WlPCxsI6F4edBNWgvSyUKEpEGVuGmVvck",
+    tab: "Facebook Review Free Bonus",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
+  },
+  "mostplay|Download & Claim": {
+    sheetId: "11UkGw0n1k7WlPCxsI6F4edBNWgvSyUKEpEGVuGmVvck",
+    tab: "Download & Claim",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
+  },
+  "jeetwin|Birthday Bonus": {
+    sheetId: "1fIpfR2a8NtZVYujT9ub_s_J9A51cIf67votyBmm4j0c",
+    tab: "Birthday Bonus",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
+  },
+  "jeetwin|Download JeetWin APP & Claim Cash": {
+    sheetId: "1fIpfR2a8NtZVYujT9ub_s_J9A51cIf67votyBmm4j0c",
+    tab: "Download & Claim",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
+  },
+  "heybaji|Birthday Bonus": {
+    sheetId: "1pzodV-4NuvJuI4qrJ_xWXMlyAx18Q_ATZdpCMUI8wEU",
+    tab: "Birthday Bonus",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
+  },
+  "heybaji|Download HeyBaji APP & Claim Cash": {
+    sheetId: "1pzodV-4NuvJuI4qrJ_xWXMlyAx18Q_ATZdpCMUI8wEU",
+    tab: "Download & Claim",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
+  },
+  "superbaji|Birthday Bonus": {
+    sheetId: "1k_Nn-NPLHVogFZjDdMuAVCRJFDM6wsAplrpYfNfidEc",
+    tab: "Birthday Bonus",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
+  },
+  "superbaji|Download SuberBaji APP & Claim Cash": {
+    sheetId: "1k_Nn-NPLHVogFZjDdMuAVCRJFDM6wsAplrpYfNfidEc",
+    tab: "Download & Claim",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
+  },
+  "sbj66|Birthday Bonus": {
+    sheetId: "1sLHwgKubzY-DrbvrZWmAi6A8RHwClMD4Nn9C1sEzF_s",
+    tab: "Birthday Bonus",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
+  },
+  "sbj66|Download SBJ66 APP & Claim Cash": {
+    sheetId: "1sLHwgKubzY-DrbvrZWmAi6A8RHwClMD4Nn9C1sEzF_s",
+    tab: "Download & Claim",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
+  },
+  "kv8|Birthday Bonus": {
+    sheetId: "1Yiput5AMiRdubIt5h4qQBnPAR4XottEdRbqKZToGa9U",
+    tab: "Birthday Bonus",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
+  },
+  "kv8|Download KV8 APP & Claim 199 Cash": {
+    sheetId: "1Yiput5AMiRdubIt5h4qQBnPAR4XottEdRbqKZToGa9U",
+    tab: "Download & Claim",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
+  },
+  "darazplay|Birthday Bonus": {
+    sheetId: "1sAswzEwGsxI3MshvRnPreIaH5seJzwK_9mvOeyxd8EI",
+    tab: "Birthday Bonus",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
+  },
+  "darazplay|Rs.200 Download DarazPlay App": {
+    sheetId: "1sAswzEwGsxI3MshvRnPreIaH5seJzwK_9mvOeyxd8EI",
+    tab: "Download & Claim",
+    startColumn: "A",
+    tidColumn: "A",
+    columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
+  },
+};
 
 /**
  * Promotion Request only: the Telegram message rows, now the SAME for
@@ -305,13 +438,48 @@ const PROMOTION_ROWS_UNIFIED = [
   { label: "To be added", key: { fixed: "Manually" } },
 ];
 
-// PKR market: same reasoning as PROMOTION_SHEET_CONFIG above — the old
-// INR brand+promotion keys were removed since those brand ids no longer
-// exist here. PROMOTION_ROWS_UNIFIED itself is untouched and ready to
-// reuse — just add "<brandId>|<promotion value>": PROMOTION_ROWS_UNIFIED
-// per PKR combination once confirmed (or a custom row array instead, if a
-// PKR promotion needs a different Telegram message format).
-export const PROMOTION_MESSAGE_TEMPLATE = {};
+// PKR market's own version of the row set above — same idea, minus the
+// "NID NO" row. PKR's promotion_request form (schemas.js) doesn't collect
+// an NID/CNIC field at all for promotions (confirmed against the business
+// owner's reference Google Sheet screenshot, which has no NID column
+// either — TID/Date/Username/Amount/Remarks/Platform/PIC, 7 columns) —
+// unlike INR's Birthday Bonus flow, which does. Used by every PKR
+// brand+promotion combo in PROMOTION_MESSAGE_TEMPLATE below.
+const PROMOTION_ROWS_PKR = [
+  { label: "TID", key: "tid" },
+  { label: "Date", key: "date" },
+  { label: "Username", key: "username" },
+  { label: "Amount to be Added", key: "amount" },
+  { label: "Remarks", key: "promotion" },
+  { label: "Processed BY", key: "pic" },
+  { label: "Platform", key: "brand" },
+  { label: "To be added", key: { fixed: "Manually" } },
+];
+
+// PKR market: all 19 confirmed brand+promotion combinations use
+// PROMOTION_ROWS_PKR (see its own comment above — same idea as
+// PROMOTION_ROWS_UNIFIED, minus the NID row PKR doesn't collect).
+export const PROMOTION_MESSAGE_TEMPLATE = {
+  "crickex|Birthday Bonus": PROMOTION_ROWS_PKR,
+  "betjili|Birthday Bonus": PROMOTION_ROWS_PKR,
+  "betjili|Facebook Review Free Bonus": PROMOTION_ROWS_PKR,
+  "betjili|Rs 500 Free Cash On App Download-PKR": PROMOTION_ROWS_PKR,
+  "mostplay|Birthday Bonus": PROMOTION_ROWS_PKR,
+  "mostplay|Facebook Review Free Bonus": PROMOTION_ROWS_PKR,
+  "mostplay|Download & Claim": PROMOTION_ROWS_PKR,
+  "jeetwin|Birthday Bonus": PROMOTION_ROWS_PKR,
+  "jeetwin|Download JeetWin APP & Claim Cash": PROMOTION_ROWS_PKR,
+  "heybaji|Birthday Bonus": PROMOTION_ROWS_PKR,
+  "heybaji|Download HeyBaji APP & Claim Cash": PROMOTION_ROWS_PKR,
+  "superbaji|Birthday Bonus": PROMOTION_ROWS_PKR,
+  "superbaji|Download SuberBaji APP & Claim Cash": PROMOTION_ROWS_PKR,
+  "sbj66|Birthday Bonus": PROMOTION_ROWS_PKR,
+  "sbj66|Download SBJ66 APP & Claim Cash": PROMOTION_ROWS_PKR,
+  "kv8|Birthday Bonus": PROMOTION_ROWS_PKR,
+  "kv8|Download KV8 APP & Claim 199 Cash": PROMOTION_ROWS_PKR,
+  "darazplay|Birthday Bonus": PROMOTION_ROWS_PKR,
+  "darazplay|Rs.200 Download DarazPlay App": PROMOTION_ROWS_PKR,
+};
 
 /**
  * Optional per-module Telegram message template — just the field rows, no

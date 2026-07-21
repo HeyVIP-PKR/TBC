@@ -48,21 +48,28 @@ touched or is affected by anything below.
   (PKR)"` tab in its `tabs` list — nothing to add here for PKR to work,
   just confirm with the business owner whether that existing tab is the
   right one this dashboard should read from.
-- **Promotion Request module — deliberately left incomplete, needs
-  business input:** `PROMOTION_SHEET_CONFIG` and `PROMOTION_MESSAGE_TEMPLATE`
-  in `routing.js` were cleared to `{}` (the old INR brand+promotion
-  combinations referenced brand ids like `betvisa`/`jeetway` that don't
-  exist in this deployment, and PKR's actual promotion amounts/tiers are
-  unknown). More importantly, **`public/assets/schemas.js`'s
-  `promotion_request` module still has the old INR business rules
-  untouched** — `fixedAmounts` (Crickex ₹1000 / Betjili ₹150 / Mostplay
-  ₹200), `optionsByBrand` for the `promotion` field (still lists
-  `betvisa`/`jeetway`, which no longer exist), and the Tier
-  Level/Number-of-Deposits selectors with their auto-fill amount tables
-  (₹300–₹5000 range). None of this was touched — it needs real PKR
-  amounts/rules from the business owner before it means anything, not a
-  guess carried over from INR. Until this is done, Promotion Request will
-  still render on the form but with wrong/stale brand-amount logic.
+- **Promotion Request module — fully configured this session** (was
+  previously left deliberately empty pending PKR business rules; now
+  done). 19 confirmed brand+promotion combinations across all 9 brands,
+  filled in from the business owner's real reference Google Sheet
+  (screenshot) + a full written rules list. `PROMOTION_SHEET_CONFIG` and
+  `PROMOTION_MESSAGE_TEMPLATE` in `routing.js`, plus `schemas.js`'s
+  `promotion_request` module (`fixedAmounts`, `optionsByBrand`, and 3
+  tiered selectors — `deposits`/`tier`/`playerRank`, each auto-filling
+  Amount) are all filled with real PKR data, cross-checked by script to
+  confirm all 19 combos line up exactly across all three (no typos/
+  mismatches). Reference sheet format: TID/Date/Username/Amount/Remarks/
+  Platform/PIC (columns A–G) — "Remarks" holds the promotion name itself,
+  "Platform" shows "<Brand> PKR" (a new `brandCurrency` column-resolver
+  key in `submit.js`, used only by this module's Sheet writes — every
+  other module's Sheet still gets the plain brand name, unchanged). PKR's
+  form doesn't collect an NID/CNIC field for promotions at all (confirmed
+  against the reference sheet, which has no such column) — a new
+  `PROMOTION_ROWS_PKR` Telegram row template (same as the older
+  `PROMOTION_ROWS_UNIFIED` INR one, minus the NID row) is used for all 19
+  combos. One deliberate gap: SBJ66's "Download SBJ66 APP & Claim Cash"
+  has no fixed/tiered amount (not provided) — Amount stays a normal
+  editable field for that one combo only, everything else auto-fills.
 - **Brand logos:** confirmed with the business owner that Crickex/Betjili/
   Mostplay are the same actual brand in PKR as in the INR build — so their
   existing logo PNGs were kept and `functions/api/brand-config.js`'s
@@ -653,6 +660,22 @@ Save, outlined Reset) instead of the original ✅/↩️ emoji icons. A divider
 + extra top spacing separates the module list from the explanatory
 footnote at the bottom.
 
+### Confirmed — Crickex intentionally shares its Telegram group with INR
+Crickex's chatId (`-1004488354399`) is the same group used by the INR
+production deployment — confirmed with the business owner this is
+deliberate, not an accidental copy-paste: INR and PKR share one
+Telegram group for this brand, split apart by Topic ID (INR's topics are
+3/10/17/30/22/24 per module; PKR's Crickex topics are 3/10/17/22/24/26 —
+different topic numbers within the same group). Not a data-mixing risk
+the way the KV namespace / R2 bucket sharing would have been (see the
+top-of-file warning) — Telegram topics fully separate the message
+threads visually, it's a shared mailbox, not shared storage. No action
+needed; noted here so a future reader doesn't mistake this for the same
+kind of environment-mixing mistake that was avoided elsewhere (KV/R2/
+GitHub repo/Cloudflare project are all still fully separate from INR, per
+the top-of-file warning — only this one brand's Telegram group is
+intentionally shared).
+
 ### 🆕 Security Alerts row (built this session, PKR)
 Below the 9-brand list (visually separated by a dashed divider) there's
 now a 10th, non-brand entry: **🔒 Security Alerts**. Clicking it shows a
@@ -844,16 +867,6 @@ of the current 6-second poll).
 
 ## Still pending / needs input before it can be finished (PKR)
 
--1. **⚠️ Confirm Crickex's Telegram chatId isn't an accidental INR reuse.**
-   The chatId entered for all 6 of Crickex's modules in the TG Group /
-   Channel panel (`-1004488354399`) is the exact same chatId that was
-   identified earlier as the INR production group's — topicIds differ
-   (3/10/17/22/24/26), suggesting new topics may have been created inside
-   that SAME existing INR group for PKR use, rather than a fully separate
-   PKR group. Not yet confirmed whether this is intentional (INR and PKR
-   sharing one group, split by topic) or accidental. If accidental, swap
-   in a genuinely separate PKR group's chatId before real tickets start
-   flowing, or PKR messages land in the INR team's production group.
 0. **Security Alerts routing not set up yet.** Either save a chatId/topicId
    through the new "🔒 Security Alerts" row in the TG Group / Channel
    panel (see write-up above — takes effect immediately, no redeploy), or
@@ -926,13 +939,12 @@ polling split to 6s/30s in `threads.html`).
    `SHEET_LAYOUT` in `routing.js`) — worth a real end-to-end test
    submission on at least one brand (e.g. Crickex) before assuming the
    rest are correct too.
-4. **Promotion Request module** — still needs real PKR business rules
-   (which brands use it, promotion names, fixed amounts, tier/deposit
-   tables) — `schemas.js`'s `promotion_request` module fields
-   (`fixedAmounts`, `optionsByBrand`, Tier Level/Number-of-Deposits
-   selectors) still reference the old INR brands/amounts untouched, and
-   `routing.js`'s `PROMOTION_SHEET_CONFIG`/`PROMOTION_MESSAGE_TEMPLATE`
-   are empty and ready for new entries once the above is known.
+4. ~~**Promotion Request module**~~ — ✅ fully configured this session, 19
+   brand+promotion combinations, all confirmed with real business data
+   (see top section for details). Not yet live-tested against a real
+   submission though — worth including in the end-to-end test pass
+   mentioned in item 3 above once at least one brand's Telegram routing
+   is also live.
 5. ~~**Brand logos**~~ — ✅ done this session, all 9 brands have real
    logo files now (see top section). Nothing pending here anymore.
 6. **Promo Code Search** — same unresolved items as the INR build this was

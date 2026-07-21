@@ -793,10 +793,11 @@
     // at once) share one fetch instead of firing two.
     const attachmentCache = new Map(); // fileId -> Promise<{url, type}>
 
-    function getAttachmentUrl(fileId) {
+    function getAttachmentUrl(fileId, name) {
       if (!attachmentCache.has(fileId)) {
         attachmentCache.set(fileId, (async () => {
-          const res = await authFetch(`/api/attachment/${encodeURIComponent(fileId)}`);
+          const qs = name ? `?name=${encodeURIComponent(name)}` : "";
+          const res = await authFetch(`/api/attachment/${encodeURIComponent(fileId)}${qs}`);
           if (!res.ok) {
             const msg = await res.text().catch(() => "");
             throw new Error(msg || "Couldn't load this attachment.");
@@ -818,7 +819,7 @@
         const fileId = slot.dataset.attachmentFile;
         const name = slot.dataset.attachmentName || "attachment";
         slot.setAttribute("data-filled", "1"); // mark now so a poll landing mid-fetch doesn't double-trigger
-        getAttachmentUrl(fileId).then(({ url, type }) => {
+        getAttachmentUrl(fileId, name).then(({ url, type }) => {
           if (!document.body.contains(slot)) return; // a newer poll already replaced this DOM before we resolved
           if (type.startsWith("image/")) {
             slot.innerHTML = `<img src="${url}" alt="${escapeAttr(name)}" class="inline-attach-media" />`;
@@ -843,7 +844,7 @@
       attachLightbox.classList.add("is-open");
       attachLightboxBody.innerHTML = `<div class="attach-lightbox-status">Loading…</div>`;
       try {
-        const { url, type } = await getAttachmentUrl(fileId);
+        const { url, type } = await getAttachmentUrl(fileId, name);
         if (type.startsWith("image/")) {
           attachLightboxBody.innerHTML = `<img src="${url}" alt="${escapeAttr(name || "attachment")}" />`;
         } else if (type.startsWith("video/")) {

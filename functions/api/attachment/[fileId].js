@@ -74,7 +74,27 @@ async function handleGet({ request, env, params }) {
     return new Response("Telegram couldn't deliver this file.", { status: 502 });
   }
 
-  const contentType = fileRes.headers.get("Content-Type") || guessContentType(filePath);
+  // Priority order, most-to-least trustworthy:
+  //   1. Guessing from the ORIGINAL filename the agent uploaded (we
+  //      already know this on our own side — e.g. "photo.jpg" — it's
+  //      the one piece of information Telegram never had a chance to
+  //      lose or mangle, see the comment above).
+  //   2. Telegram's own Content-Type header for the download — but
+  //      SKIPPED if it's just the generic "application/octet-stream",
+  //      since that's Telegram effectively saying "I don't know either"
+  //      and blindly trusting it would short-circuit past the better
+  //      guesses below.
+  //   3. Guessing from Telegram's own internal file_path.
+  //   4. Whatever Telegram's header said, even if generic.
+  //   5. Hardcoded fallback, if genuinely nothing else worked out.
+  const originalName = new URL(request.url).searchParams.get("name") || "";
+  const tgContentType = fileRes.headers.get("Content-Type") || "";
+  const contentType =
+    guessContentType(originalName) ||
+    (tgContentType && tgContentType !== "application/octet-stream" ? tgContentType : null) ||
+    guessContentType(filePath) ||
+    tgContentType ||
+    "application/octet-stream";
   return new Response(fileRes.body, {
     status: 200,
     headers: {
@@ -88,8 +108,13 @@ async function handleGet({ request, env, params }) {
   });
 }
 
-function guessContentType(filePath) {
-  const ext = (filePath || "").split(".").pop().toLowerCase();
-  const map = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", pdf: "application/pdf" };
-  return map[ext] || "application/octet-stream";
+function guessContentType(pathOrName) {
+  const ext = (pathOrName || "").split(".").pop().toLowerCase();
+  const map = {
+    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif",
+    webp: "image/webp", bmp: "image/bmp", heic: "image/heic", heif: "image/heif",
+    mp4: "video/mp4", mov: "video/quicktime", webm: "video/webm", "3gp": "video/3gpp",
+    pdf: "application/pdf",
+  };
+  return map[ext] || null;
 }

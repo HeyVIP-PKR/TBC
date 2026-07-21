@@ -451,6 +451,19 @@ async function sendTelegramMessage({ botToken, route, text }) {
   return { ok: true, messageId: data.result.message_id };
 }
 
+// Browsers usually set File.type correctly, but not always — a file
+// re-uploaded after being downloaded from somewhere else (e.g. saved out
+// of Telegram itself, which often renames photos to a plain numeric
+// filename like "6111620814923827982_1.jpg") can come through with an
+// empty or generic type. Falling back to the file extension catches
+// those cases, so an actual photo still gets sent via sendPhoto (shows
+// as an inline thumbnail in Telegram) instead of silently degrading to
+// sendDocument (shows as a bare 📎 filename with no preview).
+function looksLikeImage(type, name) {
+  if ((type || "").startsWith("image/")) return true;
+  return /\.(jpe?g|png|gif|webp|bmp|heic|heif)$/i.test(name || "");
+}
+
 async function sendTelegramWithAttachments({ botToken, route, text, attachments }) {
   if (!attachments.length) {
     const r = await sendTelegramMessage({ botToken, route, text });
@@ -463,7 +476,7 @@ async function sendTelegramWithAttachments({ botToken, route, text, attachments 
     return { messageId, attachmentLinks: [buildMessageLink(route, messageId)], attachmentFileIds: fileId ? [fileId] : [] };
   }
 
-  const allImages = attachments.every((a) => (a.type || "").startsWith("image/"));
+  const allImages = attachments.every((a) => looksLikeImage(a.type, a.name));
   if (allImages) {
     const sent = await sendMediaGroup({ botToken, route, text, attachments });
     return {
@@ -493,7 +506,7 @@ async function sendSingleWithCaption({ botToken, route, text, attachment }) {
   const bytes = base64ToBytes(dataUrlToBase64(dataUrl));
   const blob = new Blob([bytes], { type: type || "application/octet-stream" });
 
-  const isImage = (type || "").startsWith("image/");
+  const isImage = looksLikeImage(type, name);
   const method = isImage ? "sendPhoto" : "sendDocument";
   const field = isImage ? "photo" : "document";
 

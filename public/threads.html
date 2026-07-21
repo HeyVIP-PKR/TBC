@@ -428,9 +428,9 @@
           const attachmentButtons = fileIds.length ? `
             <div class="thread-summary-attachments">
               ${fileIds.map((fid, i) => `
-                <button type="button" class="msg-attach-link thread-summary-attach-btn" data-attachment-file="${escapeAttr(fid)}" data-attachment-name="ticket-attachment-${i + 1}">
-                  📎 View attachment${fileIds.length > 1 ? ` ${i + 1}` : ""}
-                </button>
+                <div class="inline-attach-slot" data-attachment-file="${escapeAttr(fid)}" data-attachment-name="ticket-attachment-${i + 1}">
+                  <div class="inline-attach-loading">Loading attachment…</div>
+                </div>
               `).join("")}
             </div>` : "";
 
@@ -567,6 +567,7 @@
       renderAttachPreview();
       scrollConversation(true);
       polishEmoji();
+      loadInlineAttachments();
     }
 
     // Light refresh — used by polling and after in-place actions (solve,
@@ -584,6 +585,7 @@
       wireConversationButtons();
       if (forceScroll || wasNearBottom) scrollConversation(true);
       polishEmoji();
+      loadInlineAttachments();
     }
 
     const AVATAR_COLORS = ["#60A5FA", "#FBBF24", "#F87171", "#F472B6", "#34D399", "#A78BFA", "#38bdf8", "#fb923c"];
@@ -611,7 +613,7 @@
       const deliveredTick = m.self ? '<span class="msg-tick" title="Delivered">✓</span>' : "";
       const attachTag = m.hasAttachment
         ? (m.attachmentFileId
-            ? `<button type="button" class="msg-attach-tag msg-attach-link" data-attachment-file="${escapeAttr(m.attachmentFileId)}" data-attachment-name="${escapeAttr(m.attachmentName || "attachment")}">📎 ${escapeHtml(m.attachmentName || "attachment")}</button>`
+            ? `<div class="inline-attach-slot msg-inline-attach" data-attachment-file="${escapeAttr(m.attachmentFileId)}" data-attachment-name="${escapeAttr(m.attachmentName || "attachment")}"><div class="inline-attach-loading">Loading attachment…</div></div>`
             : '<span class="msg-attach-tag" title="Sent before this dashboard could look attachments back up — check the Telegram group for it.">📎 attachment</span>')
         : "";
       return `
@@ -775,63 +777,106 @@
     // instead of trying to preview inline.
     const attachLightbox = document.getElementById("attachLightbox");
     const attachLightboxBody = document.getElementById("attachLightboxBody");
-    let attachObjectUrl = null;
+
+    // ---- Shared attachment cache ----
+    //
+    // Images/videos now load AUTOMATICALLY the moment a thread opens
+    // (inline in the summary card + each reply bubble) rather than
+    // needing a click first. But the thread view re-renders from
+    // scratch on every 6-second poll (see updateThreadContent()) — no
+    // caching would mean re-fetching every visible attachment from
+    // Telegram every single poll, which is slow and pointless (nothing
+    // about an already-loaded attachment ever changes). This Map caches
+    // by fileId, storing the in-flight/completed Promise itself (not
+    // just the result) so two nearly-simultaneous requests for the same
+    // fileId (e.g. the inline slot AND a lightbox click both wanting it
+    // at once) share one fetch instead of firing two.
+    const attachmentCache = new Map(); // fileId -> Promise<{url, type}>
+
+    function getAttachmentUrl(fileId) {
+      if (!attachmentCache.has(fileId)) {
+        attachmentCache.set(fileId, (async () => {
+          const res = await authFetch(`/api/attachment/${encodeURIComponent(fileId)}`);
+          if (!res.ok) {
+            const msg = await res.text().catch(() => "");
+            throw new Error(msg || "Couldn't load this attachment.");
+          }
+          const blob = await res.blob();
+          return { url: URL.createObjectURL(blob), type: blob.type || "" };
+        })());
+      }
+      return attachmentCache.get(fileId);
+    }
+
+    // Fills every not-yet-loaded ".inline-attach-slot" on the page (the
+    // summary card's ticket attachments + each reply's inline
+    // attachment) with the real image/video, using the cache above so
+    // repeat calls (every poll) skip anything already loaded. Called at
+    // the end of updateThreadContent() — see that function.
+    function loadInlineAttachments() {
+      document.querySelectorAll(".inline-attach-slot[data-attachment-file]:not([data-filled])").forEach((slot) => {
+        const fileId = slot.dataset.attachmentFile;
+        const name = slot.dataset.attachmentName || "attachment";
+        slot.setAttribute("data-filled", "1"); // mark now so a poll landing mid-fetch doesn't double-trigger
+        getAttachmentUrl(fileId).then(({ url, type }) => {
+          if (!document.body.contains(slot)) return; // a newer poll already replaced this DOM before we resolved
+          if (type.startsWith("image/")) {
+            slot.innerHTML = `<img src="${url}" alt="${escapeAttr(name)}" class="inline-attach-media" />`;
+          } else if (type.startsWith("video/")) {
+            slot.innerHTML = `<video src="${url}" controls class="inline-attach-media"></video>`;
+          } else {
+            slot.innerHTML = `<a href="${url}" download="${escapeAttr(name)}" class="inline-attach-file">📎 ${escapeHtml(name)} — click to download</a>`;
+          }
+          // Clicking an inline image/video also opens the fullscreen
+          // lightbox, for a closer look — small bonus on top of what
+          // was actually asked for, reuses the cache so it's instant.
+          const media = slot.querySelector("img.inline-attach-media, video.inline-attach-media");
+          if (media) media.addEventListener("click", () => viewAttachment(fileId, name));
+        }).catch((err) => {
+          if (!document.body.contains(slot)) return;
+          slot.innerHTML = `<div class="inline-attach-error">⚠️ Couldn't load this attachment.</div>`;
+        });
+      });
+    }
 
     async function viewAttachment(fileId, name) {
       attachLightbox.classList.add("is-open");
       attachLightboxBody.innerHTML = `<div class="attach-lightbox-status">Loading…</div>`;
       try {
-        const res = await authFetch(`/api/attachment/${encodeURIComponent(fileId)}`);
-        if (!res.ok) {
-          const msg = await res.text().catch(() => "");
-          attachLightboxBody.innerHTML = `<div class="attach-lightbox-status attach-lightbox-error">Couldn't load this attachment.${msg ? `<br>${escapeHtml(msg)}` : ""}</div>`;
-          return;
-        }
-        const blob = await res.blob();
-        if (attachObjectUrl) URL.revokeObjectURL(attachObjectUrl);
-        attachObjectUrl = URL.createObjectURL(blob);
-
-        if ((blob.type || "").startsWith("image/")) {
-          attachLightboxBody.innerHTML = `<img src="${attachObjectUrl}" alt="${escapeAttr(name || "attachment")}" />`;
-        } else if ((blob.type || "").startsWith("video/")) {
-          attachLightboxBody.innerHTML = `<video src="${attachObjectUrl}" controls autoplay playsinline></video>`;
+        const { url, type } = await getAttachmentUrl(fileId);
+        if (type.startsWith("image/")) {
+          attachLightboxBody.innerHTML = `<img src="${url}" alt="${escapeAttr(name || "attachment")}" />`;
+        } else if (type.startsWith("video/")) {
+          attachLightboxBody.innerHTML = `<video src="${url}" controls autoplay playsinline></video>`;
         } else {
           // Not an image or video (PDF/doc/etc.) — hand it off as a
           // normal download instead of pretending we can preview it
           // inline.
           const a = document.createElement("a");
-          a.href = attachObjectUrl;
+          a.href = url;
           a.download = name || "attachment";
           document.body.appendChild(a);
           a.click();
           a.remove();
           attachLightboxBody.innerHTML = `<div class="attach-lightbox-status">Downloaded — this file type can't be previewed here.</div>`;
         }
-      } catch {
-        attachLightboxBody.innerHTML = `<div class="attach-lightbox-status attach-lightbox-error">Network error loading this attachment.</div>`;
+      } catch (e) {
+        attachLightboxBody.innerHTML = `<div class="attach-lightbox-status attach-lightbox-error">${escapeHtml(String((e && e.message) || "Couldn't load this attachment."))}</div>`;
       }
     }
 
     function closeAttachLightbox() {
       attachLightbox.classList.remove("is-open");
       attachLightboxBody.innerHTML = "";
-      if (attachObjectUrl) {
-        URL.revokeObjectURL(attachObjectUrl);
-        attachObjectUrl = null;
-      }
+      // NOTE: deliberately NOT revoking the object URL here anymore —
+      // it's now a shared cache entry (see attachmentCache above) that
+      // an inline thumbnail elsewhere on the page may still be using,
+      // not something exclusively owned by the lightbox. Object URLs
+      // get cleaned up by the browser when the page/tab itself closes.
     }
     document.getElementById("attachLightboxClose").addEventListener("click", closeAttachLightbox);
     attachLightbox.addEventListener("click", (e) => { if (e.target === attachLightbox) closeAttachLightbox(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && attachLightbox.classList.contains("is-open")) closeAttachLightbox(); });
-
-    // Delegated — message bubbles are re-rendered constantly (every poll),
-    // so binding directly to each button would mean re-binding on every
-    // render. One listener on a stable ancestor instead.
-    document.addEventListener("click", (e) => {
-      const btn = e.target.closest(".msg-attach-link");
-      if (!btn) return;
-      viewAttachment(btn.dataset.attachmentFile, btn.dataset.attachmentName);
-    });
 
     bootDashboard();
 

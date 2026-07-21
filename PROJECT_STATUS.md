@@ -241,6 +241,29 @@ needed at all**, just this one backend file). Also swapped the fallback
 caption text from the literal `"(attachment)"` string to `"📎 <filename>"`
 when there's no caption, matching the wording used elsewhere.
 
+### 🆕 Attachments now load automatically, inline — no click needed
+(changed this session, PKR, after initial feedback on the click-to-view
+version below)
+The click-to-view button design (described in the next section) worked,
+but the business owner wanted photos/videos to just appear the moment a
+ticket is opened, not require clicking a button first. Changed
+`public/threads.html` so every attachment slot (ticket summary card +
+each reply bubble) auto-loads on render instead of waiting for a click —
+`loadInlineAttachments()`, called at the end of both `renderDetail()` and
+`updateThreadContent()`, scans for `.inline-attach-slot` placeholders and
+fills each with a real `<img>`/`<video>`/download-link element.
+
+The one thing this needed extra care for: the thread view re-renders
+from scratch every ~6s (polling), so a naive "fetch on every render"
+would spam Telegram's `getFile` API every poll for every visible
+attachment — added a page-level `attachmentCache` (`Map<fileId,
+Promise<{url,type}>>`) so a given fileId is only ever actually fetched
+once per page session; every subsequent render (or a lightbox click on
+the same image, for a fullscreen look) reuses the cached object URL
+instantly. `viewAttachment()` (the fullscreen lightbox — still there,
+now reachable by clicking an inline thumbnail) was updated to pull from
+this same cache instead of doing its own separate fetch.
+
 ### 🆕 Reply attachments are now viewable from the dashboard (fixed
 this session, PKR — went through two design iterations, see below)
 An agent replying with a photo/file in the Threads panel used to only

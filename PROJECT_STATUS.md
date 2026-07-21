@@ -882,9 +882,15 @@ polling split to 6s/30s in `threads.html`).
 3. **For each brand that needs sheet logging, create/duplicate a Google
    Sheet, share it with the service account email
    (`pkr-tbc@tonal-unity-503006-u6.iam.gserviceaccount.com`, Editor
-   access), and fill its `sheetId` into `routing.js`.** Currently all 9
-   brands have `sheetId: ""` — Telegram sends fine, sheet logging just
-   no-ops until this is done.
+   access), and fill its `sheetId` into `routing.js`.** All 9 brands now
+   have a real `sheetId` filled into `routing.js` (done this session).
+   **Not yet confirmed:** whether all 9 sheets have actually been shared
+   with the service account email yet, and whether each sheet's tab names
+   exactly match what the code expects (`QA OTP & Domain`, `Account
+   Issue`, `Risk Issue`, `Genie Issues`, `Daily Report` — see
+   `SHEET_LAYOUT` in `routing.js`) — worth a real end-to-end test
+   submission on at least one brand (e.g. Crickex) before assuming the
+   rest are correct too.
 4. **Promotion Request module** — still needs real PKR business rules
    (which brands use it, promotion names, fixed amounts, tier/deposit
    tables) — `schemas.js`'s `promotion_request` module fields

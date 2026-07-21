@@ -33,7 +33,7 @@
 export const BRANDS = {
   crickex: {
     name: "Crickex",
-    sheetId: "",
+    sheetId: "1M0rAQeqkD50ytzwhD31HOQ-e8nEuckLhpMsq-ua_Kic",
     telegram: {
       default: { chatId: "", topicId: null },
       qa: { chatId: "", topicId: null },
@@ -46,7 +46,7 @@ export const BRANDS = {
   },
   betjili: {
     name: "Betjili",
-    sheetId: "",
+    sheetId: "1sZRJoFwzdASNjm75Lx9ppckLfsPQtzMapcWMqRnV7eE",
     telegram: {
       default: { chatId: "", topicId: null },
       qa: { chatId: "", topicId: null },
@@ -59,7 +59,7 @@ export const BRANDS = {
   },
   mostplay: {
     name: "Mostplay",
-    sheetId: "",
+    sheetId: "1d01hM568DnE9Hl8n362cT3dgGmhHrtWQTwjRZetL3lw",
     telegram: {
       default: { chatId: "", topicId: null },
       qa: { chatId: "", topicId: null },
@@ -72,7 +72,7 @@ export const BRANDS = {
   },
   jeetwin: {
     name: "Jeetwin",
-    sheetId: "",
+    sheetId: "1G2QiwogGIe5HeucHqWQk5OzLUkSpyKGNa0jjcJPsnk0",
     telegram: {
       default: { chatId: "", topicId: null },
       qa: { chatId: "", topicId: null },
@@ -85,7 +85,7 @@ export const BRANDS = {
   },
   sbj66: {
     name: "Sbj66",
-    sheetId: "",
+    sheetId: "1YWdTDmhHv9TCyJBNOWBOKGiZNybmMx7EDAPgmrYFMRw",
     telegram: {
       default: { chatId: "", topicId: null },
       qa: { chatId: "", topicId: null },
@@ -98,7 +98,7 @@ export const BRANDS = {
   },
   heybaji: {
     name: "Heybaji",
-    sheetId: "",
+    sheetId: "1xYvEMc7gycphUINVPUqTXpevlQkFZVsXTzeNN2K7ooI",
     telegram: {
       default: { chatId: "", topicId: null },
       qa: { chatId: "", topicId: null },
@@ -111,7 +111,7 @@ export const BRANDS = {
   },
   superbaji: {
     name: "Superbaji",
-    sheetId: "",
+    sheetId: "1wxXhwQ_Nyh5Al7yAbGHsqFhLc8FV2oTUQRhwGCSn268",
     telegram: {
       default: { chatId: "", topicId: null },
       qa: { chatId: "", topicId: null },
@@ -124,7 +124,7 @@ export const BRANDS = {
   },
   kv8: {
     name: "KV8",
-    sheetId: "",
+    sheetId: "1wyq16ABqlbkHI0R7YvEBRzQPUEgmStstaCyJkbH2yPY",
     telegram: {
       default: { chatId: "", topicId: null },
       qa: { chatId: "", topicId: null },
@@ -137,7 +137,7 @@ export const BRANDS = {
   },
   darazplay: {
     name: "Darazplay",
-    sheetId: "",
+    sheetId: "1LZF08hAXDLwTQ1KYyXiQ8Zmu9TLO_N7ywpKEJBO8vjE",
     telegram: {
       default: { chatId: "", topicId: null },
       qa: { chatId: "", topicId: null },

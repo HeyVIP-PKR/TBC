@@ -376,7 +376,13 @@ function buildRiskIssueDynamicMessage({ brandName, fields, fieldMap, reporter })
 function buildAccountIssueDynamicMessage({ brandName, fields, fieldMap, reporter }) {
   const lines = [`🔑 <b>Account Issue — ${escapeHtml(fieldMap.issueType || "-")}</b>`, ""];
   lines.push(`🎮 <b>Brand/Platform:</b> ${escapeHtml(brandCurrencyLabel(brandName))}`);
-  lines.push(`👤 <b>Username:</b> ${escapeHtml(fieldMap.uid || "-")}`);
+  // "Forget Username & Gmail" is the one issue type whose form never shows
+  // a UID field at all (see showIf on the "uid" field in schemas.js) —
+  // fieldMap.uid is always empty for it, so this line used to always print
+  // a pointless "Username: -". Only show it when there's an actual value.
+  if (fieldMap.uid) {
+    lines.push(`👤 <b>Username:</b> ${escapeHtml(fieldMap.uid)}`);
+  }
 
   fields
     .filter((f) => !["issueType", "uid", "remark"].includes(f.key) && f.value)

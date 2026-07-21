@@ -69,12 +69,10 @@ touched or is affected by anything below.
   `DEFAULT_LOGOS` map now points to them again. `betvisa.png`/
   `jeetway.png` were deleted outright (not just unmapped — those brands
   don't exist in this deployment, no reason to keep the dead files). The
-  other 6 brands (Jeetwin/Sbj66/Heybaji/Superbaji/KV8/Darazplay) have no
-  logo file yet — not a blocker, the brand pill UI falls back gracefully
-  to "brand-name initials on a colored circle" when no logo is set. Add a
-  real logo later by dropping a file into
-  `public/assets/img/brands/<brandId>.png` and adding a line to
-  `DEFAULT_LOGOS`.
+  other 6 brands (Jeetwin/Sbj66/Heybaji/Superbaji/KV8/Darazplay) now have
+  their own real logo files too, provided directly by the business owner
+  and added this session — all 9 brands are fully logo'd, nothing left
+  pending here.
 
 **This version was rewritten from scratch** (not incrementally appended)
 to describe the system as it stands *right now* — it supersedes every
@@ -894,10 +892,8 @@ polling split to 6s/30s in `threads.html`).
    selectors) still reference the old INR brands/amounts untouched, and
    `routing.js`'s `PROMOTION_SHEET_CONFIG`/`PROMOTION_MESSAGE_TEMPLATE`
    are empty and ready for new entries once the above is known.
-5. **Brand logos** — Crickex/Betjili/Mostplay reuse the INR PNGs
-   (confirmed same brand); the other 6 (Jeetwin/Sbj66/Heybaji/Superbaji/
-   KV8/Darazplay) have no logo file yet — optional, falls back gracefully
-   to initials (see top section).
+5. ~~**Brand logos**~~ — ✅ done this session, all 9 brands have real
+   logo files now (see top section). Nothing pending here anymore.
 6. **Promo Code Search** — same unresolved items as the INR build this was
    forked from: "Start On" column has no source data (always "—"); "all 11
    tabs share the same A–N layout" is unverified beyond one reference tab;

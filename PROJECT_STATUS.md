@@ -221,6 +221,26 @@ session's fix, just verified while investigating this).
 
 ## TG Reply Threads
 
+### 🆕 Incoming Telegram replies with a photo/file are ALSO now
+viewable (fixed this session, PKR — found while testing the outgoing
+fixes above)
+Everything above (this section and the next) only fixed attachments
+going OUT — sent by an agent from our own website (the reply box or the
+original ticket form). There's a completely separate, third path:
+someone replying **inside the Telegram group itself** with a photo/file.
+`functions/api/telegram-webhook.js`'s `handleUpdate()` used to just
+hardcode the literal text `"(attachment)"` for these — no `file_id`
+captured, no way to ever view it, regardless of any of the fixes above.
+Fixed the same way as the other two directions: now extracts the
+`file_id` from whichever of `msg.photo`/`msg.document`/`msg.video`/
+`msg.voice`/`msg.sticker` is present, stores it as `attachmentFileId` on
+the message record (same field name/shape the dashboard already knows
+how to render — `public/threads.html`'s message-bubble template doesn't
+care which direction a message came from, so **no frontend change was
+needed at all**, just this one backend file). Also swapped the fallback
+caption text from the literal `"(attachment)"` string to `"📎 <filename>"`
+when there's no caption, matching the wording used elsewhere.
+
 ### 🆕 Reply attachments are now viewable from the dashboard (fixed
 this session, PKR — went through two design iterations, see below)
 An agent replying with a photo/file in the Threads panel used to only

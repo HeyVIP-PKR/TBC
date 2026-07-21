@@ -221,6 +221,54 @@ session's fix, just verified while investigating this).
 
 ## TG Reply Threads
 
+### 🆕 Reply attachments are now viewable from the dashboard (fixed
+this session, PKR — went through two design iterations, see below)
+An agent replying with a photo/file in the Threads panel used to only
+ever send it to Telegram — nothing about it was saved on our own side,
+so the sidebar just showed a permanent, unclickable "📎 attachment" label
+with no way to see it again without going and finding it in the Telegram
+group itself.
+
+**First attempt (superseded, not what shipped):** upload a copy to the
+same R2 bucket the original ticket-submission screenshots use. Discussed
+with the business owner, who preferred not to use any extra storage for
+this — so this approach was reverted before deploying.
+
+**What actually shipped:** zero storage, fully live/on-demand instead.
+`functions/api/threads/[id].js`'s `sendTelegramAttachment()` now also
+captures Telegram's own `file_id` from the `sendPhoto`/`sendDocument`
+response (previously discarded) and saves it as a new `attachmentFileId`
+field on the message record — nothing else. A new endpoint,
+`functions/api/attachment/[fileId].js`, resolves that file_id back into
+real bytes ONLY at the moment someone actually clicks to view it (via
+Telegram's `getFile` + file-download API, proxied through so
+`TELEGRAM_BOT_TOKEN` never reaches the browser — same reasoning as why
+R2 files go through `/api/screenshot/<key>` instead of a raw bucket URL).
+`public/threads.html` renders the attachment tag as a button that opens
+a lightbox modal (`viewAttachment()`), fetches the image live via
+`authFetch`, and displays it — non-image files (PDFs etc.) just trigger
+a normal download instead of a preview. Deliberately login-gated but
+NOT brand-scoped (any logged-in agent can view any attachment if they
+have its file_id — acceptable since file_ids are long opaque
+Telegram-issued strings, not guessable/enumerable, and only ever surface
+via thread data an agent could already see).
+
+Trade-offs of this approach, worth knowing:
+- Slightly slower to open than a stored copy would be (proxies through
+  Telegram live — typically well under a second, but not instant).
+- Relies on Telegram itself still being able to resolve the file_id —
+  generally reliable for as long as the source message/file exists on
+  Telegram's servers, but that's Telegram's behavior, not something this
+  code guarantees; a resolution failure surfaces as a clean error in the
+  lightbox rather than a broken image.
+- **Old messages sent before this fix still show the old, non-clickable
+  label** (now with a tooltip explaining why) — they never captured a
+  file_id in the first place, so there's nothing to look up. Only
+  replies sent after this fix have a working preview.
+- Uses zero R2/storage budget — the trade-off is a live Telegram round
+  trip on each view instead, which was the explicit point of choosing
+  this design.
+
 ### ✅ Root-caused and fixed this session — Telegram replies weren't
 syncing in at all ("must refresh, and even then some never show up")
 
@@ -867,6 +915,16 @@ of the current 6-second poll).
 
 ## Still pending / needs input before it can be finished (PKR)
 
+-1. ~~**Home page "TG Reply Threads" card unread-count badge bug**~~ — ✅
+   fixed this session. `public/index.html`'s `loadThreadsSummary()` was
+   calling `fetch("/api/threads", ...)` with a plain, unauthenticated
+   `fetch()` — but `/api/threads` has required a logged-in `X-Agent-Token`
+   ever since the session-token security fix (see "Account system"
+   above), so this call always got rejected (401) and the badge/stat
+   silently stayed empty. Almost certainly a leftover from that fix —
+   every other API call on this page was updated to
+   `window.AgentAuth.authFetch(...)` at the time, this one call was
+   missed. One-line fix, same swap applied here too.
 0. **Security Alerts routing not set up yet.** Either save a chatId/topicId
    through the new "🔒 Security Alerts" row in the TG Group / Channel
    panel (see write-up above — takes effect immediately, no redeploy), or

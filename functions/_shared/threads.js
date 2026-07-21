@@ -193,7 +193,7 @@ async function sweepExpired(env, list) {
   return keep;
 }
 
-export async function createThread(env, { module: moduleId, moduleName, icon, accent, brand, title, submitter, chatId, topicId, rootMessageId, rootText, hasMedia, summary }) {
+export async function createThread(env, { module: moduleId, moduleName, icon, accent, brand, title, submitter, chatId, topicId, rootMessageId, rootText, hasMedia, attachmentFileIds, summary }) {
   const now = new Date().toISOString();
   const thread = {
     id: newId(),
@@ -212,6 +212,12 @@ export async function createThread(env, { module: moduleId, moduleName, icon, ac
     rootText: rootText || "",
     rootEdited: false,
     hasMedia: !!hasMedia,
+    // Telegram's own file_id(s) for the original submission's photo(s)/
+    // document(s) — same idea and same viewer (/api/attachment/[fileId].js)
+    // as reply attachments (see functions/api/threads/[id].js), just
+    // captured at ticket-creation time instead of reply time. Empty array
+    // for text-only tickets, or if the module doesn't collect attachments.
+    attachmentFileIds: attachmentFileIds || [],
     rootRecalled: false,
     msgIds: [rootMessageId],
     summary: summary || [],

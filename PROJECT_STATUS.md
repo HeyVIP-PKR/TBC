@@ -653,7 +653,24 @@ Save, outlined Reset) instead of the original ✅/↩️ emoji icons. A divider
 + extra top spacing separates the module list from the explanatory
 footnote at the bottom.
 
-### ✅ Fixed this session — brand order mismatch
+### 🆕 Security Alerts row (built this session, PKR)
+Below the 9-brand list (visually separated by a dashed divider) there's
+now a 10th, non-brand entry: **🔒 Security Alerts**. Clicking it shows a
+single chatId/topicId row (not 6 module rows) controlling where
+`functions/api/auth/login.js`'s two Telegram warnings go — unrecognized-
+IP login attempts (correct password, IP not on the account's office
+whitelist) and account auto-lock notices. Same Save/Reset UI, same KV
+layer underneath (reuses `_shared/routes.js` unchanged, via the reserved
+pseudo id pair `brandId: "_security"`, `moduleId: "alerts"` — not a real
+brand, can't collide with one). `resolveSecurityAlertsRoute()` in
+`login.js` checks this KV override first, falls back to the
+`SECURITY_ALERTS_CHAT_ID`/`SECURITY_ALERTS_TOPIC_ID` Cloudflare secrets
+(still unset for PKR — see "Still pending" below) if nothing's been saved
+through this panel yet. Point of this: changing where security alerts go
+no longer needs a Cloudflare secret edit + redeploy, same live-editable
+convenience as brand routing already had.
+
+
 The brand list in this modal followed `functions/_shared/routing.js`'s
 `BRANDS` object key order, which didn't match `public/assets/schemas.js`'s
 reordered array used everywhere else in the UI (form dropdowns, Home page
@@ -827,6 +844,24 @@ of the current 6-second poll).
 
 ## Still pending / needs input before it can be finished (PKR)
 
+-1. **⚠️ Confirm Crickex's Telegram chatId isn't an accidental INR reuse.**
+   The chatId entered for all 6 of Crickex's modules in the TG Group /
+   Channel panel (`-1004488354399`) is the exact same chatId that was
+   identified earlier as the INR production group's — topicIds differ
+   (3/10/17/22/24/26), suggesting new topics may have been created inside
+   that SAME existing INR group for PKR use, rather than a fully separate
+   PKR group. Not yet confirmed whether this is intentional (INR and PKR
+   sharing one group, split by topic) or accidental. If accidental, swap
+   in a genuinely separate PKR group's chatId before real tickets start
+   flowing, or PKR messages land in the INR team's production group.
+0. **Security Alerts routing not set up yet.** Either save a chatId/topicId
+   through the new "🔒 Security Alerts" row in the TG Group / Channel
+   panel (see write-up above — takes effect immediately, no redeploy), or
+   set the `SECURITY_ALERTS_CHAT_ID`/`SECURITY_ALERTS_TOPIC_ID` Cloudflare
+   secrets as a fallback default. Until one of these is done, unrecognized-
+   IP login attempts and account auto-locks still work exactly as
+   designed (login stays blocked) — you just won't get a Telegram
+   heads-up about them.
 0. **Session token security fix not yet deployed.** `SESSION_TOKEN_SECRET`
    needs adding to Cloudflare Production secrets before the next deploy
    (login fails without it — see the security fix writeup under "Account

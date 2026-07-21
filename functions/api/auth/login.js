@@ -53,15 +53,31 @@
  * account gets auto-locked, distinct from the per-attempt IP-warning
  * message above.
  *
- * NOT YET CONFIGURED: set SECURITY_ALERTS_CHAT_ID (and optionally
- * SECURITY_ALERTS_TOPIC_ID) as Cloudflare environment variables once
- * there's a Telegram group/topic picked out for these — until then this
- * silently no-ops (sendTelegramMessage() skips cleanly with no chat ID),
- * so this ships now without breaking anything or requiring the group to
- * exist yet.
+ * NOT YET CONFIGURED (as Cloudflare secrets): set SECURITY_ALERTS_CHAT_ID
+ * (and optionally SECURITY_ALERTS_TOPIC_ID) as Cloudflare environment
+ * variables as a fallback default — until then this silently no-ops
+ * (sendTelegramMessage() skips cleanly with no chat ID). These CAN also
+ * be set live from the browser instead — see the "Security Alerts" row
+ * on the TG Group / Channel admin page (functions/api/admin/routes.js),
+ * which resolveSecurityAlertsRoute() below checks first and takes
+ * priority over these env vars the moment it's been saved once.
  */
 import { getAccount, verifyPassword, officeIpCheckPasses, getOffice, requestIP, setAccountLocked, issueToken } from "../../_shared/accounts.js";
 import { sendTelegramMessage } from "../../_shared/telegram.js";
+import { getRouteOverride } from "../../_shared/routes.js";
+
+// Reserved pseudo brand/module id pair — NOT a real brand — used so the
+// "TG Group / Channel" admin page (functions/api/admin/routes.js) can
+// let a SuperAdmin change where these alerts go live from the browser,
+// reusing the exact same KV-override machinery every real brand+module
+// route uses. Falls back to the SECURITY_ALERTS_CHAT_ID/
+// SECURITY_ALERTS_TOPIC_ID Cloudflare secrets when nothing's been saved
+// through that page yet.
+async function resolveSecurityAlertsRoute(env) {
+  const override = await getRouteOverride(env, "_security", "alerts");
+  if (override) return override;
+  return { chatId: env.SECURITY_ALERTS_CHAT_ID, topicId: env.SECURITY_ALERTS_TOPIC_ID };
+}
 
 const PASSWORD_FAIL_LOCK_THRESHOLD = 5;
 const IP_FAIL_LOCK_DISTINCT_THRESHOLD = 5;
@@ -184,9 +200,10 @@ async function notifyAccountLocked(env, { account, reason }) {
       ``,
       `🔑 This account can no longer log in (or use any already-open session) until a SuperAdmin unlocks it under Account Management → Agent Profile, or accounts-admin.html.`,
     ];
+    const route = await resolveSecurityAlertsRoute(env);
     await sendTelegramMessage(env, {
-      chatId: env.SECURITY_ALERTS_CHAT_ID,
-      topicId: env.SECURITY_ALERTS_TOPIC_ID,
+      chatId: route.chatId,
+      topicId: route.topicId,
       text: lines.join("\n"),
     });
   } catch {
@@ -223,9 +240,10 @@ async function notifyUnrecognizedIp(env, { account, ip, request }) {
       ``,
       `🚫 Login was blocked as usual — this is just a heads-up.`,
     ];
+    const route = await resolveSecurityAlertsRoute(env);
     await sendTelegramMessage(env, {
-      chatId: env.SECURITY_ALERTS_CHAT_ID,
-      topicId: env.SECURITY_ALERTS_TOPIC_ID,
+      chatId: route.chatId,
+      topicId: route.topicId,
       text: lines.join("\n"),
     });
   } catch {

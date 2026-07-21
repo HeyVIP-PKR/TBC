@@ -230,6 +230,7 @@ export async function createThread(env, { module: moduleId, moduleName, icon, ac
     saveThread(env, thread),
     env.THREADS_KV.put(`msgid:${thread.chatId}:${rootMessageId}`, thread.id),
   ]);
+  await patchListCache(env, thread); // instant sidebar visibility — see that function's comment for why
   return thread;
 }
 
@@ -312,32 +313,42 @@ async function scanThreadsFromKV(env) {
 // LIST_CACHE_TTL_MS — the result is cached in ONE KV key
 // (LIST_CACHE_KEY) and every listThreads() call in between just reads
 // that cache (a cheap get(), which draws from the 100,000/day read
-// budget instead, with tons of headroom). 2 minutes keeps real list()
-// calls to at most ~720/day even under continuous nonstop polling all
+// budget instead, with tons of headroom). 10 minutes keeps real list()
+// calls to at most ~144/day even under continuous nonstop polling all
 // day — comfortable headroom under 1,000, and also keeps the *write*
 // side (saving the cache) well under the SEPARATE 1,000 writes/day
-// budget, which every ticket submit/reply/solve-toggle also draws from.
+// budget, which every ticket submit/reply/solve-toggle also draws from
+// (this write-budget side is the part that was originally
+// under-accounted-for at a faster 2-minute interval — see the
+// standalone cron-worker's wrangler.toml for the full writeup).
 //
-// Trade-off, stated plainly: a brand-new ticket, or a solved/reopened
-// status change, can now take up to ~2 minutes to show up in the
-// sidebar for other agents (an already-open conversation stays fully
-// real-time regardless — that's a direct-by-ID get(), never affected by
-// any of this). Given the alternative was the whole sidebar hard-failing
-// once the daily list() quota ran out, this is a straightforward trade
-// in the sidebar's favor, same reasoning as the write-contention fix
-// before it.
+// Trade-off, stated plainly: this 10-minute window is no longer what
+// controls how fast a NEW ticket or a solved/reopened toggle shows up —
+// those are now patched into the cache instantly the moment they happen
+// (see patchListCache() and its call sites in createThread(),
+// appendMessage(), setSolved(), softDeleteThread() below), completely
+// decoupled from this interval. What this window actually still governs
+// is much lower-stakes: how often a full "health check" re-scan runs to
+// heal any drift the instant-patches might have missed (e.g. a patch
+// that failed mid-write) and to catch anything that changed OUTSIDE
+// this app's own code paths. A live CS team seeing their own actions
+// reflected instantly was the actual requirement; this background
+// consistency sweep not running for up to 10 minutes is a genuinely
+// low-stakes trade, unlike the original "your new ticket might not show
+// up for 10 minutes" framing this comment used to have (business owner
+// was right to push back hard on that version).
 //
 // Resilience: if a real scan fails (e.g. the daily list() quota is
 // ALREADY exhausted for the day when this runs), fall back to whatever
 // is cached — even hours-stale data — rather than fail the request
 // outright. Only throws if there's truly nothing cached to fall back to.
 const LIST_CACHE_KEY = "thread-list-cache";
-const LIST_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes — matches the standalone cron-worker's Cron Trigger interval
+const LIST_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes — matches the standalone cron-worker's Cron Trigger interval. Was 2 minutes originally; raised because the cron worker's OWN writes (2 KV puts per run, regardless of interval) were consuming most of the separate 1,000 writes/day free-tier budget at that frequency — see wrangler.toml in the cron-worker folder for the full writeup of that miscalculation and why 10 minutes is the corrected value.
 
-// ---- Hard daily ceiling on real list() calls, on top of the 2-minute
+// ---- Hard daily ceiling on real list() calls, on top of the 10-minute
 // throttle above ----
 //
-// The 2-minute throttle alone caps real scans at ~720/day under normal
+// The 10-minute throttle alone caps real scans at ~144/day under normal
 // conditions — comfortably under Cloudflare's 1,000/day limit. But it's
 // a "soft" guarantee: if several agents' polls land in the exact same
 // instant right as the cache expires, each could independently decide
@@ -392,6 +403,56 @@ async function getCachedScan(env) {
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
+  }
+}
+
+// ---- Instant sidebar updates for OUR OWN actions, decoupled from the
+// cron worker's refresh interval ----
+//
+// LIST_CACHE_TTL_MS (10 minutes) controls how long the sidebar can go
+// between full re-scans — that's the right knob for "how stale can
+// things get if nobody's actively doing anything," but it's the WRONG
+// knob for "how fast does MY OWN new ticket / solve-toggle / reply show
+// up" — those are things we already know about the instant they happen
+// (we're the ones doing them), no need to wait for the next scheduled
+// scan to notice something we already have full details on. Business
+// owner was right to push back hard on "up to 10 minutes for a new
+// ticket to appear" for a live CS team — that's not acceptable, and
+// tying ticket visibility to the write-budget-driven scan interval was
+// the wrong way to solve the original quota problem.
+//
+// This patches the EXISTING cached entries list in place (one targeted
+// KV get + put, not a full re-scan) every time something we already
+// know the outcome of happens — see the call sites in createThread(),
+// appendMessage(), setSolved(), and softDeleteThread() below. Costs 1
+// extra read + 1 extra write per action — negligible compared to the
+// action's own KV writes (saving the thread itself), and NOT tied to
+// polling frequency at all, so it doesn't reintroduce the write-budget
+// problem the cron interval was raised to fix. If there's no cache yet
+// (nobody's loaded the sidebar since the last full scan), this is a
+// harmless no-op — the next real scan builds it fresh anyway.
+async function patchListCache(env, thread, { remove } = {}) {
+  try {
+    const cached = await getCachedScan(env);
+    if (!cached) return; // nothing to patch yet — fine, next real scan builds it
+    const idx = cached.entries.findIndex((e) => e.id === thread.id);
+    if (remove) {
+      if (idx >= 0) cached.entries.splice(idx, 1);
+    } else {
+      const meta = summarize(thread);
+      if (idx >= 0) cached.entries[idx] = meta;
+      else cached.entries.unshift(meta); // new ticket — put it at the front, sorting happens on read anyway
+    }
+    // generatedAt is deliberately left untouched — this is a targeted
+    // patch, not a fresh scan, and keeping the original timestamp means
+    // the periodic full re-scan (which also heals/cleans up drift) still
+    // runs on its normal schedule rather than being perpetually pushed
+    // back by ongoing activity.
+    await env.THREADS_KV.put(LIST_CACHE_KEY, JSON.stringify(cached));
+  } catch {
+    // Best-effort only — worst case, this specific update shows up on
+    // the next real scan instead of instantly. Never worth failing the
+    // actual action (creating a ticket, replying, etc.) over this.
   }
 }
 
@@ -469,6 +530,7 @@ export async function appendMessage(env, threadId, message) {
     writes.push(env.THREADS_KV.put(`msgid:${thread.chatId}:${message.messageId}`, thread.id));
   }
   await Promise.all(writes);
+  await patchListCache(env, thread); // instant sidebar update — reply count / reopened status
   return thread;
 }
 
@@ -478,6 +540,7 @@ export async function setSolved(env, threadId, solved) {
   thread.solved = solved;
   thread.solvedAt = solved ? new Date().toISOString() : null;
   await saveThread(env, thread);
+  await patchListCache(env, thread); // instant sidebar update — solved/unsolved toggle
   return thread;
 }
 
@@ -556,5 +619,6 @@ export async function softDeleteThread(env, threadId) {
   const thread = await getThread(env, threadId);
   if (!thread) return null;
   await purgeThread(env, thread);
+  await patchListCache(env, thread, { remove: true }); // instant sidebar update — drop it immediately, don't wait for the next scan to notice it's gone
   return thread;
 }

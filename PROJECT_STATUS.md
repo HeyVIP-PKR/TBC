@@ -1,95 +1,71 @@
 # PROJECT STATUS — Issue Submission Hub + TG Reply Threads (PKR CS Team fork)
 
 Paste this whole document as the first message in a new conversation, along
-with the latest project zip. That gives the new chat the complete current
-state of the project.
+with the latest project zip (`pkr-issue-hub.zip`). That gives the new chat
+the complete current state of the project.
 
-## ⚠️ This is a brand-new PKR deployment, forked from the INR codebase — not yet live, read this before doing anything else
+## PKR is live and has been heavily tested — read this before doing
+anything else
 
 This project is a **separate, independent deployment** for the PKR market —
 it does NOT share a GitHub repo, Cloudflare Pages project, KV namespace, R2
-bucket, or Telegram bot with the original INR production system. It started
-as a copy of that codebase (same architecture, same modules, same feature
-set) with all INR-specific brand/routing/sheet data stripped out and
-replaced with PKR placeholders. Nothing about the INR production app was
-touched or is affected by anything below.
+bucket, or Telegram bot with the original INR production system (one
+deliberate, confirmed exception: Crickex's Telegram group is intentionally
+shared with INR, split by Topic — see "TG Group / Channel" section further
+down for why that's fine and not a mistake). It started as a fork of the
+INR codebase (same architecture, same modules, same feature set) with all
+INR-specific brand/routing/sheet data replaced with real PKR data.
 
 **Where things stand right now:**
-- **GitHub:** repo created at `HeyVIP-PKR/TBC` — code has NOT been uploaded
-  yet (this zip is what gets uploaded next: drag the `public/` and
-  `functions/` folders themselves into "Add file → Upload files", not
-  their contents — wrong drag depth has repeatedly caused duplicate/
-  misplaced files on the INR project, watch for the same here).
-- **Cloudflare:** Pages project created (`tbc`, connected to `HeyVIP-PKR/TBC`,
-  build output directory set to `public`). R2 bucket `pkr-issuescreenshot`
-  and KV namespace `pkr-ticket-threads` (id
-  `c8ca68f7781a4f1b88d0997af023aec7`) both created and filled into
-  `wrangler.toml` — no longer blank placeholders. First deploy attempt
-  failed as expected (before these existed); next push to GitHub with the
-  updated `wrangler.toml` should deploy successfully. Secrets
+- **Live and deployed**: `https://pkrcsteam-tbc.pages.dev` (GitHub:
+  `HeyVIP-PKR/TBC`, Cloudflare Pages project `pkrcsteam-tbc`). Deploys are
+  green. R2 bucket `pkr-issuescreenshot` and KV namespace
+  `pkr-ticket-threads` (id `c8ca68f7781a4f1b88d0997af023aec7`) are both
+  live and wired into `wrangler.toml`. All Cloudflare secrets are set
   (`TELEGRAM_BOT_TOKEN`, `GOOGLE_SERVICE_ACCOUNT_EMAIL`,
   `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`, `BRAND_EDIT_PASSWORD`,
-  `TELEGRAM_WEBHOOK_SECRET`) not set yet.
-- **Google Cloud:** project + service account created
-  (`pkr-tbc@tonal-unity-503006-u6.iam.gserviceaccount.com`), JSON key not
-  yet confirmed downloaded — once it is, its `client_email`/`private_key`
-  go into the two Cloudflare secrets above.
-- **Brands:** the 9 PKR platforms are in place as placeholders in both
-  `public/assets/schemas.js` and `functions/_shared/routing.js`:
-  Crickex, Betjili, Mostplay, Jeetwin, Sbj66, Heybaji, Superbaji, KV8,
-  Darazplay (ids: `crickex`, `betjili`, `mostplay`, `jeetwin`, `sbj66`,
-  `heybaji`, `superbaji`, `kv8`, `darazplay`). Every brand's `sheetId` and
-  every module's `chatId`/`topicId` in `routing.js` is currently `""` /
-  `null` — nothing routes anywhere yet until real Telegram groups/topics
-  and Google Sheets exist and get filled in.
-- **`functions/api/promo-search.js`'s `PROMO_CODE_SHEET`** — untouched,
-  deliberately. This is the shared Promo Code Search sheet spanning
-  multiple currency teams' tabs, and already has a `"Retention Team
-  (PKR)"` tab in its `tabs` list — nothing to add here for PKR to work,
-  just confirm with the business owner whether that existing tab is the
-  right one this dashboard should read from.
-- **Promotion Request module — fully configured this session** (was
-  previously left deliberately empty pending PKR business rules; now
-  done). 19 confirmed brand+promotion combinations across all 9 brands,
-  filled in from the business owner's real reference Google Sheet
-  (screenshot) + a full written rules list. `PROMOTION_SHEET_CONFIG` and
-  `PROMOTION_MESSAGE_TEMPLATE` in `routing.js`, plus `schemas.js`'s
-  `promotion_request` module (`fixedAmounts`, `optionsByBrand`, and 3
-  tiered selectors — `deposits`/`tier`/`playerRank`, each auto-filling
-  Amount) are all filled with real PKR data, cross-checked by script to
-  confirm all 19 combos line up exactly across all three (no typos/
-  mismatches). Reference sheet format: TID/Date/Username/Amount/Remarks/
-  Platform/PIC (columns A–G) — "Remarks" holds the promotion name itself,
-  "Platform" shows "<Brand> PKR" (a new `brandCurrency` column-resolver
-  key in `submit.js`, used only by this module's Sheet writes — every
-  other module's Sheet still gets the plain brand name, unchanged). PKR's
-  form doesn't collect an NID/CNIC field for promotions at all (confirmed
-  against the reference sheet, which has no such column) — a new
-  `PROMOTION_ROWS_PKR` Telegram row template (same as the older
-  `PROMOTION_ROWS_UNIFIED` INR one, minus the NID row) is used for all 19
-  combos. One deliberate gap: SBJ66's "Download SBJ66 APP & Claim Cash"
-  has no fixed/tiered amount (not provided) — Amount stays a normal
-  editable field for that one combo only, everything else auto-fills.
-- **Brand logos:** confirmed with the business owner that Crickex/Betjili/
-  Mostplay are the same actual brand in PKR as in the INR build — so their
-  existing logo PNGs were kept and `functions/api/brand-config.js`'s
-  `DEFAULT_LOGOS` map now points to them again. `betvisa.png`/
-  `jeetway.png` were deleted outright (not just unmapped — those brands
-  don't exist in this deployment, no reason to keep the dead files). The
-  other 6 brands (Jeetwin/Sbj66/Heybaji/Superbaji/KV8/Darazplay) now have
-  their own real logo files too, provided directly by the business owner
-  and added this session — all 9 brands are fully logo'd, nothing left
-  pending here.
+  `TELEGRAM_WEBHOOK_SECRET`, `SESSION_TOKEN_SECRET`). Telegram webhook is
+  set and confirmed receiving replies. A standalone Cloudflare Worker
+  (`pkr-ticket-threads-refresher`, NOT part of this Pages
+  project/repo/zip — deployed separately via the Cloudflare dashboard's
+  own code editor, see its own README for how) refreshes the sidebar
+  cache every 10 minutes as a background health-check (see "Reliability &
+  performance" further down for why 10 minutes is fine and doesn't
+  affect how fast agents actually see new tickets).
+- **All 9 brands fully configured**: Crickex, Betjili, Mostplay, Jeetwin,
+  Sbj66, Heybaji, Superbaji, KV8, Darazplay — each has a real
+  `sheetId` in `routing.js`, real Telegram `chatId`/`topicId` for every
+  module (set through the TG Group/Channel admin panel, not hardcoded —
+  see that section), and a real logo. Google Sheets are shared with the
+  service account (`pkr-tbc@tonal-unity-503006-u6.iam.gserviceaccount.com`).
+- **Promotion Request fully configured**: 19 real brand+promotion
+  combinations across all 9 brands (see "Promotion Request module"
+  section further down for the full breakdown).
+- **Account system, security, and TG Reply Threads have all been through
+  multiple rounds of real fixes this session** — session-token auth
+  (replacing plaintext-password-in-localStorage), reworked auto-lock
+  logic (per direct business-owner feedback, twice), a Security Alerts
+  routing row, and a whole attachment/photo/video-viewing feature (with
+  its own dedicated incident write-up — a real Cloudflare KV quota
+  outage was hit, root-caused, and fixed). All of this is detailed in
+  the sections below — this top summary intentionally doesn't repeat
+  every detail, just orients a new conversation to "this is live,
+  working, and has real history," not "starting from scratch."
+- **Known open items** — see "Still pending" near the end of this
+  document for the current, accurate list. The single most urgent one:
+  the business owner subscribed to **R2 Paid** by mistake (doesn't help)
+  instead of **Workers Paid** (the subscription that actually removes
+  the Workers KV daily quota caps that have interrupted testing multiple
+  times) — not yet corrected as of this writing.
 
 **This version was rewritten from scratch** (not incrementally appended)
 to describe the system as it stands *right now* — it supersedes every
-earlier version of this document, including the incremental INR-era
-session notes that used to make up most of this file's length. If you
-need the history of exactly how something got to its current state
-(including all the INR-specific debugging/design history below, which is
-still accurate background on how this codebase's architecture came to be,
-just not on PKR's brand/routing specifics), that's in the conversation
-transcript this doc came from, not here.
+earlier version of this document. If you need the history of exactly how
+something got to its current state, that's in the conversation
+transcript this doc came from (and in several dedicated `CHANGES.md`
+write-ups exported during this session — e.g.
+`master_attachment_and_quota_fix_export.zip` for the full attachment-
+viewing + KV-quota-incident story), not here.
 
 ## What this is
 A web form → Telegram bot + Google Sheets ticketing system for PKR-market
@@ -98,34 +74,39 @@ KV8, Darazplay), plus a full two-way Telegram reply-tracking dashboard
 ("TG Reply Threads") with its own per-agent account system (login,
 office-based IP allowlists, role hierarchy), a Promo Code Search
 dashboard, and a live-editable Telegram routing admin page ("TG Group /
-Channel"). To be deployed on Cloudflare Pages (not deployed yet).
+Channel"). Deployed on Cloudflare Pages.
 
-- **GitHub repo:** `HeyVIP-PKR/TBC` — repo created, code not uploaded yet
-- **Live URL:** not deployed yet — no Cloudflare Pages project exists yet
+- **GitHub repo:** `HeyVIP-PKR/TBC` — code uploaded, live
+- **Live URL:** `pkrcsteam-tbc.pages.dev`
 - **Deploy method:** GitHub web upload (drag the `public/` and `functions/`
   folders themselves into "Add file → Upload files", not their contents —
-  wrong drag depth repeatedly caused duplicate/misplaced files on the INR
-  build this was forked from, watch for the same here)
+  wrong drag depth repeatedly caused duplicate/misplaced files early on,
+  and separately, editing a large file via GitHub's inline line-editor
+  instead of a full overwrite once caused old/new code to get
+  concatenated together and broke the site — see the KV-quota-incident
+  write-up further down. Always do a full-file overwrite for anything
+  beyond a one-line tweak.)
 - **Deployment note:** the project has a `wrangler.toml` committed to the
   repo. Once that file exists, Cloudflare treats it as the source of truth
   for **Production** bindings — the dashboard's "+ Add" button for
   Production gets disabled (Preview still works via dashboard). To add/change
   a binding, edit `wrangler.toml` and re-upload; Cloudflare auto-applies it
   to Production on the next deploy. `wrangler.toml`'s `bucket_name` and KV
-  `id` are now filled in with the real PKR R2 bucket / KV namespace
-  (created under the `HeyVIP-PKR` Cloudflare account, separate from the
-  INR build's) — no longer blank placeholders, ready for the next deploy.
+  `id` are filled in with the real PKR R2 bucket (`pkr-issuescreenshot`) /
+  KV namespace (`pkr-ticket-threads`, id
+  `c8ca68f7781a4f1b88d0997af023aec7`) — created under the `HeyVIP-PKR`
+  Cloudflare account, fully separate from the INR build's.
 
 
 ## Architecture
 - **Frontend:** static HTML/CSS/JS in `public/` — no build step
 - **Backend:** Cloudflare Pages Functions in `functions/`
 - **Google Sheets writes:** service account
-  `reward-form-writer@fifth-trainer-500806-e7.iam.gserviceaccount.com`
+  `pkr-tbc@tonal-unity-503006-u6.iam.gserviceaccount.com`
   (must be shared as Editor on every new Sheet used)
-- **File storage:** R2 bucket `inr-issuescreenshot`, bound as
+- **File storage:** R2 bucket `pkr-issuescreenshot`, bound as
   `SCREENSHOTS_BUCKET`, served back out via `/api/screenshot/<key>`
-- **KV storage:** Cloudflare KV namespace `inr-ticket-threads`, bound as
+- **KV storage:** Cloudflare KV namespace `pkr-ticket-threads`, bound as
   `THREADS_KV` — backs TG Reply Threads, the account system (accounts/
   offices), and the live TG Group/Channel routing overrides. All in one
   namespace, separated by key prefix (see each module's section below).
@@ -136,7 +117,10 @@ Channel"). To be deployed on Cloudflare Pages (not deployed yet).
   system below, it is NOT used for brand logo/link editing anymore),
   `TELEGRAM_WEBHOOK_SECRET` (self-chosen random string, verifies Telegram
   webhook calls — see "IMPORTANT: must be alphanumeric only, no
-  spaces/symbols/non-ASCII" note under TG Reply Threads below).
+  spaces/symbols/non-ASCII" note under TG Reply Threads below),
+  `SESSION_TOKEN_SECRET` (signs/verifies login session tokens — see
+  "Account system" below for the security fix this belongs to; login
+  fails outright without this secret set).
   **Not yet set, optional:** `SECURITY_ALERTS_CHAT_ID` and
   `SECURITY_ALERTS_TOPIC_ID` — see "Unrecognized-IP login alerts" under
   Account system below; the feature silently no-ops until these exist.
@@ -958,33 +942,45 @@ of the current 6-second poll).
 
 ## Still pending / needs input before it can be finished (PKR)
 
--1. ~~**Home page "TG Reply Threads" card unread-count badge bug**~~ — ✅
-   fixed this session. `public/index.html`'s `loadThreadsSummary()` was
-   calling `fetch("/api/threads", ...)` with a plain, unauthenticated
-   `fetch()` — but `/api/threads` has required a logged-in `X-Agent-Token`
-   ever since the session-token security fix (see "Account system"
-   above), so this call always got rejected (401) and the badge/stat
-   silently stayed empty. Almost certainly a leftover from that fix —
-   every other API call on this page was updated to
-   `window.AgentAuth.authFetch(...)` at the time, this one call was
-   missed. One-line fix, same swap applied here too.
-0. **Security Alerts routing not set up yet.** Either save a chatId/topicId
-   through the new "🔒 Security Alerts" row in the TG Group / Channel
-   panel (see write-up above — takes effect immediately, no redeploy), or
-   set the `SECURITY_ALERTS_CHAT_ID`/`SECURITY_ALERTS_TOPIC_ID` Cloudflare
-   secrets as a fallback default. Until one of these is done, unrecognized-
-   IP login attempts and account auto-locks still work exactly as
-   designed (login stays blocked) — you just won't get a Telegram
-   heads-up about them.
-0. **Session token security fix not yet deployed.** `SESSION_TOKEN_SECRET`
-   needs adding to Cloudflare Production secrets before the next deploy
-   (login fails without it — see the security fix writeup under "Account
-   system" above), and the password a coworker saw in plaintext (plus,
-   out of caution, `TELEGRAM_BOT_TOKEN`/
-   `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`/`TELEGRAM_WEBHOOK_SECRET`/
-   `BRAND_EDIT_PASSWORD`) still need rotating — the token fix stops
-   passwords from leaking THIS way going forward, it doesn't undo
-   exposure that already happened.
+1. **⚠️ Subscribe to Workers Paid — top priority, not yet done.** The
+   business owner subscribed to **R2 Paid** by mistake, thinking it would
+   fix the KV quota errors — it doesn't; R2 Paid only affects R2 storage,
+   completely separate from Workers KV's own daily limits. **Workers
+   Paid** ($5/month, a different subscription) is what actually removes
+   the `list()`/write/etc. daily caps on Workers KV. Testing has now been
+   interrupted multiple times by hitting these free-tier limits
+   (`KV put() limit exceeded for the day` — see the write-up above for
+   the full incident). Strongly recommended to just subscribe rather than
+   keep working around free-tier caps.
+2. **Rotate exposed credentials** — a coworker saw the login password in
+   plaintext before the session-token fix went in (that fix is deployed
+   and working now, per the auto-lock/login rework described above, but
+   it doesn't undo exposure that already happened). Still needs actual
+   rotation: the password itself, and out of caution
+   `TELEGRAM_BOT_TOKEN`/`GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`/
+   `TELEGRAM_WEBHOOK_SECRET`/`BRAND_EDIT_PASSWORD` too, since they could
+   plausibly have been visible on the same device/session.
+3. **Not yet fully tested end-to-end across all 9 brands.** Individual
+   pieces have been tested successfully (submissions, Telegram delivery,
+   Sheet writes, TG Reply Threads sync, attachment viewing, Promotion
+   Request) but mostly on Crickex/Sbj66/a couple others — worth a
+   deliberate pass confirming every brand's chatId/topicId/sheetId
+   actually works, not just the ones tested so far.
+4. **Promo Code Search** — same unresolved items as the INR build this was
+   forked from, never revisited: "Start On" column has no source data
+   (always "—"); "all 11 tabs share the same A–N layout" is unverified
+   beyond one reference tab; also worth confirming the existing
+   `"Retention Team (PKR)"` tab is the one this dashboard should search.
+5. **`GET /api/screenshot/<key>` and `GET /api/brand-config`** — no login
+   gate, pre-existing from the INR build, flagged for awareness only,
+   never addressed.
+6. **Optional, not requested yet**: videos currently send to Telegram via
+   `sendDocument` (shows as a downloadable file in Telegram's own UI, not
+   a native inline video player) — works fine for viewing in OUR OWN
+   dashboard (fixed this session), just not "native-looking" on the
+   Telegram side. Would need a `type.startsWith("video/")` branch calling
+   `sendVideo` instead, in both `submit.js` and `threads/[id].js`, if
+   ever wanted.
 
 **Done so far** (moved here from the old checklist so this section stays
 an accurate snapshot, not a stale plan): GitHub repo created and code
@@ -1005,6 +1001,102 @@ INR→PKR content swaps done: topbar/title wordmarks, `CURRENCY_LABEL`
 relabeled to CNIC Card Number. KV `list()` daily-quota fix ported
 (2-minute server cache + 800/day hard cap in `threads.js`, sidebar
 polling split to 6s/30s in `threads.html`).
+
+**Also done since the paragraph above** (this project has had a LOT of
+follow-up work — summarizing chronologically so nothing gets lost):
+9 brands' real `chatId`/`topicId` filled into the TG Group/Channel panel
+and real `sheetId`s filled into `routing.js` for all 9 brands (Google
+Sheets shared with the service account); Promotion Request fully
+configured — 19 confirmed brand+promotion combinations across all 9
+brands with real fixed/tiered amounts, `PROMOTION_ROWS_PKR` Telegram
+template, cross-checked by script for consistency (see "Promotion
+Request module" section further down); Risk Issue's `Remark` row and
+Account Issue's `Username` row each got a `skipIfEmpty`-style fix so they
+stop printing placeholder junk when unused; a "🔒 Security Alerts" row
+was added to the TG Group/Channel panel (KV-override based, same pattern
+as brand routing, falls back to `SECURITY_ALERTS_CHAT_ID`/
+`SECURITY_ALERTS_TOPIC_ID` env vars); login's auto-lock logic was
+reworked twice per direct business-owner feedback — "no office assigned"
+no longer shares the same lock-counter as genuine security events (but
+still alerts), and wrong-password + unrecognized-IP failures were merged
+into ONE combined 5-in-an-hour counter (previously two separate,
+inconsistent triggers); the home page's unread-ticket badge was fixed
+(was silently failing on an unauthenticated `fetch()` call, a leftover
+from the session-token migration); all 9 brand logos were added.
+
+**Attachment/photo/video viewing — a whole feature built this session,
+in stages, fully documented with its own exported changelog** (see
+`master_attachment_and_quota_fix_export.zip` in this conversation's
+outputs for the complete blow-by-blow — worth reading in full if picking
+this back up, it went through several design iterations): agents can now
+see photos/videos/files directly in the TG Reply Threads dashboard —
+both what THEY send (from the reply box, or attached to the original
+ticket form) and what comes back the OTHER direction (someone replying
+with a photo directly inside the Telegram group itself). Deliberately
+built with ZERO extra storage (business owner's explicit call, after an
+R2-based first draft was tried and reverted) — Telegram's own `file_id`
+is captured at send time, and a new endpoint
+(`functions/api/attachment/[fileId].js`) resolves it back into real
+bytes live, on demand, proxied through so the bot token never reaches
+the browser. Went from "click a button to view" to "loads automatically
+the instant a ticket opens" per business-owner feedback, with a
+page-level cache (`attachmentCache` in `threads.html`) so the 6-second
+poll doesn't re-fetch the same image over and over. Two real bugs were
+found and fixed along the way: (1) the "is this an image?" check only
+looked at browser-reported MIME type, which is sometimes wrong/empty for
+re-uploaded files — fixed with a filename-extension fallback
+(`looksLikeImage()`), applied on both the send side and, separately, on
+the `/api/attachment/[fileId].js` retrieval side (which needed the
+ORIGINAL filename passed as `?name=` to guess correctly, since
+Telegram's own internal file path for "document"-type uploads often
+doesn't carry a usable extension).
+
+**A real Cloudflare KV quota incident, root-caused and fixed this
+session** — worth understanding fully before touching this area again.
+Testing hit `"KV put() limit exceeded for the day"` (a genuinely
+different, independent quota from the `list()`-call quota fixed
+earlier). Root cause: the standalone `cron-worker` (the one that
+refreshes the sidebar cache on a schedule, deployed separately from this
+Pages project) writes to KV twice on every single run regardless of
+whether anything changed — at its original 2-minute interval, that's
+720 × 2 = 1,440 writes/day from the cron job ALONE, already over the
+free tier's 1,000/day cap, before counting a single real ticket
+submission/reply/solve-toggle. This was a genuine miscalculation when
+the cron job was first built — only the `list()`-call budget was checked
+at the time, not the separate write budget. Fixed in two parts: (1) the
+cron interval was raised to 10 minutes (`cron-worker/wrangler.toml`,
+`LIST_CACHE_TTL_MS` in `threads.js` — both must stay in sync) as an
+immediate stopgap, cutting the cron's own writes to ~288/day; (2) the
+REAL fix — a new `patchListCache()` function in `_shared/threads.js`
+that surgically updates the cached sidebar list the INSTANT a ticket is
+created/replied-to/solved/deleted, completely decoupling "how fast does
+MY OWN action show up" from "how often does the background cache do a
+full re-scan." This was necessary because the business owner correctly
+pushed back hard on "a new ticket can take up to 10 minutes to appear"
+being genuinely unacceptable for a live CS team — lowering the cron
+interval alone was the wrong fix for that complaint; instant-patching on
+every real action was the right one, and it scales with actual usage
+instead of a fixed background cost.
+
+**A deployment-process lesson learned the hard way, not a code bug**: at
+one point, editing a large file directly in GitHub's web line-editor
+(instead of a full-file "Add file → Upload files" overwrite) resulted in
+old and new code getting concatenated together — e.g. a duplicate
+`const contentType =` declaration — which is a hard JavaScript syntax
+error, and broke every endpoint importing that file (500 errors
+site-wide) until caught and fixed. Lesson: for any file with substantial
+structural changes (not a one-line tweak), always do a full-file
+overwrite via upload, never GitHub's inline editor.
+
+**Billing mix-up, not yet resolved**: the business owner subscribed to
+**R2 Paid** (thinking it was the fix for the KV quota errors) — R2 Paid
+only affects R2 storage quotas and has NO effect on Workers KV's
+separate daily limits. **Workers Paid** (a different subscription,
+$5/month) is what actually removes the KV `list()`/write/etc. daily caps
+— this has NOT been subscribed to yet as of this writing. Given how many
+times testing has now been interrupted by hitting these free-tier caps,
+subscribing to Workers Paid is a strong recommendation, not just a
+nice-to-have — see "Still pending" below.
 
 1. **Deploy the standalone `cron-worker`** — a separate Cloudflare Workers
    project (not part of this Pages project/zip), ported from the INR

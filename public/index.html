@@ -62,7 +62,7 @@
     </div>
   </div>
 
-  <div class="hub-layout">
+  <div class="hub-layout page-slide-in">
     <aside class="sidebar">
       <div class="sidebar-header"><span class="dot"></span> ISSUE SUBMISSION</div>
       <a href="/" class="sidebar-item active" style="--item-accent:#7c6cf0;">
@@ -299,6 +299,17 @@
         </div>
         <span class="arrow">&rarr;</span>
       `;
+      // Play the slide-out transition on the sidebar+content area first,
+      // THEN do the real navigation — this is a full page load (form.html
+      // is a separate static page, not an SPA route), so CSS alone can't
+      // delay it; the setTimeout below has to match the CSS animation's
+      // duration (0.2s, see .page-slide-out in style.css).
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        const dest = a.href;
+        document.querySelector(".hub-layout").classList.add("page-slide-out");
+        setTimeout(() => { location.href = dest; }, 200);
+      });
       list.appendChild(a);
     });
 

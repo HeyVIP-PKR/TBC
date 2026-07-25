@@ -84,7 +84,7 @@ async function handleSubmit({ request, env }) {
     // sees SOMETHING rather than racing straight through too — overwritten
     // with the real response (see the `return` at the very end of this
     // function) once the actual Telegram/Sheet/thread work is done.
-    await env.THREADS_KV.put(dedupeKey, JSON.stringify({ ok: true, duplicate: true, note: "Original submission was still processing — this is not a second ticket." }), { expirationTtl: 30 });
+    await env.THREADS_KV.put(dedupeKey, JSON.stringify({ ok: true, duplicate: true, note: "Original submission was still processing — this is not a second ticket." }), { expirationTtl: 60 });
   }
 
   const botToken = env.TELEGRAM_BOT_TOKEN;
@@ -263,7 +263,7 @@ async function handleSubmit({ request, env }) {
   // with the REAL result, so a duplicate request arriving even a moment
   // late still gets back this exact ticket's info (not "still processing")
   // instead of silently creating a second one. Longer TTL than the
-  // placeholder's 30s — 10 minutes is generous enough to cover any
+  // placeholder's 60s — 10 minutes is generous enough to cover any
   // realistically-delayed retransmit while not lingering in KV forever.
   if (idempotencyKey && env.THREADS_KV) {
     await env.THREADS_KV.put(`submit_dedupe:${idempotencyKey}`, JSON.stringify(finalResponse), { expirationTtl: 600 });

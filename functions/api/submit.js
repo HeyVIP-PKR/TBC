@@ -37,7 +37,7 @@ async function handleSubmit({ request, env }) {
     return json({ ok: false, error: "Invalid JSON body." }, 400);
   }
 
-  const { module: moduleId, brand: brandId, reporter, fields, attachments } = body || {};
+  const { module: moduleId, brand: brandId, reporter, fields, attachments, idempotencyKey } = body || {};
 
   if (!VALID_MODULES.includes(moduleId)) {
     return json({ ok: false, error: `Unknown module "${moduleId}".` }, 400);
@@ -56,6 +56,35 @@ async function handleSubmit({ request, env }) {
   }
   if (!reporter || !Array.isArray(fields)) {
     return json({ ok: false, error: "Missing reporter or fields." }, 400);
+  }
+
+  // Duplicate-submission guard — protects against the SAME click ending up
+  // as two Telegram messages / two Sheet rows / two thread records, no
+  // matter what actually caused the second POST (flaky mobile network
+  // silently retransmitting, a stray double-tap the button-disable in
+  // app.js's submit handler didn't quite catch in time, a Cloudflare edge
+  // retry, etc). `idempotencyKey` is a random ID app.js generates fresh
+  // for each individual submit attempt (see public/assets/app.js) — NOT
+  // tied to the form's contents, so re-submitting the exact same fields
+  // after a genuine failure still gets a fresh key and goes through.
+  //
+  // Best-effort, not a hard distributed lock: two requests landing on
+  // different edge colos in the same instant could both pass the get()
+  // below before either put() finishes. Given app.js already disables the
+  // button synchronously on click, the realistic remaining race window is
+  // extremely small — this closes the actual failure mode you were
+  // hitting, not a theoretical one.
+  if (idempotencyKey && env.THREADS_KV) {
+    const dedupeKey = `submit_dedupe:${idempotencyKey}`;
+    const already = await env.THREADS_KV.get(dedupeKey);
+    if (already) {
+      return new Response(already, { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    // Placeholder written immediately so a near-simultaneous duplicate
+    // sees SOMETHING rather than racing straight through too — overwritten
+    // with the real response (see the `return` at the very end of this
+    // function) once the actual Telegram/Sheet/thread work is done.
+    await env.THREADS_KV.put(dedupeKey, JSON.stringify({ ok: true, duplicate: true, note: "Original submission was still processing — this is not a second ticket." }), { expirationTtl: 30 });
   }
 
   const botToken = env.TELEGRAM_BOT_TOKEN;
@@ -220,7 +249,7 @@ async function handleSubmit({ request, env }) {
     }
   }
 
-  return json({
+  const finalResponse = {
     ok: true,
     telegramMessageId: tgResult.messageId,
     threadId,
@@ -229,7 +258,17 @@ async function handleSubmit({ request, env }) {
     sheetError,
     attachmentErrors: attachmentErrors.length ? attachmentErrors : undefined,
     r2Errors: r2Errors.length ? r2Errors : undefined,
-  });
+  };
+  // Overwrite the placeholder from the duplicate-submission guard above
+  // with the REAL result, so a duplicate request arriving even a moment
+  // late still gets back this exact ticket's info (not "still processing")
+  // instead of silently creating a second one. Longer TTL than the
+  // placeholder's 30s — 10 minutes is generous enough to cover any
+  // realistically-delayed retransmit while not lingering in KV forever.
+  if (idempotencyKey && env.THREADS_KV) {
+    await env.THREADS_KV.put(`submit_dedupe:${idempotencyKey}`, JSON.stringify(finalResponse), { expirationTtl: 600 });
+  }
+  return json(finalResponse);
 }
 
 async function sendTelegramMessage({ botToken, route, text }) {

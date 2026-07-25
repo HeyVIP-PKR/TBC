@@ -347,6 +347,16 @@
         reporter: formData.get("reporter"),
         fields,
         attachments,
+        // A fresh random ID per submit ATTEMPT (not per form/ticket) — lets
+        // the server (see submit.js) recognize "this exact click's request
+        // arrived twice" (flaky mobile network retransmit, a double-tap
+        // the button-disable below didn't quite catch, etc) and only ever
+        // create one Telegram message / Sheet row / thread record for it,
+        // instead of two identical tickets. crypto.randomUUID() isn't
+        // available on very old browsers/insecure contexts — falls back to
+        // Math.random() in that case, which is fine here since this only
+        // needs to be unique per click, not cryptographically unguessable.
+        idempotencyKey: (crypto.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       };
 
       const res = await window.AgentAuth.authFetch("/api/submit", {

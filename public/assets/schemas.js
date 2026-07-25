@@ -265,10 +265,7 @@ const MODULES = [
     // Birthday Bonus, Jeetwin Birthday Bonus, Darazplay Birthday Bonus)
     // are tiered instead, handled by the "deposits"/"tier"/"playerRank"
     // select fields further down (each has its own per-brand amount table
-    // and auto-fills Amount the same way once picked). SBJ66's "Download
-    // SBJ66 APP & Claim Cash" was given with no amount at all — left out
-    // of this table on purpose, so Amount just stays a normal editable
-    // field for that one combo (the agent types it in manually).
+    // and auto-fills Amount the same way once picked).
     fixedAmounts: {
       "crickex|Birthday Bonus": 1000,
       "betjili|Facebook Review Free Bonus": 200,
@@ -281,6 +278,7 @@ const MODULES = [
       "superbaji|Birthday Bonus": 2000,
       "superbaji|Download SuberBaji APP & Claim Cash": 200,
       "sbj66|Birthday Bonus": 2000,
+      "sbj66|Download SBJ66 APP & Claim Cash": 199,
       "kv8|Birthday Bonus": 1500,
       "kv8|Download KV8 APP & Claim 199 Cash": 199,
       "darazplay|Rs.200 Download DarazPlay App": 200,

@@ -693,14 +693,18 @@
 
       const rows = visibleAccounts.map((a) => {
         // Office / IP — every role in THIS table now requires one to log
-        // in at all (see _shared/accounts.js officeIpCheckPasses()) — the
-        // one role that's exempt, Owner, never appears in this table to
-        // begin with (see listAccounts()'s server-side filter), so there's
-        // no "unrestricted" case left to special-case here anymore.
+        // in at all, EXCEPT Owner (see _shared/accounts.js
+        // officeIpCheckPasses()). Owner accounts normally never appear
+        // in this table at all (server-side filter in listAccounts()) —
+        // the one exception is an owner viewing their OWN row (see
+        // viewerUsername in listAccounts()), which is the only way `a`
+        // could ever actually be role "owner" here.
         const office = a.officeId ? acctOfficesById[a.officeId] : null;
         const officeCell = office
           ? acctEsc(office.name)
-          : `<span class="office-missing">⚠️ No office — can't log in</span>`;
+          : (a.role === "owner"
+              ? `<span class="office-none">— no office (unrestricted, OK for Owner)</span>`
+              : `<span class="office-missing">⚠️ No office — can't log in</span>`);
         const statusCell = a.locked
           ? `<span class="office-missing" title="${acctEsc(a.lockedReason || "Locked")}">🔒 Locked</span>`
           : `<span style="color:var(--ink-soft);">Active</span>`;

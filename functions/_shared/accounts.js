@@ -265,15 +265,29 @@ export async function deleteOffice(env, id) {
 // anyAdminExists(), anySuperAdminExists(), etc.), so hiding it HERE means
 // it's hidden EVERYWHERE automatically, for every role including
 // SuperAdmin — nobody browsing Account Management, no matter their rank,
-// ever sees an owner account's username or that one exists. A DIRECT
-// lookup by exact username (getAccount() below) still finds it — that's
-// necessary for the owner to be able to log in at all — but nothing that
-// enumerates "all accounts" ever surfaces it.
-export async function listAccounts(env) {
+// ever sees an owner account's username or that one exists.
+//
+// ONE deliberate exception (2026-07): `viewerUsername`, if passed, is
+// allowed to see an owner row for THAT EXACT username only — this is
+// what lets an owner see themselves in their own Agent Profile table
+// (so they can edit their own fullName/PID like anyone else would),
+// without exposing them to anyone else, including another owner account
+// if one ever existed. Every OTHER caller (anyAdminExists(),
+// anySuperAdminExists(), and any call site that doesn't explicitly pass
+// this) gets the fully-hidden behavior by default — passing nothing here
+// is the safe default, not an opt-in.
+//
+// A DIRECT lookup by exact username (getAccount() below) still finds it
+// regardless of any of this — that's necessary for the owner to be able
+// to log in at all — but nothing that enumerates "all accounts" ever
+// surfaces it to anyone but that one account.
+export async function listAccounts(env, { viewerUsername } = {}) {
   const raw = await env.THREADS_KV.get(ACCOUNTS_INDEX_KEY);
   const usernames = raw ? JSON.parse(raw) : [];
   const accounts = await Promise.all(usernames.map((u) => env.THREADS_KV.get(`account:${u}`)));
-  return accounts.filter(Boolean).map((a) => JSON.parse(a)).filter((a) => a.role !== "owner").map(stripSecret);
+  return accounts.filter(Boolean).map((a) => JSON.parse(a))
+    .filter((a) => a.role !== "owner" || a.username === viewerUsername)
+    .map(stripSecret);
 }
 
 export async function getAccount(env, username) {

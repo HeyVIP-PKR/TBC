@@ -2,8 +2,10 @@
  * /api/admin/accounts
  *   GET                                  -> list accounts (no secrets).
  *     Requires rank >= senior (Senior needs this to pick a target for
- *     assisted password resets). NEVER includes "owner" accounts — see
- *     listAccounts() in _shared/accounts.js, filtered at the source.
+ *     assisted password resets). NEVER includes "owner" accounts for
+ *     anyone EXCEPT an owner viewing this list themselves, in which case
+ *     they see their own row (and only their own) — see listAccounts()
+ *     in _shared/accounts.js, filtered at the source.
  *   POST { action:"save", username, password?, role?, officeId?, allowedBrands?, allowedModules?, fullName?, pid? }
  *     What's allowed depends on the caller's rank AND the TARGET
  *     account's rank — see the permission matrix below. Any field
@@ -82,7 +84,11 @@ async function handleGet({ request, env }) {
   if (!env.THREADS_KV) return json({ ok: false, error: "THREADS_KV is not bound yet." }, 500);
   const auth = await authenticateStaff(request, env, ROLE_RANK.senior);
   if (!auth.ok) return json({ ok: false, error: "Not authorized." }, 401);
-  return json({ ok: true, accounts: await listAccounts(env) });
+  // Only an owner viewing this list gets their OWN row back (see the
+  // viewerUsername comment on listAccounts() in _shared/accounts.js) —
+  // everyone else, at any rank, still sees zero owner accounts.
+  const viewerUsername = auth.account?.role === "owner" ? auth.account.username : undefined;
+  return json({ ok: true, accounts: await listAccounts(env, { viewerUsername }) });
 }
 
 export async function onRequestPost(context) {

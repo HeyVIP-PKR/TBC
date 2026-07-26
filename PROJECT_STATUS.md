@@ -604,36 +604,63 @@ nobody needs to reset anything because of this change.
   side endpoints independently 401 without valid credentials too, not
   just the page redirect.
 
-### Role hierarchy — Agent / Senior / Admin / SuperAdmin
-Each tier's authority is a **literal allow-list**, not a sliding "anything
-below my rank" comparison:
+### Role hierarchy — Owner / SuperAdmin / Admin / Senior / Agent
+(2026-07 redesign — added Owner above SuperAdmin.)
 
-| Capability | Agent | Senior | Admin | SuperAdmin |
-|---|---|---|---|---|
-| Reset own password | ✅ | ✅ | ✅ | ✅ |
-| Reset an Agent's password (assisted) | ❌ | ✅ | ✅ | ✅ |
-| Reset a Senior's password (assisted) | ❌ | ❌ | ✅ | ✅ |
-| Reset an Admin/SuperAdmin's password | ❌ | ❌ | ❌ | ✅ (anyone) |
-| Create an Agent account | ❌ | ✅ | ✅ | ✅ |
-| Create a Senior account | ❌ | ❌ | ✅ | ✅ |
-| Create an Admin/SuperAdmin account | ❌ | ❌ | ❌ | ✅ (any role) |
-| Delete an Agent account | ❌ | ❌ | ✅ | ✅ |
-| Delete a Senior account | ❌ | ❌ | ✅ | ✅ |
-| Delete an Admin/SuperAdmin account | ❌ | ❌ | ❌ | ✅ |
-| View Whitelist IP (Offices) | ❌ | ❌ | 👁️ view only | ✅ view + edit |
-| View / edit TG Group Channel routing | ❌ | ❌ | ❌ | ✅ only |
-| Lock / unlock an account (manual) | ❌ | ❌ | ❌ | ✅ only |
-| View Agent Profile table | ❌ | ❌ | ✅ view | ✅ view |
-| Edit Agent Profile fullName/PID | ❌ | ❌ | ✅ | ✅ |
-| Edit Agent Profile Role | ❌ | ❌ | ❌ | ✅ |
+Every tier's authority is now ONE rule, not a hand-maintained allow-list:
+**an actor may act on a target only if the actor's rank is STRICTLY
+GREATER than the target's rank.** Same rank can never manage same rank —
+this is what makes "SuperAdmin can't touch another SuperAdmin, only
+Owner can" fall out for free.
 
-`MANAGE_SCOPE` in `functions/api/admin/accounts.js`:
-`{ senior: ["agent"], admin: ["agent", "senior"] }` (superadmin bypasses
-the map entirely). SuperAdmin self-promotion bootstrap: while zero
-SuperAdmin accounts exist anywhere, any Admin-or-above account can
-promote ONLY its own account to `superadmin` (via `accounts-admin.html`'s
-Edit Account) — the instant one SuperAdmin exists, this path closes for
-good.
+| Capability | Agent | Senior | Admin | SuperAdmin | Owner |
+|---|---|---|---|---|---|
+| Reset own password | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Reset an Agent's password (assisted) | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Reset a Senior's password (assisted) | ❌ | ❌ | ✅ | ✅ | ✅ |
+| Reset an Admin's password (assisted) | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Reset a SuperAdmin's password (assisted) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Create an Agent account | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Create a Senior account | ❌ | ❌ | ✅ | ✅ | ✅ |
+| Create an Admin account | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Create a SuperAdmin account | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Create an Owner account | ❌ | ❌ | ❌ | ❌ | ❌ (nobody — see below) |
+| Delete an Agent/Senior account | ❌ | ❌ | ✅ | ✅ | ✅ |
+| Delete an Admin account | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Delete a SuperAdmin account | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Lock / unlock an Agent/Senior/Admin account | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Lock / unlock a SuperAdmin account | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Edit role / office / brands / Topic Access of an Agent/Senior/Admin | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Edit role / office / brands / Topic Access of a SuperAdmin | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Log in from any IP (no office/whitelist needed) | ❌ | ❌ | ❌ | ❌ (changed — used to be ✅) | ✅ |
+| View Agent Profile table | ❌ | ❌ | ✅ view | ✅ view | ✅ view |
+| See that an Owner account exists at all | ❌ | ❌ | ❌ | ❌ | (n/a — only sees itself) |
+
+**Owner is not a role anyone can be promoted to, ever, through the app.**
+`saveAccount()` in `_shared/accounts.js` hard-refuses `role: "owner"` in
+any create/edit request regardless of the caller's rank
+(`ASSIGNABLE_ROLES` excludes it), and `functions/api/admin/accounts.js`
+rejects it explicitly too, before anything else runs. The only way an
+owner account exists is a **direct Cloudflare KV write**, outside the
+app entirely (`wrangler kv key put --namespace-id=<THREADS_KV id>
+"account:<username>" '<json>'` — ask Claude for the exact command +
+password-hash generation when setting this up).
+
+**Owner accounts never appear in ANY account listing** —
+`listAccounts()` filters them out at the source, so `GET
+/api/admin/accounts` never returns one, for any caller including
+SuperAdmin. A `save`/`delete`/`lock`/`unlock` request that names an
+*existing* owner account as its target (by username) gets back the
+exact same `404 "Account not found"` a nonexistent username would —
+never a `403` — so there's no way to distinguish "doesn't exist" from
+"exists but you can't touch it."
+
+SuperAdmin self-promotion bootstrap (unrelated to and unaffected by the
+Owner tier): while zero SuperAdmin accounts exist anywhere, any
+Admin-or-above account can promote ONLY its own account to `superadmin`
+(via `accounts-admin.html` or index.html's Account Management → Agent
+Profile) — the instant one SuperAdmin exists, this path closes for good.
+
 
 ### ✅ Office/IP rule — CHANGED this session: SuperAdmin is now the ONLY
 role exempt from needing an office

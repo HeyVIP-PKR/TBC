@@ -2,46 +2,73 @@
  * /api/admin/accounts
  *   GET                                  -> list accounts (no secrets).
  *     Requires rank >= senior (Senior needs this to pick a target for
- *     assisted password resets).
+ *     assisted password resets). NEVER includes "owner" accounts — see
+ *     listAccounts() in _shared/accounts.js, filtered at the source.
  *   POST { action:"save", username, password?, role?, officeId?, allowedBrands?, allowedModules?, fullName?, pid? }
- *     What's allowed depends on the caller's rank AND what's actually
- *     changing — see the permission matrix below. Any field omitted from
- *     the body keeps its existing value (saveAccount uses patch/merge
- *     semantics).
+ *     What's allowed depends on the caller's rank AND the TARGET
+ *     account's rank — see the permission matrix below. Any field
+ *     omitted from the body keeps its existing value (saveAccount uses
+ *     patch/merge semantics).
  *   POST { action:"delete", username }   -> requires rank >= admin, and
  *     scoped the same way as create/reset below.
- *   POST { action:"lock"|"unlock", username, reason? } -> SuperAdmin ONLY,
- *     no delegation to Admin/Senior (unlike everything else in this
- *     file). Manual override in either direction for the auto-lock
- *     feature in api/auth/login.js (5 consecutive wrong passwords, or 5
- *     different unrecognized IPs within an hour, both lock the account
- *     automatically) — see that file's header for the full writeup.
+ *   POST { action:"lock"|"unlock", username, reason? } -> requires rank
+ *     >= superadmin (no delegation to Admin/Senior), AND target rank
+ *     strictly below the caller's own. Manual override in either
+ *     direction for the auto-lock feature in api/auth/login.js (5
+ *     consecutive wrong passwords, or 5 different unrecognized IPs
+ *     within an hour, both lock the account automatically) — see that
+ *     file's header for the full writeup.
  *
- * Permission matrix (see PROJECT_STATUS.md "Role hierarchy" for the
- * full writeup) — each tier's "manage scope" is a literal allow-list,
- * NOT "anything ranked below me":
- *   - Senior's manage scope: Agent only.
- *   - Admin's manage scope: Agent AND Senior.
- *   - SuperAdmin: unrestricted.
- *   Manage scope governs THREE actions identically: creating a new
- *   account with that role, an assisted password-only reset targeting
- *   an existing account with that role, and deleting an account with
- *   that role.
+ * Permission matrix (2026-07 redesign — added an "owner" tier above
+ * superadmin; see PROJECT_STATUS.md "Role hierarchy" for the full
+ * writeup). Every tier's authority is now governed by ONE rule instead
+ * of a hand-maintained allow-list: an actor may create / assisted-
+ * password-reset / delete / lock-unlock / edit-role-and-access-of a
+ * target ONLY IF the actor's rank is STRICTLY GREATER than the target's
+ * rank (see canManage() below). Same rank can never manage same rank —
+ * this is what makes "SuperAdmin can't touch another SuperAdmin, only
+ * Owner can" fall out for free, with no owner-specific special-casing
+ * needed in the comparison itself.
+ *   - "owner" itself can NEVER be created, promoted to, or edited
+ *     through this endpoint (or through saveAccount() at all — see
+ *     ASSIGNABLE_ROLES in _shared/accounts.js) — full stop, regardless
+ *     of the caller's rank. The only way an owner account exists is a
+ *     direct KV write outside the app.
+ *   - Any request that names an EXISTING owner account as its target
+ *     (save/delete/lock/unlock) gets back the exact same "Account not
+ *     found" a nonexistent username would — never a permission-denied —
+ *     so a SuperAdmin poking at a guessed username can't tell the
+ *     difference between "doesn't exist" and "exists but I'm not allowed
+ *     to touch it."
  *   - Editing role / officeId / allowedBrands / allowedModules on an
- *     EXISTING account:
- *     SuperAdmin only — EXCEPT the one-time SuperAdmin self-promotion
- *     bootstrap (an admin-or-above promoting THEIR OWN account to
- *     "superadmin", only while no superadmin exists anywhere yet).
+ *     EXISTING account: caller rank must be >= superadmin AND strictly
+ *     greater than the target's rank — EXCEPT the one-time SuperAdmin
+ *     self-promotion bootstrap (an admin-or-above promoting THEIR OWN
+ *     account to "superadmin", only while no superadmin exists anywhere
+ *     yet — unrelated to and unaffected by the owner tier).
  *   - Editing fullName / pid (profile fields) on an EXISTING account:
- *     rank >= admin (Admin and SuperAdmin both allowed — Senior is not).
+ *     caller rank >= admin AND (editing themselves OR strictly
+ *     outranking the target).
  */
 import { listAccounts, saveAccount, deleteAccount, getAccount, authenticateStaff, anySuperAdminExists, setAccountLocked, ROLE_RANK, rankOf } from "../../_shared/accounts.js";
 
-// Literal allow-lists, not a rank comparison — see file header.
-const MANAGE_SCOPE = {
-  senior: ["agent"],
-  admin: ["agent", "senior"],
-};
+// An actor may act on a target only if strictly outranking it — same
+// rank can never manage same rank (this alone is what stops SuperAdmin
+// from managing another SuperAdmin; Owner, one tier above, still can).
+function canManage(actorRank, targetRank) {
+  return actorRank > targetRank;
+}
+
+// True when `target` is a real, existing account whose role is "owner"
+// AND the actor doesn't outrank it — i.e. every non-owner actor. Used to
+// make owner accounts indistinguishable from nonexistent ones for any
+// action targeting them by username (see the file header). Deliberately
+// does NOT special-case "actor is also an owner" via a role check —
+// rank comparison (owner is the top rank) already covers that correctly
+// with no extra branching.
+function isHiddenTarget(target, actorRank) {
+  return !!target && target.role === "owner" && actorRank < ROLE_RANK.owner;
+}
 
 export async function onRequestGet(context) {
   try {
@@ -78,24 +105,41 @@ async function handlePost({ request, env }) {
     return json({ ok: false, error: "Invalid JSON body." }, 400);
   }
 
+  // "owner" can never be the value of `role` in ANY save request —
+  // creating a new account with it, or trying to promote an existing
+  // account to it — regardless of the caller's own rank. This is also
+  // enforced independently inside saveAccount() itself (see
+  // ASSIGNABLE_ROLES in _shared/accounts.js); checked here too so the
+  // rejection is explicit and immediate rather than a silent no-op deep
+  // in a shared function.
+  if (body.action === "save" && body.role === "owner") {
+    return json({ ok: false, error: "The Owner role cannot be assigned through this interface." }, 403);
+  }
+
   // Bootstrap mode (no real account yet) is treated as superadmin-rank
   // for this one-time setup call — same trust level BRAND_EDIT_PASSWORD
   // already had before any of this existed.
   const actorRank = auth.account ? rankOf(auth.account.role) : ROLE_RANK.superadmin;
-  const actorRole = auth.account ? auth.account.role : "superadmin";
   const actorUsername = auth.account ? auth.account.username : null;
-  const inScope = (targetRole) => actorRank === ROLE_RANK.superadmin || (MANAGE_SCOPE[actorRole] || []).includes(targetRole);
 
   if (body.action === "save") {
     if (!body.username) return json({ ok: false, error: "Username is required." }, 400);
     const targetUsername = body.username.toLowerCase();
     const existingTarget = await getAccount(env, targetUsername);
 
+    // An owner account, targeted by anyone who doesn't outrank it (i.e.
+    // everyone but another owner) — respond exactly as if it didn't
+    // exist. See isHiddenTarget()'s comment above for why this can't
+    // just be a 403.
+    if (isHiddenTarget(existingTarget, actorRank)) {
+      return json({ ok: false, error: "Account not found." }, 404);
+    }
+
     if (!existingTarget) {
       // ---- Creating a brand-new account ----
       const requestedRole = body.role || "agent";
-      if (!inScope(requestedRole)) {
-        return json({ ok: false, error: `You can only create accounts with role: ${(MANAGE_SCOPE[actorRole] || []).join(" or ")}.` }, 403);
+      if (!canManage(actorRank, rankOf(requestedRole))) {
+        return json({ ok: false, error: "You can only create accounts with a role lower than your own." }, 403);
       }
     } else {
       // ---- Editing an existing account ----
@@ -106,6 +150,8 @@ async function handlePost({ request, env }) {
       // would wrongly count as "changing" even when the value is
       // identical. This matters a lot for the SuperAdmin self-promotion
       // bootstrap below, which requires ONLY role to be changing.
+      const targetRank = rankOf(existingTarget.role);
+      const isSelf = actorUsername === targetUsername;
       const roleChanging = body.role !== undefined && body.role !== existingTarget.role;
       const profileChanging =
         (body.fullName !== undefined && body.fullName !== (existingTarget.fullName || "")) ||
@@ -118,23 +164,32 @@ async function handlePost({ request, env }) {
 
       if (roleChanging || accessChanging) {
         const isSelfPromotionToSuperAdmin =
-          actorUsername === targetUsername &&
+          isSelf &&
           body.role === "superadmin" &&
           !accessChanging &&
           actorRank >= ROLE_RANK.admin;
         const superAdminAlreadyExists = await anySuperAdminExists(env);
+        // Two conditions, BOTH required (not just "rank >= superadmin"
+        // like before this redesign): the caller must be superadmin-or-
+        // above, AND must strictly outrank the target — the second part
+        // is what stops a SuperAdmin from touching another SuperAdmin's
+        // role/office/brands/modules, and (redundantly with the
+        // isHiddenTarget() check above, which already returned 404 for
+        // an actual owner target) would also stop anyone but an owner
+        // from reaching an owner this way.
+        const hasAuthority = actorRank >= ROLE_RANK.superadmin && canManage(actorRank, targetRank);
 
-        if (actorRank < ROLE_RANK.superadmin && !(isSelfPromotionToSuperAdmin && !superAdminAlreadyExists)) {
-          return json({ ok: false, error: "Only SuperAdmin can change role, office, or brand access." }, 403);
+        if (!hasAuthority && !(isSelfPromotionToSuperAdmin && !superAdminAlreadyExists)) {
+          return json({ ok: false, error: "You can only change role, office, or access for accounts ranked below your own." }, 403);
         }
       }
-      if (profileChanging && actorRank < ROLE_RANK.admin) {
-        return json({ ok: false, error: "Only Admin or above can edit profile fields." }, 403);
+      if (profileChanging && !(actorRank >= ROLE_RANK.admin && (isSelf || canManage(actorRank, targetRank)))) {
+        return json({ ok: false, error: "You can only edit profile fields for your own account, or accounts ranked below your own." }, 403);
       }
       if (passwordChanging && !roleChanging && !accessChanging) {
         // Password-only change on someone else's account (an assisted reset).
-        if (!inScope(existingTarget.role)) {
-          return json({ ok: false, error: `You can only reset a password for: ${(MANAGE_SCOPE[actorRole] || []).join(" or ")}.` }, 403);
+        if (!isSelf && !canManage(actorRank, targetRank)) {
+          return json({ ok: false, error: "You can only reset a password for accounts ranked below your own." }, 403);
         }
       }
     }
@@ -161,25 +216,32 @@ async function handlePost({ request, env }) {
     if (actorRank < ROLE_RANK.admin) return json({ ok: false, error: "Not authorized." }, 403); // Senior has no delete access at all
     if (!body.username) return json({ ok: false, error: "Missing username." }, 400);
     const target = await getAccount(env, body.username);
-    if (target && !inScope(target.role)) {
-      return json({ ok: false, error: `You can only delete: ${(MANAGE_SCOPE[actorRole] || []).join(" or ")}.` }, 403);
+    if (isHiddenTarget(target, actorRank)) return json({ ok: false, error: "Account not found." }, 404);
+    if (target && !canManage(actorRank, rankOf(target.role))) {
+      return json({ ok: false, error: "You can only delete accounts ranked below your own." }, 403);
     }
     await deleteAccount(env, body.username);
     return json({ ok: true });
   }
 
   if (body.action === "lock" || body.action === "unlock") {
-    // Manual lock/unlock — SuperAdmin only, no exceptions (unlike
-    // delete/create which follow the tiered MANAGE_SCOPE allow-list,
-    // locking someone out of the whole hub is treated as sensitive
-    // enough to not delegate down to Admin). Requested directly by the
-    // business owner alongside the auto-lock triggers in
-    // api/auth/login.js — see that file for what actually causes an
-    // automatic lock; this is just the manual override either direction.
-    if (actorRank < ROLE_RANK.superadmin) return json({ ok: false, error: "Only SuperAdmin can lock or unlock an account." }, 403);
+    // Manual lock/unlock — SuperAdmin-or-above only (no delegation to
+    // Admin/Senior — locking someone out of the whole hub is treated as
+    // sensitive enough not to hand down), AND the target must be
+    // strictly outranked by the caller (new — this used to be missing
+    // entirely, meaning any SuperAdmin could lock any other SuperAdmin;
+    // now peer SuperAdmins can't touch each other, only Owner can act on
+    // a SuperAdmin). Requested directly by the business owner alongside
+    // the auto-lock triggers in api/auth/login.js — see that file for
+    // what actually causes an automatic lock; this is just the manual
+    // override either direction.
     if (!body.username) return json({ ok: false, error: "Missing username." }, 400);
     const target = await getAccount(env, body.username);
+    if (isHiddenTarget(target, actorRank)) return json({ ok: false, error: "Account not found." }, 404);
     if (!target) return json({ ok: false, error: "Account not found." }, 404);
+    if (!(actorRank >= ROLE_RANK.superadmin && canManage(actorRank, rankOf(target.role)))) {
+      return json({ ok: false, error: "You can only lock or unlock accounts ranked below your own." }, 403);
+    }
     const locked = body.action === "lock";
     const account = await setAccountLocked(env, body.username, locked, locked ? (body.reason || `Manually locked by ${actorUsername}`) : null);
     return json({ ok: true, account });

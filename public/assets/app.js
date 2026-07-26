@@ -18,6 +18,20 @@
     return;
   }
 
+  // Real enforcement, not just hiding it from the sidebar — an agent
+  // scoped away from this Topic (account.allowedModules, see
+  // authguard.js's filterAllowedModules) who directly types/pastes this
+  // module's URL still gets blocked here, before the form even renders.
+  // submit.js has the actual server-side check that matters (this is
+  // just a friendlier "Not available" message instead of a raw 403 after
+  // filling out the whole form).
+  if (window.AgentAuth && window.AgentAuth.filterAllowedModules([module]).length === 0) {
+    titleEl.textContent = "Not available";
+    hintEl.textContent = "You don't have access to this Topic. Contact a SuperAdmin if you think this is a mistake.";
+    formCard.querySelector("form").style.display = "none";
+    return;
+  }
+
   document.title = `${module.name} — Issue Submission`;
   iconEl.textContent = module.icon;
   titleEl.textContent = module.formTitle || `${module.name} Request`;

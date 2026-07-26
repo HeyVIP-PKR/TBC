@@ -123,6 +123,18 @@
       const allowed = new Set(a.allowedBrands || []);
       return (brands || []).filter(function (b) { return allowed.has(b.name); });
     },
+    // Same idea as filterAllowedBrands above, for Topics (window.MODULES)
+    // instead of brands — used by index.html's sidebar and app.js's
+    // direct-URL guard. `!a.allowedModules` (not just `!== "all"`) also
+    // treats a missing field as unrestricted — matches canSeeModule()'s
+    // server-side default in _shared/accounts.js for accounts saved
+    // before this feature existed.
+    filterAllowedModules: function (modules) {
+      const a = getAuth();
+      if (!a || !a.allowedModules || a.allowedModules === "all") return modules;
+      const allowed = new Set(a.allowedModules);
+      return (modules || []).filter(function (m) { return allowed.has(m.id); });
+    },
     // After a successful self-service password change, the OLD token is
     // now stale (password changes bump the account's tokenVersion server
     // -side — see accounts.js) — the change-password endpoint returns a

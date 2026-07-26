@@ -268,7 +268,7 @@ function stripSecret(account) {
 // `passwordChangedBy` is only meaningful when `password` is also given —
 // the username of whoever triggered the change (their own, for
 // self-service; the admin's, for an admin-driven reset).
-export async function saveAccount(env, { username, password, passwordChangedBy, role, officeId, allowedBrands, fullName, pid }) {
+export async function saveAccount(env, { username, password, passwordChangedBy, role, officeId, allowedBrands, allowedModules, fullName, pid }) {
   const key = username.toLowerCase();
   const existing = await getAccount(env, key);
   let salt = existing?.salt;
@@ -304,6 +304,16 @@ export async function saveAccount(env, { username, password, passwordChangedBy, 
     allowedBrands: allowedBrands !== undefined
       ? (allowedBrands === "all" ? "all" : (Array.isArray(allowedBrands) ? allowedBrands : []))
       : (existing?.allowedBrands ?? []),
+    // Same shape as allowedBrands ("all" or an array of module ids), but
+    // defaults to "all" instead of [] — a brand-less new account should
+    // see nothing until someone grants brands, but a module-less new
+    // account should NOT default to seeing zero Topics; that would make
+    // every brand-new agent (and every pre-existing account from before
+    // this field existed) unable to submit anything until a SuperAdmin
+    // manually re-grants every module. See canSeeModule() below.
+    allowedModules: allowedModules !== undefined
+      ? (allowedModules === "all" ? "all" : (Array.isArray(allowedModules) ? allowedModules : []))
+      : (existing?.allowedModules ?? "all"),
     fullName: fullName !== undefined ? fullName : (existing?.fullName || ""),
     pid: pid !== undefined ? pid : (existing?.pid || ""),
     lastActiveAt: existing?.lastActiveAt || null,
@@ -451,6 +461,16 @@ export function canSeeBrand(account, brandName) {
   if (rankOf(account.role) >= ROLE_RANK.admin) return true; // admin & superadmin see everything
   if (account.allowedBrands === "all") return true;
   return Array.isArray(account.allowedBrands) && account.allowedBrands.includes(brandName);
+}
+
+export function canSeeModule(account, moduleId) {
+  if (rankOf(account.role) >= ROLE_RANK.admin) return true; // admin & superadmin see everything
+  // `undefined` here (not just "all") covers accounts saved before this
+  // field existed — saveAccount() backfills existing accounts to "all"
+  // on their next save, but an account that's never been re-saved since
+  // this feature shipped won't have the field at all yet.
+  if (account.allowedModules === "all" || account.allowedModules === undefined) return true;
+  return Array.isArray(account.allowedModules) && account.allowedModules.includes(moduleId);
 }
 
 /**

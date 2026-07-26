@@ -2,7 +2,7 @@ import { BRANDS, RECORD_TO_SHEET, MODULE_META, SHEET_LAYOUT, MESSAGE_TEMPLATE, S
 import { appendRowToSheet, appendRowByColumns, writeRowForDate } from "../_shared/googleSheets.js";
 import { uploadAttachmentToR2, screenshotUrl } from "../_shared/r2.js";
 import { createThread } from "../_shared/threads.js";
-import { verifyRequest, canSeeBrand } from "../_shared/accounts.js";
+import { verifyRequest, canSeeBrand, canSeeModule } from "../_shared/accounts.js";
 import { getRouteOverride } from "../_shared/routes.js";
 import { resolveColumnValues, resolveSheetLayout, formatDateDDMMYYYY, buildTicketMessage, buildTitleAndSummary } from "../_shared/messageBuilders.js";
 
@@ -41,6 +41,13 @@ async function handleSubmit({ request, env }) {
 
   if (!VALID_MODULES.includes(moduleId)) {
     return json({ ok: false, error: `Unknown module "${moduleId}".` }, 400);
+  }
+  // Same real-server-side-enforcement reasoning as the canSeeBrand check
+  // just below — an agent scoped away from a Topic (account.allowedModules)
+  // can't submit to it even by calling this endpoint directly, regardless
+  // of what the sidebar/form on the client hid or let through.
+  if (!canSeeModule(account, moduleId)) {
+    return json({ ok: false, error: `You don't have access to submit ${MODULE_META[moduleId]?.name || moduleId} tickets.` }, 403);
   }
   const brand = BRANDS[brandId];
   if (!brand) {

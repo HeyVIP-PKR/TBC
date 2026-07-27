@@ -42,6 +42,7 @@ export const BRANDS = {
       promotion_request: { chatId: "", topicId: null },
       daily_report: { chatId: "", topicId: null },
       genie_issue: { chatId: "", topicId: null },
+      withdraw_issue: { chatId: "", topicId: null },
     },
   },
   betjili: {
@@ -55,6 +56,7 @@ export const BRANDS = {
       promotion_request: { chatId: "", topicId: null },
       daily_report: { chatId: "", topicId: null },
       genie_issue: { chatId: "", topicId: null },
+      withdraw_issue: { chatId: "", topicId: null },
     },
   },
   mostplay: {
@@ -68,6 +70,7 @@ export const BRANDS = {
       promotion_request: { chatId: "", topicId: null },
       daily_report: { chatId: "", topicId: null },
       genie_issue: { chatId: "", topicId: null },
+      withdraw_issue: { chatId: "", topicId: null },
     },
   },
   jeetwin: {
@@ -81,6 +84,7 @@ export const BRANDS = {
       promotion_request: { chatId: "", topicId: null },
       daily_report: { chatId: "", topicId: null },
       genie_issue: { chatId: "", topicId: null },
+      withdraw_issue: { chatId: "", topicId: null },
     },
   },
   sbj66: {
@@ -94,6 +98,7 @@ export const BRANDS = {
       promotion_request: { chatId: "", topicId: null },
       daily_report: { chatId: "", topicId: null },
       genie_issue: { chatId: "", topicId: null },
+      withdraw_issue: { chatId: "", topicId: null },
     },
   },
   heybaji: {
@@ -107,6 +112,7 @@ export const BRANDS = {
       promotion_request: { chatId: "", topicId: null },
       daily_report: { chatId: "", topicId: null },
       genie_issue: { chatId: "", topicId: null },
+      withdraw_issue: { chatId: "", topicId: null },
     },
   },
   superbaji: {
@@ -120,6 +126,7 @@ export const BRANDS = {
       promotion_request: { chatId: "", topicId: null },
       daily_report: { chatId: "", topicId: null },
       genie_issue: { chatId: "", topicId: null },
+      withdraw_issue: { chatId: "", topicId: null },
     },
   },
   kv8: {
@@ -133,6 +140,7 @@ export const BRANDS = {
       promotion_request: { chatId: "", topicId: null },
       daily_report: { chatId: "", topicId: null },
       genie_issue: { chatId: "", topicId: null },
+      withdraw_issue: { chatId: "", topicId: null },
     },
   },
   darazplay: {
@@ -146,6 +154,7 @@ export const BRANDS = {
       promotion_request: { chatId: "", topicId: null },
       daily_report: { chatId: "", topicId: null },
       genie_issue: { chatId: "", topicId: null },
+      withdraw_issue: { chatId: "", topicId: null },
     },
   },
 };
@@ -159,6 +168,9 @@ export const RECORD_TO_SHEET = {
   promotion_request: true,
   daily_report: true,
   genie_issue: true,
+  // Sheet structure confirmed (see SHEET_LAYOUT.withdraw_issue below) —
+  // no more guessing needed, safe to turn on.
+  withdraw_issue: true,
 };
 
 // Emoji + display name per module, used to build the Telegram message header.
@@ -169,6 +181,7 @@ export const MODULE_META = {
   promotion_request: { emoji: "🎟️", name: "Promotion Request", accent: "#F472B6" },
   daily_report: { emoji: "📊", name: "Daily Report", accent: "#34D399" },
   genie_issue: { emoji: "🤖", name: "Genie Issue", accent: "#A78BFA" },
+  withdraw_issue: { emoji: "💸", name: "Withdraw Issue", accent: "#4ADE80" },
 };
 
 /**
@@ -241,6 +254,20 @@ export const ACCOUNT_ISSUE_FIELD_STYLE = {
   updateRequest: { emoji: "✏️" },
   fullName: { emoji: "🧾" },
   aadharPan: { emoji: "🆔" },
+};
+
+/**
+ * Emoji (and optional label override) per field, for the Telegram
+ * message Withdraw Issue's submissions produce. See
+ * buildWithdrawIssueDynamicMessage() (_shared/messageBuilders.js) for
+ * how this gets used — "issueType"/"username"/"remark" are handled
+ * separately by that function (they get their own fixed header/footer
+ * lines) and deliberately don't need an entry here.
+ */
+export const WITHDRAW_ISSUE_FIELD_STYLE = {
+  tid: { emoji: "🆔" },
+  submittedAmount: { emoji: "💵" },
+  receivedAmount: { emoji: "💰" },
 };
 
 /**
@@ -644,6 +671,18 @@ export const SHEET_LAYOUT = {
     leftBlock: { startColumn: "B", width: 12, shiftValue: "Day Shift" },
     rightBlock: { startColumn: "O", width: 12, shiftValue: "Night Shift" },
     columns: dailyReportColumns(),
+  },
+  // Unlike every other module's sheet, this one's Date column is A (not
+  // B) and there's deliberately NO Screenshot Link column at all —
+  // matched against the real "Withdraw Issue" tab, confirmed column by
+  // column, not guessed. submittedAmount/receivedAmount both write "-"
+  // for any Issue Type except "Withdraw Amount Received Less" (the only
+  // one that actually collects them) via the plain-string column
+  // lookup's fieldMap[col]-is-empty fallback in resolveColumnValues().
+  withdraw_issue: {
+    tab: "Withdraw Issue",
+    startColumn: "A",
+    columns: ["autoDate", "brand", "username", "issueType", "tid", "submittedAmount", "receivedAmount", "remark", "pic"],
   },
 };
 

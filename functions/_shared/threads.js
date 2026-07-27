@@ -193,8 +193,19 @@ async function sweepExpired(env, list) {
   return keep;
 }
 
-export async function createThread(env, { module: moduleId, moduleName, icon, accent, brand, brandId, title, submitter, chatId, topicId, rootMessageId, rootText, hasMedia, attachmentFileIds, summary, fieldMap, screenshotLink, sheetRef, forwardedFrom }) {
+export async function createThread(env, { module: moduleId, moduleName, icon, accent, brand, brandId, title, submitter, chatId, topicId, rootMessageId, rootMessageIds, rootText, hasMedia, attachmentFileIds, summary, fieldMap, screenshotLink, sheetRef, forwardedFrom }) {
   const now = new Date().toISOString();
+  // A ticket sent as a multi-photo Telegram album (sendMediaGroup) gets
+  // ONE message_id per photo, only the FIRST of which carries the
+  // caption/text and is what `rootMessageId` points at. Everything that
+  // acts on "the original ticket message" needs to know about ALL of
+  // them, not just that first one — most importantly recallRoot() (see
+  // functions/api/threads/[id].js), which used to only delete the first
+  // photo from Telegram, silently leaving the rest behind. Falls back to
+  // a single-element array when the caller only passes rootMessageId
+  // (single-attachment or text-only tickets, where there's only one
+  // message anyway).
+  const allRootIds = rootMessageIds && rootMessageIds.length ? rootMessageIds : [rootMessageId];
   const thread = {
     id: newId(),
     module: moduleId,
@@ -214,6 +225,11 @@ export async function createThread(env, { module: moduleId, moduleName, icon, ac
     chatId: String(chatId),
     topicId: topicId ?? null,
     rootMessageId,
+    // Every Telegram message_id belonging to the ORIGINAL submission —
+    // see the comment above allRootIds. Threads from before this field
+    // existed simply don't have it; recallRoot() falls back to
+    // [thread.rootMessageId] for those, same net effect as before.
+    rootMessageIds: allRootIds,
     rootText: rootText || "",
     rootEdited: false,
     hasMedia: !!hasMedia,
@@ -224,7 +240,11 @@ export async function createThread(env, { module: moduleId, moduleName, icon, ac
     // for text-only tickets, or if the module doesn't collect attachments.
     attachmentFileIds: attachmentFileIds || [],
     rootRecalled: false,
-    msgIds: [rootMessageId],
+    // Includes every id in allRootIds (not just rootMessageId) so
+    // purgeThread()'s cleanup below removes a msgid: pointer for EVERY
+    // photo in the album, not just the first — matches the msgid: KV
+    // writes a few lines down.
+    msgIds: [...allRootIds],
     summary: summary || [],
     messages: [],
     solved: false,
@@ -256,7 +276,10 @@ export async function createThread(env, { module: moduleId, moduleName, icon, ac
   };
   await Promise.all([
     saveThread(env, thread),
-    env.THREADS_KV.put(`msgid:${thread.chatId}:${rootMessageId}`, thread.id),
+    // One msgid: pointer per photo in the album (not just the first) —
+    // so a reply to ANY of them (not only the first/captioned one) still
+    // correctly resolves back to this thread via the webhook.
+    ...allRootIds.map((mid) => env.THREADS_KV.put(`msgid:${thread.chatId}:${mid}`, thread.id)),
   ]);
   await patchListCache(env, thread); // instant sidebar visibility — see that function's comment for why
   return thread;

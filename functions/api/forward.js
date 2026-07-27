@@ -45,8 +45,9 @@
  * addForwardedToLink()) — both rendered in threads.html as a small
  * clickable "↗️ Forwarded to/from ..." reference card.
  */
-import { BRANDS, MODULE_META, MESSAGE_TEMPLATE, PROMOTION_MESSAGE_TEMPLATE, RECORD_TO_SHEET, SHEET_LAYOUT, PROMOTION_SHEET_CONFIG } from "../_shared/routing.js";
+import { BRANDS, MODULE_META, MESSAGE_TEMPLATE, PROMOTION_MESSAGE_TEMPLATE, RECORD_TO_SHEET, SHEET_LAYOUT, PROMOTION_SHEET_CONFIG, SCREENSHOT_R2_ENABLED } from "../_shared/routing.js";
 import { appendRowByColumns, writeRowForDate } from "../_shared/googleSheets.js";
+import { uploadAttachmentToR2, screenshotUrl } from "../_shared/r2.js";
 import { getThread, createThread, addForwardedToLink } from "../_shared/threads.js";
 import { verifyRequest, canSeeBrand, canSeeModule } from "../_shared/accounts.js";
 import { buildTicketMessage, buildTitleAndSummary, resolveColumnValues, resolveSheetLayout, formatDateDDMMYYYY } from "../_shared/messageBuilders.js";
@@ -104,6 +105,47 @@ async function handlePost({ request, env }) {
     return json({ ok: false, error: `No Telegram routing configured for ${meta.name} yet — ask a SuperAdmin to set it up under TG Group / Channel.` }, 400);
   }
 
+  const fileIds = sourceThread.attachmentFileIds || [];
+
+  // Upload to R2 first (same reasoning/order submit.js uses — so the
+  // message text below can include a real, directly-openable link) if
+  // this TARGET module wants one. This was missing entirely in the
+  // first version of forwarding — the Sheet's "Screenshot Link" column
+  // (which specifically expects an R2 url, not a Telegram file_id or
+  // deep-link) came out empty for every forwarded ticket, even ones
+  // with real attachments. Two sources of bytes to upload:
+  //   1. Freshly-added attachments — already have raw bytes (dataUrl)
+  //      right here in the request body, identical to a normal
+  //      submission's attachments.
+  //   2. Carried-over attachments — only have a Telegram file_id;
+  //      have to download the actual bytes from Telegram FIRST (same
+  //      two-step getFile + download dance functions/api/attachment/
+  //      [fileId].js already does for viewing them) before they can be
+  //      re-uploaded to R2.
+  const r2Links = [];
+  const r2Errors = [];
+  if (env.SCREENSHOTS_BUCKET && SCREENSHOT_R2_ENABLED[moduleId]) {
+    const origin = new URL(request.url).origin;
+    for (const att of newAttachments || []) {
+      try {
+        const key = await uploadAttachmentToR2(env, { moduleId, brandId, attachment: att });
+        r2Links.push(screenshotUrl(origin, key));
+      } catch (e) {
+        r2Errors.push(`${att.name || "new attachment"}: ${String((e && e.message) || e)}`);
+      }
+    }
+    for (const fid of fileIds) {
+      try {
+        const { bytes, contentType, filePath } = await downloadTelegramFile(env.TELEGRAM_BOT_TOKEN, fid);
+        const key = await uploadBytesToR2(env, { moduleId, brandId, name: filePath.split("/").pop(), type: contentType, bytes });
+        r2Links.push(screenshotUrl(origin, key));
+      } catch (e) {
+        r2Errors.push(`carried-over attachment: ${String((e && e.message) || e)}`);
+      }
+    }
+  }
+  const screenshotLink = r2Links.join(", ");
+
   const text = buildTicketMessage({
     moduleId,
     brandId,
@@ -112,18 +154,23 @@ async function handlePost({ request, env }) {
     fieldMap,
     fields,
     reporter,
-    screenshotLink: "",
+    screenshotLink,
     messageTemplate: MESSAGE_TEMPLATE,
     promotionMessageTemplate: PROMOTION_MESSAGE_TEMPLATE,
   });
 
-  const fileIds = sourceThread.attachmentFileIds || [];
   let tgResult;
   try {
     tgResult = await sendCombinedAttachments({ botToken: env.TELEGRAM_BOT_TOKEN, route, text, fileIds, newAttachments: newAttachments || [] });
   } catch (e) {
     return json({ ok: false, error: `Telegram send failed: ${String((e && e.message) || e)}` }, 502);
   }
+  // Fallback link resolveColumnValues() reaches for when THIS module
+  // doesn't have R2 enabled (screenshotLink would be "") — a Telegram
+  // deep-link to the message itself, same as a normal submission's
+  // attachmentLinks. Only meaningful once tgResult.messageId exists,
+  // which is why this is computed here and not alongside r2Links above.
+  const attachmentLinks = (fileIds.length || (newAttachments || []).length) ? [buildMessageLink(route, tgResult.messageId)] : [];
 
   // Sheet write — same pattern/order submit.js uses (write BEFORE
   // createThread so a real row's number can be captured into sheetRef
@@ -139,13 +186,13 @@ async function handlePost({ request, env }) {
   if (sheetAttempted) {
     try {
       if (moduleId === "promotion_request") {
-        const values = resolveColumnValues(promoConfig.columns, { fieldMap, brand, reporter, screenshotLink: "", attachmentLinks: [] });
+        const values = resolveColumnValues(promoConfig.columns, { fieldMap, brand, reporter, screenshotLink, attachmentLinks });
         const { row } = await appendRowByColumns(env, promoConfig.sheetId, promoConfig.tab, promoConfig.startColumn, values);
         if (row) sheetRef = { sheetId: promoConfig.sheetId, tab: promoConfig.tab, startColumn: promoConfig.startColumn, columns: promoConfig.columns, row };
       } else {
         const layoutEntry = SHEET_LAYOUT[moduleId];
         if (layoutEntry && layoutEntry.pairByDate) {
-          const values = resolveColumnValues(layoutEntry.columns, { fieldMap, brand, reporter, screenshotLink: "", attachmentLinks: [] });
+          const values = resolveColumnValues(layoutEntry.columns, { fieldMap, brand, reporter, screenshotLink, attachmentLinks });
           const dateValue = formatDateDDMMYYYY(fieldMap.reportDate || fieldMap.date);
           const shiftValue = fieldMap[layoutEntry.selectorField];
           const activeSide = shiftValue === layoutEntry.rightBlock.shiftValue ? "right" : "left";
@@ -159,7 +206,7 @@ async function handlePost({ request, env }) {
         } else {
           const layout = resolveSheetLayout(layoutEntry, fieldMap);
           if (layout) {
-            const values = resolveColumnValues(layout.columns, { fieldMap, brand, reporter, screenshotLink: "", attachmentLinks: [] });
+            const values = resolveColumnValues(layout.columns, { fieldMap, brand, reporter, screenshotLink, attachmentLinks });
             const { row } = await appendRowByColumns(env, brand.sheetId, layout.tab, layout.startColumn, values);
             if (row) sheetRef = { sheetId: brand.sheetId, tab: layout.tab, startColumn: layout.startColumn, columns: layout.columns, row };
           }
@@ -193,12 +240,13 @@ async function handlePost({ request, env }) {
       chatId: route.chatId,
       topicId: route.topicId,
       rootMessageId: tgResult.messageId,
+      rootMessageIds: tgResult.messageIds,
       rootText: text,
       hasMedia: fileIds.length > 0 || (newAttachments || []).length > 0,
       attachmentFileIds: tgResult.attachmentFileIds.length ? tgResult.attachmentFileIds : fileIds,
       summary,
       fieldMap,
-      screenshotLink: "",
+      screenshotLink,
       sheetRef,
       forwardedFrom,
     });
@@ -222,7 +270,7 @@ async function handlePost({ request, env }) {
     // only the backlink shown on the ORIGINAL ticket.
   }
 
-  return json({ ok: true, thread: newThread, sheetAttempted, sheetLogged, sheetError });
+  return json({ ok: true, thread: newThread, sheetAttempted, sheetLogged, sheetError, r2Errors: r2Errors.length ? r2Errors : undefined });
 }
 
 // Reuses Telegram's own file_id(s) from the source ticket instead of
@@ -252,7 +300,7 @@ async function sendCombinedAttachments({ botToken, route, text, fileIds, newAtta
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.description || "unknown Telegram error");
-    return { messageId: data.result.message_id, attachmentFileIds: [] };
+    return { messageId: data.result.message_id, messageIds: [data.result.message_id], attachmentFileIds: [] };
   }
 
   if (total === 1) {
@@ -299,10 +347,15 @@ async function sendCombinedAttachments({ botToken, route, text, fileIds, newAtta
     for (let i = 0; i < newAttachments.length; i++) {
       sent.push(await sendOneFreshUpload({ botToken, route, text: sent.length === 0 ? text : undefined, attachment: newAttachments[i] }));
     }
-    return { messageId: sent[0].messageId, attachmentFileIds: sent.flatMap((s) => s.attachmentFileIds) };
+    return { messageId: sent[0].messageId, messageIds: sent.map((s) => s.messageId), attachmentFileIds: sent.flatMap((s) => s.attachmentFileIds) };
   }
   return {
     messageId: data.result[0].message_id,
+    // EVERY message_id in the album — see the comment on this same
+    // field in submit.js's sendTelegramWithAttachments() for why this
+    // matters (recallRoot() needs to delete all of them, not just the
+    // first/captioned one).
+    messageIds: data.result.map((m) => m.message_id),
     attachmentFileIds: data.result.map((m) => (m.photo?.[m.photo.length - 1] || m.document)?.file_id).filter(Boolean),
   };
 }
@@ -340,7 +393,7 @@ async function sendOneFreshUpload({ botToken, route, text, attachment }) {
   const fileId = isImage
     ? data.result.photo?.[data.result.photo.length - 1]?.file_id
     : data.result.document?.file_id;
-  return { messageId: data.result.message_id, attachmentFileIds: fileId ? [fileId] : [] };
+  return { messageId: data.result.message_id, messageIds: [data.result.message_id], attachmentFileIds: fileId ? [fileId] : [] };
 }
 
 function dataUrlToBase64(dataUrl) {
@@ -353,6 +406,44 @@ function base64ToBytes(base64) {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
+}
+
+// Downloads a Telegram-hosted file's actual bytes by file_id — same
+// two-step getFile + download dance functions/api/attachment/[fileId].js
+// already does to let an agent VIEW a carried-over attachment; this is
+// the same thing, just so those bytes can be re-uploaded to R2 (see
+// uploadBytesToR2 below) instead of streamed to a browser.
+async function downloadTelegramFile(botToken, fileId) {
+  const infoRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${encodeURIComponent(fileId)}`);
+  const info = await infoRes.json();
+  if (!info.ok) throw new Error(info.description || "Telegram couldn't resolve this file.");
+  const filePath = info.result.file_path;
+  const fileRes = await fetch(`https://api.telegram.org/file/bot${botToken}/${filePath}`);
+  if (!fileRes.ok) throw new Error("Telegram couldn't deliver this file.");
+  const buffer = await fileRes.arrayBuffer();
+  const contentType = fileRes.headers.get("content-type") || "application/octet-stream";
+  return { bytes: new Uint8Array(buffer), contentType, filePath };
+}
+
+// Same key format/bucket _shared/r2.js's uploadAttachmentToR2() uses —
+// this is a separate function (not that one) only because it already
+// has raw bytes in hand (freshly downloaded from Telegram, see
+// downloadTelegramFile above) and skipping the dataUrl-string round trip
+// avoids btoa()/atob() choking on very large files.
+async function uploadBytesToR2(env, { moduleId, brandId, name, type, bytes }) {
+  const bucket = env.SCREENSHOTS_BUCKET;
+  if (!bucket) throw new Error("Missing SCREENSHOTS_BUCKET R2 binding");
+  const safeName = (name || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
+  const key = `${moduleId}/${brandId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`;
+  await bucket.put(key, bytes, { httpMetadata: { contentType: type || "application/octet-stream" } });
+  return key;
+}
+
+function buildMessageLink(route, messageId) {
+  const internalId = String(route.chatId).replace(/^-100/, "");
+  return route.topicId
+    ? `https://t.me/c/${internalId}/${route.topicId}/${messageId}`
+    : `https://t.me/c/${internalId}/${messageId}`;
 }
 
 async function sendOnePhotoOrDocument({ botToken, route, text, fileId }) {
@@ -377,9 +468,9 @@ async function sendOnePhotoOrDocument({ botToken, route, text, fileId }) {
     });
     data = await res.json();
     if (!data.ok) throw new Error(data.description || "unknown Telegram error");
-    return { messageId: data.result.message_id, attachmentFileIds: [data.result.document?.file_id].filter(Boolean) };
+    return { messageId: data.result.message_id, messageIds: [data.result.message_id], attachmentFileIds: [data.result.document?.file_id].filter(Boolean) };
   }
-  return { messageId: data.result.message_id, attachmentFileIds: [data.result.photo?.[data.result.photo.length - 1]?.file_id].filter(Boolean) };
+  return { messageId: data.result.message_id, messageIds: [data.result.message_id], attachmentFileIds: [data.result.photo?.[data.result.photo.length - 1]?.file_id].filter(Boolean) };
 }
 
 function json(obj, status = 200) {

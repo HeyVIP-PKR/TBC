@@ -913,8 +913,14 @@
             <div class="thread-summary-attachments" id="fwdCarriedAttachments"></div>
             <div class="field" style="margin-top:10px;">
               <label>Add another attachment (optional — e.g. this Topic's group needs a photo the original one didn't)</label>
-              <input type="file" id="fwdNewFile" accept="image/*,.pdf" multiple />
-              <div id="fwdNewFileList" style="font-size:12px; color:var(--ink-soft); margin-top:6px;"></div>
+              <div class="dropzone" id="fwdDropzone" tabindex="0">
+                <div class="dz-icon">📎</div>
+                <p class="dz-main">Click or drag files here</p>
+                <p class="dz-sub">JPG, PNG, PDF — Max 3 files, 20MB each</p>
+                <p class="dz-paste">📋 Ctrl+V / ⌘V to paste screenshot</p>
+              </div>
+              <div class="file-list" id="fwdFileList"></div>
+              <input type="file" id="fwdNewFile" multiple hidden />
             </div>
           </div>
           <div class="edit-details-status" id="fwdStatus"></div>
@@ -926,7 +932,7 @@
       `;
       document.body.appendChild(overlay);
 
-      function close() { overlay.remove(); }
+      function close() { window.removeEventListener("paste", onWindowPaste); overlay.remove(); }
       overlay.querySelector("#fwdClose").addEventListener("click", close);
       overlay.querySelector("#fwdCancel").addEventListener("click", close);
       overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
@@ -935,7 +941,7 @@
       const fieldsContainer = overlay.querySelector("#fwdFields");
       const submitBtn = overlay.querySelector("#fwdSubmit");
       const statusEl = overlay.querySelector("#fwdStatus");
-      const newFileListEl = overlay.querySelector("#fwdNewFileList");
+      const newFileListEl = overlay.querySelector("#fwdFileList");
       let fieldEls = {};
       let targetModule = null;
       const newFiles = []; // File objects, converted to base64 only at submit time
@@ -1012,11 +1018,73 @@
         refreshVisibility();
       });
 
-      overlay.querySelector("#fwdNewFile").addEventListener("change", (e) => {
-        newFiles.push(...Array.from(e.target.files || []));
-        e.target.value = ""; // lets the same file (or more) be picked again
-        newFileListEl.textContent = newFiles.length ? `${newFiles.length} new file(s) attached: ${newFiles.map((f) => f.name).join(", ")}` : "";
+      // Same dropzone behavior (click / drag&drop / paste, with a
+      // removable chip list) the submission form itself uses — see
+      // public/assets/app.js's own copy of this same logic. Re-
+      // implemented locally rather than shared since this one has to be
+      // scoped to just this modal (the paste listener in particular
+      // must NOT fire while some other part of the page has focus, and
+      // must be torn down again on close()).
+      const fwdDropzone = overlay.querySelector("#fwdDropzone");
+      const fwdFileInput = overlay.querySelector("#fwdNewFile");
+      const FWD_MAX_FILES = 3;
+      const FWD_MAX_SIZE_MB = 20;
+
+      function renderNewFileList() {
+        newFileListEl.innerHTML = newFiles
+          .map((f, i) => `<div class="file-chip"><span class="name">${escapeHtml(f.name)}</span><button type="button" data-i="${i}">&times;</button></div>`)
+          .join("");
+        newFileListEl.querySelectorAll("button").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            newFiles.splice(Number(btn.dataset.i), 1);
+            renderNewFileList();
+          });
+        });
+      }
+
+      function addNewFiles(list) {
+        const rejected = [];
+        for (const f of list) {
+          if (newFiles.length >= FWD_MAX_FILES) break;
+          if (f.size > FWD_MAX_SIZE_MB * 1024 * 1024) {
+            rejected.push(f.name);
+            continue;
+          }
+          newFiles.push(f);
+        }
+        renderNewFileList();
+        if (rejected.length) {
+          statusEl.textContent = `Skipped (over ${FWD_MAX_SIZE_MB}MB): ${rejected.join(", ")}`;
+          statusEl.className = "edit-details-status err";
+        }
+      }
+
+      fwdDropzone.addEventListener("click", () => fwdFileInput.click());
+      fwdDropzone.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") fwdFileInput.click();
       });
+      fwdFileInput.addEventListener("change", () => {
+        addNewFiles(fwdFileInput.files);
+        fwdFileInput.value = ""; // lets the same file (or more) be picked again
+      });
+      ["dragenter", "dragover"].forEach((evt) =>
+        fwdDropzone.addEventListener(evt, (e) => { e.preventDefault(); fwdDropzone.classList.add("drag-over"); })
+      );
+      ["dragleave", "drop"].forEach((evt) =>
+        fwdDropzone.addEventListener(evt, (e) => { e.preventDefault(); fwdDropzone.classList.remove("drag-over"); })
+      );
+      fwdDropzone.addEventListener("drop", (e) => addNewFiles(e.dataTransfer.files));
+
+      // Scoped to while THIS modal is open only — added here, removed
+      // again in close() below — so pasting elsewhere on the page (e.g.
+      // the reply box) is never intercepted by a modal that isn't even
+      // visible anymore.
+      function onWindowPaste(e) {
+        const items = Array.from(e.clipboardData.items).filter((i) => i.kind === "file");
+        if (!items.length) return;
+        addNewFiles(items.map((i) => i.getAsFile()).filter(Boolean));
+      }
+      window.addEventListener("paste", onWindowPaste);
 
       function fileToDataUrl(file) {
         return new Promise((resolve, reject) => {

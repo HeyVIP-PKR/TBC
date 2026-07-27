@@ -966,12 +966,34 @@
         slot.setAttribute("data-filled", "1"); // mark now so a poll landing mid-fetch doesn't double-trigger
         getAttachmentUrl(fileId, name).then(({ url, type }) => {
           if (!document.body.contains(slot)) return; // a newer poll already replaced this DOM before we resolved
-          if (type.startsWith("image/")) {
-            slot.innerHTML = `<img src="${url}" alt="${escapeAttr(name)}" class="inline-attach-media" />`;
-          } else if (type.startsWith("video/")) {
+          if (type.startsWith("video/")) {
             slot.innerHTML = `<video src="${url}" controls class="inline-attach-media"></video>`;
+          } else if (type.startsWith("image/")) {
+            slot.innerHTML = `<img src="${url}" alt="${escapeAttr(name)}" class="inline-attach-media" />`;
           } else {
-            slot.innerHTML = `<a href="${url}" download="${escapeAttr(name)}" class="inline-attach-file">📎 ${escapeHtml(name)} — click to download</a>`;
+            // Content-Type couldn't be confirmed as image/video (common
+            // for ticket-level attachments — see the comment on the
+            // "ticket-attachment-N" placeholder name a few lines up,
+            // which has no real extension to guess from, and Telegram
+            // itself doesn't always set a specific Content-Type either).
+            // Rather than give up and show a download link for what
+            // might genuinely be a perfectly normal photo, optimistically
+            // try rendering it as an <img> anyway — a browser decodes
+            // <img> from the ACTUAL file bytes, not the declared MIME
+            // type, so this still displays correctly even when `type`
+            // was wrong/generic. Only truly falls back to the download
+            // link if the browser actually fails to decode it as an
+            // image (this file genuinely isn't one).
+            const img = document.createElement("img");
+            img.alt = name;
+            img.className = "inline-attach-media";
+            img.addEventListener("error", () => {
+              if (!document.body.contains(slot)) return;
+              slot.innerHTML = `<a href="${url}" download="${escapeAttr(name)}" class="inline-attach-file">📎 ${escapeHtml(name)} — click to download</a>`;
+            }, { once: true });
+            slot.innerHTML = "";
+            slot.appendChild(img);
+            img.src = url; // set last so the error listener above is already attached
           }
           // Clicking an inline image/video also opens the fullscreen
           // lightbox, for a closer look — small bonus on top of what
@@ -990,21 +1012,33 @@
       attachLightboxBody.innerHTML = `<div class="attach-lightbox-status">Loading…</div>`;
       try {
         const { url, type } = await getAttachmentUrl(fileId, name);
-        if (type.startsWith("image/")) {
-          attachLightboxBody.innerHTML = `<img src="${url}" alt="${escapeAttr(name || "attachment")}" />`;
-        } else if (type.startsWith("video/")) {
+        if (type.startsWith("video/")) {
           attachLightboxBody.innerHTML = `<video src="${url}" controls autoplay playsinline></video>`;
+        } else if (type.startsWith("image/")) {
+          attachLightboxBody.innerHTML = `<img src="${url}" alt="${escapeAttr(name || "attachment")}" />`;
         } else {
-          // Not an image or video (PDF/doc/etc.) — hand it off as a
-          // normal download instead of pretending we can preview it
-          // inline.
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = name || "attachment";
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          attachLightboxBody.innerHTML = `<div class="attach-lightbox-status">Downloaded — this file type can't be previewed here.</div>`;
+          // Content-Type wasn't confirmed as image/video — same situation
+          // as loadInlineAttachments() above (see its comment on the
+          // "ticket-attachment-N" placeholder name having no real
+          // extension). Try rendering as an <img> anyway before assuming
+          // it's a genuinely non-previewable file — a browser decodes
+          // <img> from the actual bytes, not the declared MIME type.
+          const img = document.createElement("img");
+          img.alt = name || "attachment";
+          img.addEventListener("error", () => {
+            // Really isn't an image — hand it off as a normal download
+            // instead of pretending we can preview it inline.
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = name || "attachment";
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            attachLightboxBody.innerHTML = `<div class="attach-lightbox-status">Downloaded — this file type can't be previewed here.</div>`;
+          }, { once: true });
+          attachLightboxBody.innerHTML = "";
+          attachLightboxBody.appendChild(img);
+          img.src = url; // set last so the error listener above is already attached
         }
       } catch (e) {
         attachLightboxBody.innerHTML = `<div class="attach-lightbox-status attach-lightbox-error">${escapeHtml(String((e && e.message) || "Couldn't load this attachment."))}</div>`;

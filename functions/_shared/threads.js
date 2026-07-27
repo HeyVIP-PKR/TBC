@@ -193,7 +193,7 @@ async function sweepExpired(env, list) {
   return keep;
 }
 
-export async function createThread(env, { module: moduleId, moduleName, icon, accent, brand, brandId, title, submitter, chatId, topicId, rootMessageId, rootText, hasMedia, attachmentFileIds, summary, fieldMap, screenshotLink, sheetRef }) {
+export async function createThread(env, { module: moduleId, moduleName, icon, accent, brand, brandId, title, submitter, chatId, topicId, rootMessageId, rootText, hasMedia, attachmentFileIds, summary, fieldMap, screenshotLink, sheetRef, forwardedFrom }) {
   const now = new Date().toISOString();
   const thread = {
     id: newId(),
@@ -245,6 +245,14 @@ export async function createThread(env, { module: moduleId, moduleName, icon, ac
     // could change after the fact; the row this ticket ACTUALLY landed
     // on never does).
     sheetRef: sheetRef || null,
+    // "Generate to another Topic" (forwarding) — see functions/api/forward.js.
+    // forwardedFrom is set ONCE at creation time on the NEW ticket, points
+    // back at the ticket it was generated from. forwardedTo lives on the
+    // ORIGINAL ticket instead and can grow (one ticket could in principle
+    // be forwarded to more than one other Topic over time), appended via
+    // addForwardedToLink() below rather than passed in here.
+    forwardedFrom: forwardedFrom || null,
+    forwardedTo: [],
   };
   await Promise.all([
     saveThread(env, thread),
@@ -603,6 +611,22 @@ export async function updateThreadDetails(env, threadId, { fieldMap, rootText, t
   await patchListCache(env, thread);
   return thread;
 }
+
+// Appends one entry to the ORIGINAL ticket's forwardedTo array, right
+// after the new (forwarded) ticket was successfully created in
+// functions/api/forward.js — so the original shows "↗️ Forwarded to
+// Account Issue" alongside whatever else it already has, and that link
+// is clickable to jump straight to the new ticket. Doesn't call
+// patchListCache() — forwardedTo isn't part of the sidebar's summary/
+// title, so there's nothing there that would go stale.
+export async function addForwardedToLink(env, threadId, link) {
+  const thread = await getThread(env, threadId);
+  if (!thread) return null;
+  thread.forwardedTo = [...(thread.forwardedTo || []), link];
+  await saveThread(env, thread);
+  return thread;
+}
+
 
 // ---- Deletion history — every "delete/recall" action, kept separately
 // from thread storage so it survives even after a thread itself is gone.

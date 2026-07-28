@@ -417,16 +417,24 @@ a { color: inherit; text-decoration: none; }
 .agent-profile-status-text.is-locked { color: var(--required); }
 .agent-profile-module-list { display: flex; flex-direction: column; gap: 2px; }
 .agent-profile-admin-section-list { display: flex; flex-direction: column; gap: 2px; }
-.agent-profile-collapsible { margin-top: 14px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.agent-profile-collapsible { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
 .agent-profile-collapsible-header {
-  width: 100%; display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 12px; background: var(--field-bg); border: none; cursor: pointer;
-  font-family: inherit; text-align: left;
+  width: 100%; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+  padding: 0; margin: 0 0 10px; background: none; border: none; cursor: pointer; font-family: inherit; text-align: left;
 }
-.agent-profile-collapsible-header:hover { background: rgba(167, 139, 250, 0.12); }
-.agent-profile-chev { color: var(--ink-soft); font-size: 12px; transition: transform 0.15s ease; }
-.agent-profile-collapsible.is-open .agent-profile-chev { transform: rotate(180deg); }
-.agent-profile-collapsible-body { padding: 10px 12px; }
+.agent-profile-collapsible-header:hover .agent-profile-section-label-lg { color: var(--wordmark); }
+.agent-profile-section-label-lg {
+  font-size: 12px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--ink); display: block;
+}
+.agent-profile-section-hint {
+  display: block; font-size: 11px; font-weight: 600; letter-spacing: 0; text-transform: none;
+  color: var(--ink-soft); margin-top: 2px;
+}
+.agent-profile-chev { color: var(--ink-soft); font-size: 13px; flex-shrink: 0; transition: transform 0.15s ease; }
+.agent-profile-collapsible:not(.is-open) .agent-profile-chev { transform: rotate(180deg); }
+.agent-profile-collapsible-body { padding: 0; }
+.agent-profile-divider { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
 .agent-profile-edit-level-row {
   display: flex; align-items: center; gap: 14px; margin: 0 0 6px 26px;
   font-size: 12px; color: var(--ink-soft);

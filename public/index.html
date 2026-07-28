@@ -957,28 +957,30 @@
             <div class="field"><label>Full name</label><input type="text" id="ap_fullname" value="${acctEsc(a.fullName || "")}" autocomplete="off" ${canEditProfileFields ? "" : "disabled"} /></div>
             <div class="field"><label>Agent PSD</label><input type="text" id="ap_pid" value="${acctEsc(a.pid || "")}" placeholder="e.g. PSD-014" autocomplete="off" ${canEditProfileFields ? "" : "disabled"} /></div>
 
-            <div class="agent-profile-collapsible" data-section="topicAccess">
+            <div class="agent-profile-collapsible is-open" data-section="topicAccess">
               <button type="button" class="agent-profile-collapsible-header" data-collapse-toggle>
-                <span class="agent-profile-section-label" style="margin:0;">Topic access ${canManageAccess ? "" : '<span class="agent-profile-locked-note">(requires outranking this account)</span>'}</span>
-                <span class="agent-profile-chev">▾</span>
+                <span class="agent-profile-section-label agent-profile-section-label-lg">🔒 Topic Access</span>
+                <span class="agent-profile-chev">↓</span>
               </button>
-              <div class="agent-profile-collapsible-body" style="display:none;">
+              <div class="agent-profile-collapsible-body">
+                ${!canManageAccess ? '<p class="agent-profile-locked-note" style="margin:-4px 0 8px;">(requires outranking this account)</p>' : ""}
                 <div class="agent-profile-module-list">${moduleChecks}</div>
               </div>
             </div>
 
             ${canManageThisAccountsAdminAccess ? `
-            <div class="agent-profile-collapsible" data-section="adminAccess">
+            <div class="agent-profile-collapsible is-open" data-section="adminAccess">
               <button type="button" class="agent-profile-collapsible-header" data-collapse-toggle>
-                <span class="agent-profile-section-label" style="margin:0;">🔒 Account Management Access</span>
-                <span class="agent-profile-chev">▾</span>
+                <span class="agent-profile-section-label agent-profile-section-label-lg">🔒 Account Management Access <span class="agent-profile-section-hint">(which admin sidebar sections this account can see/edit)</span></span>
+                <span class="agent-profile-chev">↓</span>
               </button>
-              <div class="agent-profile-collapsible-body" style="display:none;">
+              <div class="agent-profile-collapsible-body">
                 <div class="agent-profile-admin-section-list">${adminSectionChecks}</div>
                 ${showDelegationToggle ? `
-                <label class="agent-profile-module-check" style="margin-top:6px;">
+                <hr class="agent-profile-divider" />
+                <label class="agent-profile-module-check">
                   <input type="checkbox" id="ap_canManageAdminAccess" ${a.canManageAdminAccess ? "checked" : ""} />
-                  🗝️ Can manage Account Management Access for other accounts
+                  Can manage Account Management Access for other accounts
                 </label>` : ""}
               </div>
             </div>` : ""}
@@ -1038,13 +1040,10 @@
       document.querySelectorAll(".agent-profile-collapsible").forEach((section) => {
         const header = section.querySelector("[data-collapse-toggle]");
         const body = section.querySelector(".agent-profile-collapsible-body");
-        const chev = section.querySelector(".agent-profile-chev");
         if (!header || !body) return;
         header.addEventListener("click", () => {
-          const isOpen = body.style.display !== "none";
-          body.style.display = isOpen ? "none" : "";
-          if (chev) chev.textContent = isOpen ? "▾" : "▴";
-          section.classList.toggle("is-open", !isOpen);
+          const isOpen = section.classList.toggle("is-open");
+          body.style.display = isOpen ? "" : "none";
         });
       });
     }

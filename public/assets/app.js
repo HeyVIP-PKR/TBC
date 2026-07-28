@@ -100,6 +100,74 @@
     if (f.required && !isGated) fieldEls[f.key].control.required = true;
   });
 
+  // ---- Withdraw Issue: duplicate-TID guard ----
+  // See functions/api/check-tid.js for the full write-up. Two check
+  // points: onBlur (early warning — see the listener below) and again
+  // right before actually submitting (final guard below, in the submit
+  // handler) — a fresh check right before submit covers the agent never
+  // blurring the field, or pasting a new value and hitting Submit
+  // without tabbing away first.
+  let tidDuplicateInfo = null; // { date, pic } while the CURRENT tid value is a known duplicate, else null
+  let checkTidNow = null; // set below only for the Withdraw Issue module; read by the submit handler further down
+  let tidCheckSeq = 0; // ignores a stale response if the agent kept typing/re-checking before an earlier check came back
+  if (module.id === "withdraw_issue" && fieldEls.tid) {
+    const tidLabel = fieldEls.tid.wrap.querySelector("label");
+    const tidWarning = document.createElement("span");
+    tidWarning.className = "tid-warning";
+    tidWarning.id = "tidWarning";
+    tidLabel.appendChild(tidWarning);
+
+    async function checkTid(showChecking) {
+      const brandId = brandSelect.value;
+      const tid = fieldEls.tid.control.value.trim();
+      tidDuplicateInfo = null;
+      if (!brandId || !tid) {
+        tidWarning.textContent = "";
+        tidWarning.className = "tid-warning";
+        return null;
+      }
+      const seq = ++tidCheckSeq;
+      if (showChecking) {
+        tidWarning.textContent = "checking…";
+        tidWarning.className = "tid-warning checking";
+      }
+      let data;
+      try {
+        const res = await window.AgentAuth.authFetch(`/api/check-tid?brand=${encodeURIComponent(brandId)}&tid=${encodeURIComponent(tid)}`);
+        data = await res.json();
+      } catch {
+        data = { ok: false };
+      }
+      if (seq !== tidCheckSeq) return null; // a newer check superseded this one — ignore
+      if (!data.ok) {
+        tidWarning.textContent = "";
+        tidWarning.className = "tid-warning";
+        return null;
+      }
+      if (data.found) {
+        tidDuplicateInfo = { date: data.date, pic: data.pic };
+        const parts = [data.date, data.pic].filter(Boolean).join(" by ");
+        tidWarning.textContent = `⚠️ TID has been submitted on${parts ? ` ${parts}` : " before"}.`;
+        tidWarning.className = "tid-warning found";
+      } else {
+        tidWarning.textContent = "";
+        tidWarning.className = "tid-warning";
+      }
+      return tidDuplicateInfo;
+    }
+    checkTidNow = checkTid;
+    fieldEls.tid.control.addEventListener("blur", () => checkTid(true));
+    // Brand changing invalidates whatever the TID field last checked
+    // against (it was checking the OLD brand's sheet) — clear it rather
+    // than leave a stale warning that no longer means anything until the
+    // agent touches the TID field again.
+    brandSelect.addEventListener("change", () => {
+      tidDuplicateInfo = null;
+      tidWarning.textContent = "";
+      tidWarning.className = "tid-warning";
+    });
+  }
+
   // ---- Brand-dependent select options (e.g. Promotion / Tier Level lists
   // that differ per brand) — rebuilt whenever the brand changes. ----
   function refreshBrandDependentOptions() {
@@ -346,6 +414,20 @@
     btn.textContent = "Submitting…";
 
     try {
+      // Withdraw Issue: final duplicate-TID guard, right before actually
+      // submitting — re-checks the CURRENT tid value even if the field
+      // was never blurred (pasted + hit Submit directly) or was changed
+      // back to a previously-flagged value without a fresh blur. See
+      // functions/api/check-tid.js for why this reads the Sheet, and the
+      // field-setup block above for the onBlur early-warning half of this.
+      if (checkTidNow) {
+        await checkTidNow(true);
+        if (tidDuplicateInfo) {
+          const parts = [tidDuplicateInfo.date, tidDuplicateInfo.pic].filter(Boolean).join(" by ");
+          throw new Error(`This TID was already submitted${parts ? ` on ${parts}` : ""}. Change the TID or confirm with the team before resubmitting.`);
+        }
+      }
+
       const formData = new FormData(form);
       const fields = module.fields
         .filter((f) => !f.showIf || fieldEls[f.key].wrap.classList.contains("is-visible"))

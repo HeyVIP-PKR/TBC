@@ -1328,3 +1328,13 @@ h1 {
   color: var(--required);
 }
 .tid-warning.checking { color: var(--ink-soft); font-weight: 500; font-style: italic; }
+
+/* Withdraw Issue: TID input itself, not just the label warning — see
+   setTidState() in app.js, which is the single place that toggles this
+   class alongside the warning text and Submit's disabled state, so all
+   three always agree with each other. */
+.field input.field-error {
+  border-color: var(--required);
+  background: color-mix(in srgb, var(--field-bg) 85%, var(--required) 15%);
+}
+.field input.field-error:focus { border-color: var(--required); }

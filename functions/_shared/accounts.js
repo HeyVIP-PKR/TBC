@@ -71,6 +71,81 @@ const VALID_ROLES = Object.keys(ROLE_RANK);
 const ASSIGNABLE_ROLES = VALID_ROLES.filter((r) => r !== "owner");
 export function rankOf(role) { return ROLE_RANK[role] ?? ROLE_RANK.agent; }
 
+// ---- Account Management Access — per-section, per-account admin
+// permissions (2026-07). Sits ON TOP of the rank system above: rank still
+// decides WHO you can act on (canManage(), defined per-endpoint), this
+// decides WHICH admin-area sections an account can even see, and for the
+// subset in EDITABLE_ADMIN_SECTIONS, whether it can also EDIT them (as
+// opposed to just viewing).
+//
+// DEFAULTS ARE RANK-TIERED, not flat deny-all — an account whose
+// allowedAdminSections/adminSectionEditAccess have never been explicitly
+// touched inherits a default computed from ITS CURRENT rank (see
+// defaultSectionsForRank()/defaultEditForRank() below):
+//   agent      -> sees nothing (Reset Password is separate, ungated)
+//   senior     -> createAccount only
+//   admin      -> createAccount + whitelistIp, both VIEW ONLY
+//   superadmin -> every section, fully editable
+//   owner      -> unconditionally unrestricted (never even consults these
+//                 fields — see the `role === "owner"` shortcuts below)
+// This mirrors exactly what the old flat rank checks used to grant
+// before this became a per-account choice, so turning this feature on
+// doesn't silently strip existing SuperAdmins of access they already
+// had, NOR does it silently hand an Agent/Senior more than they used to
+// have. The instant an Owner (or a delegate — see
+// canManageOthersAdminAccess() below) explicitly sets EITHER field on an
+// account (even to an empty array), that concrete value wins forever
+// after and stops following rank changes — a deliberate customization,
+// once made, doesn't get silently reset by a later promotion/demotion.
+//
+// See functions/api/admin/{accounts,offices,routes}.js for where these
+// gate the actual server-side actions, and public/index.html for the
+// sidebar-visibility + Agent Profile checkbox UI this controls (which
+// mirrors this same rank-tiered default logic client-side for rendering
+// only — the server here is what's actually enforced).
+export const ADMIN_SECTIONS = ["createAccount", "whitelistIp", "tgRoutes", "agentProfile"];
+export const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "agentProfile"];
+
+function defaultSectionsForRank(rank) {
+  if (rank >= ROLE_RANK.superadmin) return "all";
+  if (rank >= ROLE_RANK.admin) return ["createAccount", "whitelistIp"];
+  if (rank >= ROLE_RANK.senior) return ["createAccount"];
+  return []; // agent
+}
+function defaultEditForRank(rank) {
+  return rank >= ROLE_RANK.superadmin ? "all" : [];
+}
+
+/** Can `account` even SEE this admin section? Rank-tiered default, see note above. */
+export function canSeeAdminSection(account, sectionId) {
+  if (!account) return true; // bootstrap/setup mode
+  if (account.role === "owner") return true;
+  const sections = account.allowedAdminSections !== undefined ? account.allowedAdminSections : defaultSectionsForRank(rankOf(account.role));
+  if (sections === "all") return true;
+  return Array.isArray(sections) && sections.includes(sectionId);
+}
+
+/** Can `account` EDIT (not just view) this section? Requires view access first. */
+export function canEditAdminSection(account, sectionId) {
+  if (!account) return true; // bootstrap/setup mode
+  if (account.role === "owner") return true;
+  if (!canSeeAdminSection(account, sectionId)) return false;
+  const edit = account.adminSectionEditAccess !== undefined ? account.adminSectionEditAccess : defaultEditForRank(rankOf(account.role));
+  if (edit === "all") return true;
+  return Array.isArray(edit) && edit.includes(sectionId);
+}
+
+/**
+ * Can `account` edit OTHER accounts' allowedAdminSections /
+ * adminSectionEditAccess at all? Owner always can (source of all
+ * delegation); anyone else needs canManageAdminAccess === true, which
+ * only Owner may ever set (enforced in functions/api/admin/accounts.js,
+ * not here — this function only reads the flag).
+ */
+export function canManageOthersAdminAccess(account) {
+  return !!account && (account.role === "owner" || !!account.canManageAdminAccess);
+}
+
 // ---- password hashing (PBKDF2 via Web Crypto, available in Workers) ----
 //
 // ITERATION COUNT — lowered this session, see below for why.
@@ -308,7 +383,7 @@ function stripSecret(account) {
 // `passwordChangedBy` is only meaningful when `password` is also given —
 // the username of whoever triggered the change (their own, for
 // self-service; the admin's, for an admin-driven reset).
-export async function saveAccount(env, { username, password, passwordChangedBy, role, officeId, allowedBrands, allowedModules, fullName, pid }) {
+export async function saveAccount(env, { username, password, passwordChangedBy, role, officeId, allowedBrands, allowedModules, fullName, pid, allowedAdminSections, adminSectionEditAccess, canManageAdminAccess }) {
   const key = username.toLowerCase();
   const existing = await getAccount(env, key);
   let salt = existing?.salt;
@@ -333,24 +408,26 @@ export async function saveAccount(env, { username, password, passwordChangedBy, 
   }
   if (!salt || !hash) throw new Error("A password is required for a new account.");
 
+  // ASSIGNABLE_ROLES (not VALID_ROLES) — "owner" is a real, valid role (an
+  // existing owner account keeps working, patch-saves that don't touch
+  // `role` leave it alone via the `existing?.role` fallback below), but
+  // it can never be the RESULT of someone explicitly setting `role` to
+  // it. If `role === "owner"` is sent, this falls through to
+  // `existing?.role || "agent"` — which means an ATTEMPT to promote an
+  // existing account to owner silently keeps that account's CURRENT role
+  // unchanged (does not demote an existing owner, does not promote
+  // anyone else), and an attempt to CREATE a brand-new account with role
+  // "owner" gets "agent" instead. Either way, this function can never be
+  // the mechanism that produces a new owner.
+  const finalRole = role !== undefined ? (ASSIGNABLE_ROLES.includes(role) ? role : (existing?.role || "agent")) : (existing?.role || "agent");
+
   const account = {
     username: key,
     salt,
     hash,
     iterations,
     tokenVersion,
-    // ASSIGNABLE_ROLES (not VALID_ROLES) — "owner" is a real, valid role
-    // (an existing owner account keeps working, patch-saves that don't
-    // touch `role` leave it alone via the `existing?.role` fallback
-    // below), but it can never be the RESULT of someone explicitly
-    // setting `role` to it. If `role === "owner"` is sent, this falls
-    // through to `existing?.role || "agent"` — which means an ATTEMPT to
-    // promote an existing account to owner silently keeps that account's
-    // CURRENT role unchanged (does not demote an existing owner, does
-    // not promote anyone else), and an attempt to CREATE a brand-new
-    // account with role "owner" gets "agent" instead. Either way, this
-    // function can never be the mechanism that produces a new owner.
-    role: role !== undefined ? (ASSIGNABLE_ROLES.includes(role) ? role : (existing?.role || "agent")) : (existing?.role || "agent"),
+    role: finalRole,
     officeId: officeId !== undefined ? (officeId || null) : (existing?.officeId ?? null),
     allowedBrands: allowedBrands !== undefined
       ? (allowedBrands === "all" ? "all" : (Array.isArray(allowedBrands) ? allowedBrands : []))
@@ -367,6 +444,20 @@ export async function saveAccount(env, { username, password, passwordChangedBy, 
       : (existing?.allowedModules ?? "all"),
     fullName: fullName !== undefined ? fullName : (existing?.fullName || ""),
     pid: pid !== undefined ? pid : (existing?.pid || ""),
+    // Left UNSET (undefined, i.e. omitted from the stored JSON) when
+    // never explicitly provided — canSeeAdminSection()/
+    // canEditAdminSection() compute a rank-tiered default on the fly for
+    // as long as it stays unset. Only writing a concrete value here when
+    // the caller actually provided one is what makes "hasn't been
+    // customized yet" and "was deliberately set to nothing" two
+    // distinguishable states instead of collapsing to the same [].
+    allowedAdminSections: allowedAdminSections !== undefined
+      ? (allowedAdminSections === "all" ? "all" : (Array.isArray(allowedAdminSections) ? allowedAdminSections : []))
+      : existing?.allowedAdminSections,
+    adminSectionEditAccess: adminSectionEditAccess !== undefined
+      ? (adminSectionEditAccess === "all" ? "all" : (Array.isArray(adminSectionEditAccess) ? adminSectionEditAccess : []))
+      : existing?.adminSectionEditAccess,
+    canManageAdminAccess: canManageAdminAccess !== undefined ? !!canManageAdminAccess : !!existing?.canManageAdminAccess,
     lastActiveAt: existing?.lastActiveAt || null,
     lastPasswordChange,
     // Lock state is intentionally NOT a parameter of saveAccount() — it's

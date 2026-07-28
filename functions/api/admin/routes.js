@@ -8,39 +8,41 @@
  *        this page); `false` means it's still showing the hardcoded
  *        default from _shared/routing.js. Also includes `securityAlerts`
  *        (see below) — same shape, but not tied to any brand.
- *     SuperAdmin-only.
+ *     Requires canSeeAdminSection(..., "tgRoutes").
  *
  *   POST { action:"save", brandId, moduleId, chatId, topicId } -> store an
  *     override in THREADS_KV. Takes effect on the very next form
  *     submission for that brand+module — no redeploy needed.
- *     SuperAdmin-only.
+ *     Requires canEditAdminSection(..., "tgRoutes").
  *
  *   POST { action:"reset", brandId, moduleId } -> delete the override,
  *     reverting that brand+module back to the hardcoded default.
- *     SuperAdmin-only.
+ *     Requires canEditAdminSection(..., "tgRoutes").
  *
  * SECURITY ALERTS ROW — not a real brand/module, just reuses the exact
  * same KV-override machinery (_shared/routes.js) under the reserved
  * pseudo id pair brandId="_security", moduleId="alerts" (not a valid
- * brand id, so it can never collide with a real brand). Lets a
- * SuperAdmin change where the login-security Telegram alerts
- * (functions/api/auth/login.js — unrecognized-IP warnings, account
+ * brand id, so it can never collide with a real brand). Lets an account
+ * with tgRoutes Can-Edit access change where the login-security Telegram
+ * alerts (functions/api/auth/login.js — unrecognized-IP warnings, account
  * auto-lock notices) go, live from the browser, instead of needing a
  * Cloudflare secret + redeploy. Falls back to the SECURITY_ALERTS_CHAT_ID
  * / SECURITY_ALERTS_TOPIC_ID env vars when nothing's been saved here yet
  * — same "KV override, env/code default underneath" layering as every
  * other row on this page.
  *
- * Same tier as Whitelist IP (functions/api/admin/offices.js) — but unlike
- * that endpoint, this one is SuperAdmin-only for GET too, not
- * Admin-view/SuperAdmin-edit, since routing controls where every ticket
- * actually gets delivered.
+ * 2026-07: this used to be SuperAdmin-only for BOTH GET and POST, with no
+ * view-only tier at all (unlike Whitelist IP, which Admin could at least
+ * see read-only). It now uses the same per-account Account Management
+ * Access layer as every other admin section — canSeeAdminSection gates
+ * GET, canEditAdminSection gates POST — so an account CAN now be granted
+ * View-only on tgRoutes where before there was no such option.
  *
  * See functions/_shared/routes.js for the KV layer, and
  * functions/api/submit.js for where the override is actually consulted
  * at submission time.
  */
-import { authenticateStaff, ROLE_RANK } from "../../_shared/accounts.js";
+import { authenticateStaff, ROLE_RANK, canSeeAdminSection, canEditAdminSection } from "../../_shared/accounts.js";
 import { getAllRouteOverrides, saveRouteOverride, deleteRouteOverride, getRouteOverride } from "../../_shared/routes.js";
 import { BRANDS, MODULE_META } from "../../_shared/routing.js";
 
@@ -57,8 +59,14 @@ export async function onRequestGet(context) {
 
 async function handleGet({ request, env }) {
   if (!env.THREADS_KV) return json({ ok: false, error: "THREADS_KV is not bound yet." }, 500);
-  const auth = await authenticateStaff(request, env, ROLE_RANK.superadmin);
-  if (!auth.ok) return json({ ok: false, error: "SuperAdmin required." }, 403);
+  // Base auth floor lowered to Senior (this section used to be
+  // SuperAdmin-only at the auth layer too) — actual visibility is now
+  // decided by canSeeAdminSection below, same as every other section.
+  const auth = await authenticateStaff(request, env, ROLE_RANK.senior);
+  if (!auth.ok) return json({ ok: false, error: "Not authorized." }, 401);
+  if (!canSeeAdminSection(auth.account, "tgRoutes")) {
+    return json({ ok: false, error: "You don't have access to TG Group / Channel." }, 403);
+  }
 
   const brandIds = Object.keys(BRANDS);
   const moduleIds = Object.keys(MODULE_META);
@@ -99,8 +107,11 @@ export async function onRequestPost(context) {
 
 async function handlePost({ request, env }) {
   if (!env.THREADS_KV) return json({ ok: false, error: "THREADS_KV is not bound yet." }, 500);
-  const auth = await authenticateStaff(request, env, ROLE_RANK.superadmin);
-  if (!auth.ok) return json({ ok: false, error: "SuperAdmin required." }, 403);
+  const auth = await authenticateStaff(request, env, ROLE_RANK.senior);
+  if (!auth.ok) return json({ ok: false, error: "Not authorized." }, 401);
+  if (!canEditAdminSection(auth.account, "tgRoutes")) {
+    return json({ ok: false, error: "You don't have Can-Edit access to TG Group / Channel." }, 403);
+  }
 
   let body;
   try {

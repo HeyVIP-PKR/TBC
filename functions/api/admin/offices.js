@@ -1,15 +1,27 @@
 /**
  * /api/admin/offices
- *   GET                                  -> list offices. Requires rank >= admin
- *     (Admin can SEE the IP whitelist for awareness, but not change it).
+ *   GET                                  -> list offices.
+ *     Base auth floor is Senior (the lowest of the sections that need an
+ *     office list — Create Account needs the office dropdown too). Two
+ *     data tiers on top of that: an actor with canSeeAdminSection(...,
+ *     "whitelistIp") gets the full record (name + allowedIPs); anyone
+ *     else (e.g. Senior/Admin who only has createAccount access) gets
+ *     just { id, name } — enough to populate an office picker without
+ *     leaking the IP whitelist to someone who has no whitelistIp access
+ *     at all. (Bugfix, 2026-07: this endpoint used to hard-require
+ *     whitelistIp access for the GET entirely, which meant an account
+ *     with ONLY createAccount access couldn't see any offices and so
+ *     couldn't pick one when creating a new account.)
  *   POST { action:"save", id?, name, allowedIPs[] }  -> create/update.
- *     Requires rank >= superadmin.
- *   POST { action:"delete", id }         -> delete. Requires rank >= superadmin.
+ *     Requires Can-Edit(whitelistIp).
+ *   POST { action:"delete", id }         -> delete. Requires Can-Edit(whitelistIp).
  *
  * See _shared/accounts.js authenticateStaff() for the two ways in (real
- * login at the required rank, or the one-time bootstrap password).
+ * login at the required rank, or the one-time bootstrap password), and
+ * canSeeAdminSection()/canEditAdminSection() for the per-account
+ * Account Management Access layer these checks are built on.
  */
-import { listOffices, saveOffice, deleteOffice, authenticateStaff, ROLE_RANK } from "../../_shared/accounts.js";
+import { listOffices, saveOffice, deleteOffice, authenticateStaff, ROLE_RANK, canSeeAdminSection, canEditAdminSection } from "../../_shared/accounts.js";
 
 export async function onRequestGet(context) {
   try {
@@ -21,9 +33,20 @@ export async function onRequestGet(context) {
 
 async function handleGet({ request, env }) {
   if (!env.THREADS_KV) return json({ ok: false, error: "THREADS_KV is not bound yet." }, 500);
-  const auth = await authenticateStaff(request, env, ROLE_RANK.admin);
+  // Lowest floor among the sections that need an office list at all —
+  // "can I even get in the door" is separate from "how much data do I
+  // get back", handled below.
+  const auth = await authenticateStaff(request, env, ROLE_RANK.senior);
   if (!auth.ok) return json({ ok: false, error: "Not authorized." }, 401);
-  return json({ ok: true, offices: await listOffices(env) });
+
+  const offices = await listOffices(env);
+  if (canSeeAdminSection(auth.account, "whitelistIp")) {
+    return json({ ok: true, offices });
+  }
+  // Minimal shape for anyone who can reach this endpoint (e.g. via
+  // createAccount access) but has no whitelistIp access — enough to
+  // populate an office <select>, nothing about the IP whitelist itself.
+  return json({ ok: true, offices: offices.map((o) => ({ id: o.id, name: o.name })) });
 }
 
 export async function onRequestPost(context) {
@@ -36,13 +59,11 @@ export async function onRequestPost(context) {
 
 async function handlePost({ request, env }) {
   if (!env.THREADS_KV) return json({ ok: false, error: "THREADS_KV is not bound yet." }, 500);
-  // Editing IPs is SuperAdmin-only — Admin can view via GET above but not
-  // change the whitelist. The bootstrap password still works here during
-  // initial setup (creating the very first Office before any admin
-  // account exists) since authenticateStaff grants bootstrap mode full
-  // trust until an admin-or-above account exists — see _shared/accounts.js.
-  const auth = await authenticateStaff(request, env, ROLE_RANK.superadmin);
-  if (!auth.ok) return json({ ok: false, error: "SuperAdmin required." }, 403);
+  const auth = await authenticateStaff(request, env, ROLE_RANK.senior);
+  if (!auth.ok) return json({ ok: false, error: "Not authorized." }, 401);
+  if (!canEditAdminSection(auth.account, "whitelistIp")) {
+    return json({ ok: false, error: "You don't have Can-Edit access to Whitelist IP." }, 403);
+  }
 
   let body;
   try {

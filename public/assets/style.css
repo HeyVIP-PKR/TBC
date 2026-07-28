@@ -416,6 +416,22 @@ a { color: inherit; text-decoration: none; }
 .agent-profile-status-text.is-active { color: #1a9c6e; }
 .agent-profile-status-text.is-locked { color: var(--required); }
 .agent-profile-module-list { display: flex; flex-direction: column; gap: 2px; }
+.agent-profile-admin-section-list { display: flex; flex-direction: column; gap: 2px; }
+.agent-profile-collapsible { margin-top: 14px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.agent-profile-collapsible-header {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; background: var(--field-bg); border: none; cursor: pointer;
+  font-family: inherit; text-align: left;
+}
+.agent-profile-collapsible-header:hover { background: rgba(167, 139, 250, 0.12); }
+.agent-profile-chev { color: var(--ink-soft); font-size: 12px; transition: transform 0.15s ease; }
+.agent-profile-collapsible.is-open .agent-profile-chev { transform: rotate(180deg); }
+.agent-profile-collapsible-body { padding: 10px 12px; }
+.agent-profile-edit-level-row {
+  display: flex; align-items: center; gap: 14px; margin: 0 0 6px 26px;
+  font-size: 12px; color: var(--ink-soft);
+}
+.agent-profile-edit-level-row label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
 .agent-profile-module-check {
   display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 4px 2px;
   color: var(--ink);
@@ -844,6 +860,14 @@ a { color: inherit; text-decoration: none; }
 .icon-btn { width: 32px; height: 32px; border-radius: 10px; border: 1px solid var(--border); background: var(--card-bg); color: var(--required); font-size: 13px; cursor: pointer; }
 .icon-btn:hover { background: rgba(239, 74, 114, 0.1); }
 .icon-btn.spinning { color: var(--required); animation: spin 0.8s linear infinite; }
+/* Icon + text label variant (e.g. thread-detail-actions toolbar) — same
+   pill family as .icon-btn but auto width, with a short caption next to
+   the emoji instead of an icon-only square. Color goes back to --ink
+   (neutral) since these aren't all "danger" actions like the plain
+   icon-btn's red tint implies. */
+.icon-btn.labeled { width: auto; height: auto; padding: 7px 12px; display: inline-flex; align-items: center; gap: 6px; color: var(--ink); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.icon-btn.labeled:hover { background: var(--field-bg); }
+.icon-btn.labeled.spinning { color: var(--ink); }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 .threads-topline { display: flex; align-items: center; justify-content: flex-end; gap: 14px; padding-right: 24px; }

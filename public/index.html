@@ -88,6 +88,7 @@
         <div class="sidebar-subitem" id="subCreateAccount" style="display:none;"><span class="sub-icon">➕</span> Create Account</div>
         <div class="sidebar-subitem" id="subWhitelistIp" style="display:none;"><span class="sub-icon">🌐</span> Whitelist IP</div>
         <div class="sidebar-subitem" id="subTgRoutes" style="display:none;"><span class="sub-icon">📡</span> TG Group / Channel</div>
+        <div class="sidebar-subitem" id="subDepositSheets" style="display:none;"><span class="sub-icon">📊</span> Deposit Sheet Link</div>
         <div class="sidebar-subitem" id="subResetPassword"><span class="sub-icon">🔑</span> Reset Password</div>
         <div class="sidebar-subitem" id="subAgentProfile" style="display:none;"><span class="sub-icon">🪪</span> Agent Profile</div>
       </div>
@@ -355,9 +356,10 @@
       { id: "createAccount", name: "Create Account", icon: "➕" },
       { id: "whitelistIp", name: "Whitelist IP", icon: "🌐" },
       { id: "tgRoutes", name: "TG Group / Channel", icon: "📡" },
+      { id: "depositSheets", name: "Deposit Sheet Link", icon: "📊" },
       { id: "agentProfile", name: "Agent Profile", icon: "🪪" },
     ];
-    const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "agentProfile"];
+    const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "agentProfile"];
     // Must match defaultSectionsForRank()/defaultEditForRank() in
     // functions/_shared/accounts.js exactly:
     //   agent -> nothing, senior -> createAccount, admin -> +whitelistIp
@@ -398,6 +400,7 @@
     document.getElementById("subCreateAccount").style.display = canSeeAdminSection("createAccount") ? "flex" : "none";
     document.getElementById("subWhitelistIp").style.display = canSeeAdminSection("whitelistIp") ? "flex" : "none";
     document.getElementById("subTgRoutes").style.display = canSeeAdminSection("tgRoutes") ? "flex" : "none";
+    document.getElementById("subDepositSheets").style.display = canSeeAdminSection("depositSheets") ? "flex" : "none";
     document.getElementById("subAgentProfile").style.display = canSeeAdminSection("agentProfile") ? "flex" : "none";
 
     const acctToggle = document.getElementById("acctMgmtToggle");
@@ -410,6 +413,7 @@
     document.getElementById("subCreateAccount").addEventListener("click", () => openAcctModal("create"));
     document.getElementById("subWhitelistIp").addEventListener("click", () => openAcctModal("whitelist"));
     document.getElementById("subTgRoutes").addEventListener("click", () => openAcctModal("tgroutes"));
+    document.getElementById("subDepositSheets").addEventListener("click", () => openAcctModal("depositsheets"));
     document.getElementById("subResetPassword").addEventListener("click", () => openAcctModal("reset"));
     document.getElementById("subAgentProfile").addEventListener("click", () => openAcctModal("profile"));
     document.getElementById("acctProfileRoleFilter").addEventListener("change", () => renderAgentProfileTable());
@@ -558,6 +562,11 @@
       if (mode === "tgroutes") {
         acctTitle.textContent = "TG Group / Channel";
         await loadTgRoutes();
+      }
+
+      if (mode === "depositsheets") {
+        acctTitle.textContent = "Deposit Sheet Link";
+        await loadDepositSheets();
       }
     }
 
@@ -727,6 +736,93 @@
       }
       setAcctNote("Reset to default.", "ok");
       renderTgRoutes();
+    }
+
+    // ---- Deposit Sheet Link (live-editable Google Sheet source) ----
+    // One row per Deposit-type module (just "Deposit Issue" for now —
+    // Deposit Backup will add a second row here once built, no new UI
+    // pattern needed, see functions/api/admin/deposit-sheets.js). Backed
+    // by /api/admin/deposit-sheets, same override-over-code-default
+    // layering as TG Group/Channel above.
+    let acctDepositSheetsData = null;
+
+    async function loadDepositSheets() {
+      const res = await window.AgentAuth.authFetch("/api/admin/deposit-sheets");
+      const data = await res.json();
+      if (!data.ok) {
+        acctBody.innerHTML = `<p class="edit-modal-note err">${acctEsc(data.error || "Failed to load.")}</p>`;
+        return;
+      }
+      acctDepositSheetsData = data.slots;
+      renderDepositSheets();
+    }
+
+    function renderDepositSheets() {
+      if (!acctDepositSheetsData) return;
+      const canEdit = canEditAdminSection("depositSheets");
+      const roAttr = canEdit ? "" : "disabled";
+
+      const rowsHtml = acctDepositSheetsData.map((slot) => `
+        <div class="tgroute-row" data-slot="${acctEsc(slot.id)}">
+          <div class="tgroute-mod-name">📊 ${acctEsc(slot.name)}
+            <span class="route-tag${slot.isOverride ? " custom" : ""}">${slot.isOverride ? "custom" : "default"}</span>
+          </div>
+          <div class="tgroute-fields" style="flex-direction:column; align-items:stretch; gap:8px;">
+            <input type="text" class="depsheet-url" placeholder="Paste the full Google Sheets URL (or just the Sheet ID)" value="${acctEsc(slot.sheetId)}" ${roAttr} autocomplete="off" />
+            <input type="text" class="depsheet-tabs" placeholder="Tab name(s), comma-separated if more than one" value="${acctEsc((slot.tabNames || []).join(", "))}" ${roAttr} autocomplete="off" />
+            ${canEdit ? `<div class="tgroute-row-actions">
+              <button type="button" class="tgroute-action-btn depsheet-save">Save</button>
+              ${slot.isOverride ? '<button type="button" class="tgroute-action-btn tgroute-action-secondary depsheet-reset">Reset</button>' : ""}
+            </div>` : ""}
+          </div>
+        </div>`).join("");
+
+      acctBody.innerHTML = `
+        <div class="tgroute-modules">${rowsHtml}</div>
+        <hr class="tgroute-divider" />
+        ${canEdit ? "" : '<p class="edit-modal-note">View only.</p>'}
+        <p class="edit-modal-note tgroute-footnote">Changes apply to the very next search — no redeploy needed. Paste the new Sheet's URL here whenever the other department swaps it out; "default" rows are still using the value built into the code, "custom" rows have been overridden here.</p>`;
+
+      acctBody.querySelectorAll(".depsheet-save").forEach((btn) => {
+        btn.addEventListener("click", () => saveDepositSheetRow(btn.closest(".tgroute-row")));
+      });
+      acctBody.querySelectorAll(".depsheet-reset").forEach((btn) => {
+        btn.addEventListener("click", () => resetDepositSheetRow(btn.closest(".tgroute-row")));
+      });
+    }
+
+    async function saveDepositSheetRow(row) {
+      const slotId = row.dataset.slot;
+      const sheetUrlOrId = row.querySelector(".depsheet-url").value.trim();
+      const tabNames = row.querySelector(".depsheet-tabs").value.trim();
+      if (!sheetUrlOrId) return setAcctNote("Sheet URL or ID is required.", "err");
+      if (!tabNames) return setAcctNote("At least one tab name is required.", "err");
+      setAcctNote("Saving…");
+      const res = await window.AgentAuth.authFetch("/api/admin/deposit-sheets", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "save", slotId, sheetUrlOrId, tabNames }),
+      });
+      const data = await res.json();
+      if (!data.ok) return setAcctNote(data.error || "Save failed.", "err");
+      const idx = acctDepositSheetsData.findIndex((s) => s.id === slotId);
+      if (idx >= 0) acctDepositSheetsData[idx] = data.slot;
+      setAcctNote("Saved — takes effect on the next search.", "ok");
+      renderDepositSheets();
+    }
+
+    async function resetDepositSheetRow(row) {
+      const slotId = row.dataset.slot;
+      setAcctNote("Resetting…");
+      const res = await window.AgentAuth.authFetch("/api/admin/deposit-sheets", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset", slotId }),
+      });
+      const data = await res.json();
+      if (!data.ok) return setAcctNote(data.error || "Reset failed.", "err");
+      const idx = acctDepositSheetsData.findIndex((s) => s.id === slotId);
+      if (idx >= 0) acctDepositSheetsData[idx] = data.slot;
+      setAcctNote("Reset to default.", "ok");
+      renderDepositSheets();
     }
 
     let acctOfficesById = {};

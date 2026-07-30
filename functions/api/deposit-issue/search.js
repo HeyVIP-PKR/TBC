@@ -1,9 +1,17 @@
 import { getAccessToken } from "../../_shared/googleOAuth.js";
 import { verifyRequest } from "../../_shared/accounts.js";
+import { getDepositSheetOverride } from "../../_shared/depositSheets.js";
+
+// Stable identifier for this module's slot in the "Deposit Sheet Link"
+// admin page (Account Management → Deposit Sheet Link) — must match the
+// `id` used in functions/api/admin/deposit-sheets.js's SLOTS array.
+const SLOT_ID = "depositIssue";
 
 /**
  * ══════════════════════════════════════════════════════════════════
- *  FILL THESE IN before deploying — see PROJECT_STATUS / README notes
+ *  HARDCODED DEFAULTS — only used if nothing's been saved through the
+ *  "Deposit Sheet Link" admin page yet. Once someone saves a link there,
+ *  THAT value wins and these two are ignored — see resolveSheetConfig().
  * ══════════════════════════════════════════════════════════════════
  */
 // The Sheet ID from the Gsheet's URL:
@@ -13,6 +21,14 @@ const SHEET_ID = "1HByPuZMuuYZL9S5fPPGjb8RAmCwNVgKXvuLgVBbVM-E";
 // One tab name, or several if the data is split across tabs (e.g. by
 // month). Every tab listed here gets searched on every request.
 const TAB_NAMES = ["CX PKR"];
+
+// Resolves the actual Sheet ID + tab names to use for this request:
+// live KV override (set via the admin page) if one exists, otherwise
+// the hardcoded defaults above.
+async function resolveSheetConfig(env) {
+  const override = await getDepositSheetOverride(env, SLOT_ID);
+  return override ? { sheetId: override.sheetId, tabNames: override.tabNames } : { sheetId: SHEET_ID, tabNames: TAB_NAMES };
+}
 
 // Column layout confirmed from the real sheet (row 1 = headers, data
 // starts row 2). If the department ever reorders columns, update here.
@@ -52,19 +68,21 @@ function normalizeTabName(name) {
 }
 
 // Sheet's real tab titles rarely change — cache per Worker isolate for a
-// few minutes instead of re-fetching metadata on every search.
-let cachedTabTitles = null; // { titles, expiresAt }
+// few minutes instead of re-fetching metadata on every search. Keyed by
+// sheetId so the cache self-invalidates if the admin page points this
+// module at a different Sheet.
+let cachedTabTitles = null; // { sheetId, titles, expiresAt }
 const TAB_CACHE_MS = 5 * 60 * 1000;
 
-async function resolveExistingTabs(accessToken) {
+async function resolveExistingTabs(accessToken, sheetId) {
   const now = Date.now();
-  if (cachedTabTitles && cachedTabTitles.expiresAt > now) return cachedTabTitles.titles;
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties.title`;
+  if (cachedTabTitles && cachedTabTitles.sheetId === sheetId && cachedTabTitles.expiresAt > now) return cachedTabTitles.titles;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties.title`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   const data = await res.json();
   if (!res.ok) throw new Error(`Could not read sheet tab list: ${data.error?.message || res.status}`);
   const titles = (data.sheets || []).map((s) => s.properties.title);
-  cachedTabTitles = { titles, expiresAt: now + TAB_CACHE_MS };
+  cachedTabTitles = { sheetId, titles, expiresAt: now + TAB_CACHE_MS };
   return titles;
 }
 
@@ -99,22 +117,21 @@ async function handleSearch({ request, env }) {
   if (!queries.length) return json({ ok: false, error: "No valid search terms." }, 400);
 
   const accessToken = await getAccessToken(env);
+  const { sheetId, tabNames } = await resolveSheetConfig(env);
 
   // Resolve configured tab names against what actually exists on the
   // sheet — a mistyped/renamed tab becomes a warning in the response
-  // instead of a silent "0 results" (this is what happened before: the
-  // configured TAB_NAMES didn't match the sheet's real tab title, so
-  // every search legitimately found nothing rather than erroring).
+  // instead of a silent "0 results".
   let realTitles;
   try {
-    realTitles = await resolveExistingTabs(accessToken);
+    realTitles = await resolveExistingTabs(accessToken, sheetId);
   } catch (e) {
     return json({ ok: false, error: String(e.message || e) }, 502);
   }
   const realByNormalized = new Map(realTitles.map((t) => [normalizeTabName(t), t]));
   const tabsToQuery = []; // real title strings only
   const missingTabs = [];
-  for (const configured of TAB_NAMES) {
+  for (const configured of tabNames) {
     const real = realByNormalized.get(normalizeTabName(configured));
     if (real) tabsToQuery.push(real);
     else missingTabs.push(configured);
@@ -125,7 +142,7 @@ async function handleSearch({ request, env }) {
   for (const tab of tabsToQuery) {
     if (results.length >= MAX_RESULTS) break;
     const range = `'${tab.replace(/'/g, "''")}'!A2:${LAST_COL}`;
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}`;
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     const data = await res.json();
     if (!res.ok) {
@@ -148,7 +165,7 @@ async function handleSearch({ request, env }) {
       results.push({
         sheetName: "PKR Deposit Support", // adjust label shown in the UI if you want
         tabName: tab,
-        sheetId: SHEET_ID,
+        sheetId,
         rowIndex: i + 2, // actual row number in the sheet (header is row 1)
         transaction: transactionId,
         requestTime: get(COLS.requestTime),

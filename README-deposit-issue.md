@@ -1,5 +1,42 @@
 # Deposit Issue module — now merged into your real repo
 
+## New: "Deposit Sheet Link" admin page
+Added under Account Management, next to TG Group / Channel (same
+override-over-code-default pattern, same permission system). Lets a
+SuperAdmin (or anyone granted the new `depositSheets` admin-section
+access) paste in a new Google Sheets URL whenever the other department
+swaps the Deposit Issue sheet out — no code edit, no redeploy.
+
+**New files:**
+- `functions/_shared/depositSheets.js` — KV layer (mirrors `routes.js`)
+- `functions/api/admin/deposit-sheets.js` — GET/POST admin API (mirrors `functions/api/admin/routes.js`)
+
+**Changed files:**
+- `functions/_shared/accounts.js` — registered `depositSheets` in
+  `ADMIN_SECTIONS`/`EDITABLE_ADMIN_SECTIONS` (same rank-tiered default as
+  `tgRoutes`: only SuperAdmin sees/edits it by default; an Owner can grant
+  it to specific accounts, same as every other admin section)
+- `functions/api/deposit-issue/search.js` and `update.js` — now resolve
+  the Sheet ID + tab names via `getDepositSheetOverride()` first, falling
+  back to the hardcoded `SHEET_ID`/`TAB_NAMES` constants only if nothing's
+  been saved through the admin page yet
+- `public/index.html` — new sidebar item "Deposit Sheet Link", reusing
+  the exact same `tgroute-*` CSS classes as TG Group/Channel so it looks
+  native, not bolted on
+
+**How to use it:** Account Management → Deposit Sheet Link → paste the
+new Sheet's full URL (or just its ID) → type the tab name(s), comma-
+separated if more than one → Save. Takes effect on the very next search,
+no deploy needed. "Reset" reverts to the hardcoded default in `search.js`.
+
+**Built for extensibility, per your Deposit Backup plan**: this isn't
+hardcoded to a single sheet — it's keyed by "slot" (`depositIssue` today).
+When Deposit Backup gets built, its search/update files just need to call
+`getDepositSheetOverride(env, "depositBackup")` the same way, and add one
+line to the `SLOTS` array in `deposit-sheets.js` — no new UI pattern, no
+new permission system, it reuses everything here.
+
+
 This version is merged directly into the actual `pkr-issue-hub` project you
 sent (using your real `functions/_shared/accounts.js`, `authguard.js`, and
 `index.html` — not placeholders anymore). Everything below is already done

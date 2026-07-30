@@ -108,11 +108,14 @@
   .dep-fr { display: flex; flex-direction: column; gap: 3px; }
   .dep-fl { font-size: 10.5px; color: var(--ink-soft); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
   .dep-fv { font-size: 13px; color: var(--ink); word-break: break-word; }
-  .dep-pill { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 11.5px; font-weight: 700; }
-  .dep-pg { background: rgba(34,197,94,0.14); color: #16a34a; }
-  .dep-po { background: rgba(234,179,8,0.16); color: #b45309; }
-  .dep-pr { background: rgba(224,87,122,0.14); color: #e0577a; }
-  .dep-py { background: var(--field-bg); color: var(--ink-soft); }
+  .dep-pill { display: inline-block; padding: 3px 11px; border-radius: 20px; font-size: 11.5px; font-weight: 800; letter-spacing: 0.01em; white-space: nowrap; }
+  .dep-p-red    { background: #e5304a; color: #fff; }
+  .dep-p-orange { background: #f0a020; color: #241400; }
+  .dep-p-green  { background: #22c55e; color: #06280f; }
+  .dep-p-blue   { background: #2f6fed; color: #fff; }
+  .dep-p-purple { background: #8b5cf6; color: #fff; }
+  .dep-p-teal   { background: #14b8a6; color: #04201c; }
+  .dep-py { background: var(--field-bg); color: var(--ink-soft); font-weight: 700; }
   .dep-dash { color: var(--ink-soft); }
   .dep-rcard-f { padding: 8px 16px; border-top: 1px solid var(--border); }
   .dep-btn-ed {
@@ -298,12 +301,58 @@
     gi('depChips').innerHTML = queries.map(function(q){ return '<span class="dep-chip">'+escapeHtml(q)+'</span>'; }).join('');
   }
 
+  // Explicit status -> color category, covering every real value from the
+  // sheet's dropdown. Categorized by what it MEANS, not just guessed from
+  // keywords: red = serious/rejected/fraud, orange = pending/needs action,
+  // green = resolved successfully, blue = refund in progress/info, purple =
+  // escalated to another team, teal = neutral/misc (testing, no SMS, etc).
+  var STATUS_COLOR = {
+    // — red: serious problems, fraud, rejected —
+    "cs-invalid deposit": "dep-p-red",
+    "cs-fake slip": "dep-p-red",
+    "cs-invalid slip/mobile recharge": "dep-p-red",
+    "cs-not our agent": "dep-p-red",
+    "cs-repeat slip/duplicate slip": "dep-p-red",
+    "pyt- not our agent": "dep-p-red",
+    "pyt-not our agent": "dep-p-red",
+    "shop closed": "dep-p-red",
+    // — orange: pending / needs follow-up or action —
+    "pg-processing": "dep-p-orange",
+    "cs-amount not received": "dep-p-orange",
+    "pyt-amount not recieve": "dep-p-orange",
+    "cs-no slip on ply telegram": "dep-p-orange",
+    "pyt-no slip on ply telegram": "dep-p-orange",
+    "provide another slip": "dep-p-orange",
+    "cs-provide video/bank statement": "dep-p-orange",
+    "pyt-provide cart id": "dep-p-orange",
+    "cs-advice player to input correct agent number": "dep-p-orange",
+    "cs-advice player to raise again": "dep-p-orange",
+    "pyt-verify cash out number": "dep-p-orange",
+    "cash in slip": "dep-p-orange",
+    "below 200rs": "dep-p-orange",
+    // — green: resolved successfully —
+    "cs-refund success": "dep-p-green",
+    "pyt-refund success": "dep-p-green",
+    "pyt-auto success": "dep-p-green",
+    "pyt-mark as success": "dep-p-green",
+    "pyt-make up success": "dep-p-green",
+    "already success in msteams": "dep-p-green",
+    "other merchant success": "dep-p-green",
+    "pyt-agent close, will mark as success": "dep-p-green",
+    // — blue: refund in progress / informational —
+    "cs-refund": "dep-p-blue",
+    "pyt-refund": "dep-p-blue",
+    "cs-agent cash out": "dep-p-blue",
+    "easypay": "dep-p-blue",
+    // — purple: escalated / forwarded elsewhere —
+    "issue forwarded": "dep-p-purple",
+    // — teal: neutral / misc —
+    "testing": "dep-p-teal",
+    "no sms": "dep-p-teal",
+  };
   function fp(l, v) {
-    var c = 'dep-py'; if (!v) v = '—';
-    var vv = v.toLowerCase();
-    if (vv.indexOf('success')>-1||vv.indexOf('approved')>-1) c='dep-pg';
-    else if (vv.indexOf('refund')>-1||vv.indexOf('fail')>-1) c='dep-pr';
-    else if (vv.indexOf('pending')>-1||vv.indexOf('processing')>-1) c='dep-po';
+    if (!v) return '<div class="dep-fr"><span class="dep-fl">'+l+'</span><span class="dep-fv"><span class="dep-pill dep-py">—</span></span></div>';
+    var c = STATUS_COLOR[v.toLowerCase().trim()] || 'dep-p-blue'; // never gray — unmapped values default to blue, not a dull neutral
     return '<div class="dep-fr"><span class="dep-fl">'+l+'</span><span class="dep-fv"><span class="dep-pill '+c+'">'+escapeHtml(v)+'</span></span></div>';
   }
   function f(l, v) { return '<div class="dep-fr"><span class="dep-fl">'+l+'</span><span class="dep-fv">'+cell(v)+'</span></div>'; }

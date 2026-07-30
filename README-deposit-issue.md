@@ -111,5 +111,18 @@ variables — just confirm both **Production** and **Preview** have all three:
   for Manually Credited, navy for Provide Correct UID, blue for Approved
   by System). Any value not in that list falls back to the same
   hash-based color assignment as Transaction Error — still never gray.
+- **Edit Record panel height now matches the first result card** — it's
+  no longer a fixed size; JS measures the first `.dep-rcard`'s actual
+  rendered height after every search and applies it as the panel's
+  `min-height`, re-measuring on window resize/zoom too, so the two stay
+  visually aligned at any window size.
+- **Fixed a pre-existing display bug**: the yellow tab-mismatch warning
+  banner used to disappear whenever the search actually found some
+  results (it only survived when there were zero results) — it now
+  always shows above the results when applicable.
+- **Result card layout widened** — fields now show 3 per row (was 2) on
+  desktop, with larger gaps and more card padding, so cards read as less
+  cramped/tall. Auto-drops to 2 columns under 1100px width and 1 column
+  under 640px (mobile), so it never feels squeezed on smaller screens.
 - **Performance**: reads the whole tab on every search — fine for a few
   thousand rows, may need optimizing if this sheet gets very large.

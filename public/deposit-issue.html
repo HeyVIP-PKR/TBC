@@ -109,8 +109,9 @@
   .dep-img-btn:hover { border-color: var(--accent-gold); }
   .dep-rcard-id { font-family: var(--font-mono); font-weight: 700; color: var(--ink); font-size: 14px; }
   .dep-rcard-tm { font-size: 12px; color: var(--ink-soft); margin-left: auto; }
-  .dep-rcard-b { padding: 14px 16px; }
-  .dep-fg { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; }
+  .dep-rcard-b { padding: 20px 22px; }
+  .dep-fg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px 28px; }
+  @media (max-width: 1100px) { .dep-fg { grid-template-columns: 1fr 1fr; } }
   .dep-fr { display: flex; flex-direction: column; gap: 3px; }
   .dep-fl { font-size: 10.5px; color: var(--ink-soft); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
   .dep-fv { font-size: 13px; color: var(--ink); word-break: break-word; }
@@ -176,6 +177,7 @@
     .dep-header-card { flex-direction: column; }
     .dep-search-row { flex-direction: column; }
     .dep-search-btn { height: auto; padding: 11px 18px; }
+    .dep-fg { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -389,10 +391,28 @@
     t.style.display = 'block';
   }
 
+  // Keeps the Edit Record panel's height visually matched to the FIRST
+  // result card's actual rendered height (which varies with how many
+  // fields/rows are in it) — not a fixed value, since results differ
+  // search to search. Re-measures on every search render and on window
+  // resize/zoom (debounced), since the first card's height itself can
+  // reflow at different viewport widths.
+  var _resizeTimer = null;
+  function syncEditPanelHeight() {
+    var firstCard = document.querySelector('#depRes .dep-rcard');
+    var panel = document.querySelector('.dep-epanel');
+    if (!panel) return;
+    panel.style.minHeight = firstCard ? firstCard.offsetHeight + 'px' : '';
+  }
+  window.addEventListener('resize', function () {
+    clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(syncEditPanelHeight, 120);
+  });
+
   function showDep(data) {
     gi('depLbl').textContent = 'Results (' + data.length + (data.length>=500?' — max 500':'') + ')';
     window._dep = data;
-    if (!data.length) { gi('depRes').innerHTML = '<div class="dep-state">No results found.</div>'; return; }
+    if (!data.length) { gi('depRes').innerHTML = '<div class="dep-state">No results found.</div>'; syncEditPanelHeight(); return; }
     gi('depRes').innerHTML = data.map(function(r,i){
       var imgBtn = r.imageLink ? '<span class="dep-img-btn" id="img-'+i+'">🖼️ Image</span>' : '';
       return '<div class="dep-rcard"><div class="dep-rcard-h">'
@@ -416,6 +436,7 @@
       gi('deb-'+i).addEventListener('click', function(){ openDep(i); });
       if (r.imageLink) gi('img-'+i).addEventListener('click', function(){ openImageLightbox(r.imageLink); });
     });
+    syncEditPanelHeight();
   }
 
   // Transaction Error doesn't have a fixed list of values like Status PG
@@ -510,18 +531,18 @@
       });
       const data = await res.json();
       btn.disabled = false;
-      if (!data.ok) { gi('depRes').innerHTML = '<div class="dep-state err">'+escapeHtml(data.error||'Search failed.')+'</div>'; return; }
+      if (!data.ok) { gi('depRes').innerHTML = '<div class="dep-state err">'+escapeHtml(data.error||'Search failed.')+'</div>'; syncEditPanelHeight(); return; }
       var warningHtml = (data.missingTabs && data.missingTabs.length)
         ? '<div class="dep-tab-warning">⚠️ Skipped ' + data.missingTabs.length + ' tab(s) not found on the sheet (name mismatch?): ' + data.missingTabs.map(escapeHtml).join(', ')
           + (data.actualSheetTabs ? '<br/><br/>Sheet\'s actual tabs: ' + data.actualSheetTabs.map(escapeHtml).join(', ') : '')
           + '</div>'
         : '';
-      if (warningHtml) gi('depRes').innerHTML = warningHtml;
       showDep(data.results || []);
-      if (warningHtml && !(data.results||[]).length) gi('depRes').innerHTML = warningHtml + gi('depRes').innerHTML;
+      if (warningHtml) gi('depRes').innerHTML = warningHtml + gi('depRes').innerHTML;
     } catch (e) {
       btn.disabled = false;
       gi('depRes').innerHTML = '<div class="dep-state err">Search failed — check your connection.</div>';
+      syncEditPanelHeight();
     }
   }
 

@@ -76,5 +76,33 @@ variables — just confirm both **Production** and **Preview** have all three:
   like the ticket modules are.
 - **Search matches** Transaction ID (A), Reference (K), Username (E), and
   Agent Number (D) — substring, case-insensitive.
+- **Image Link (col G)**: if a row has a value here, a small "🖼️ Image"
+  button appears next to the Transaction ID in the result card. Clicking
+  it opens a fullscreen lightbox (reuses the exact same
+  `.attach-lightbox` styling/markup as `threads.html`) showing that URL
+  directly as an `<img>` — no server proxy, no KV, no storage of any
+  kind, exactly as asked. This assumes the sheet's Image Link values are
+  direct image URLs; if they're actually Google Drive "view" links or
+  something else that doesn't render as a raw `<img src>`, the lightbox
+  will show a "couldn't load" message instead — let me know if that
+  happens and I'll adjust (e.g. converting a Drive share link to its
+  direct-image form).
+- **Transaction Error (col H)**: shown as a colored pill like Status PG,
+  but since you didn't give me a fixed list of possible values for this
+  column (unlike Status PG's ~30 values), each distinct string gets a
+  color deterministically hashed from its text — the same error message
+  always gets the same color, picked from a 5-color vibrant palette,
+  never gray. If you want exact per-message colors instead (e.g. all
+  bank-related errors red, all "pending" ones orange), send me the real
+  list of values like you did for Status PG and I'll swap this for an
+  explicit map.
+- **Edit panel now has a "Clear All — Update Sheet" button** below Submit
+  — one click blanks CS PIC / Player Contact No / Status CS / Correct UID
+  AND writes the blanks to the Sheet immediately (not just clearing the
+  boxes on screen). Confirms first (since it's destructive) unless all 4
+  fields were already empty. Re-opening Edit on the same result always
+  shows whatever was last successfully written (this was already true
+  before this change — Submit updates the local copy of that row, so
+  re-clicking Edit shows the latest values, not stale ones).
 - **Performance**: reads the whole tab on every search — fine for a few
   thousand rows, may need optimizing if this sheet gets very large.

@@ -101,6 +101,12 @@
   .dep-rcard { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden; }
   .dep-rcard-h { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
   .dep-tab-pill { background: var(--field-bg); border: 1px solid var(--pill-border); color: var(--label-blue); font-weight: 700; font-size: 11.5px; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
+  .dep-img-btn {
+    display: inline-flex; align-items: center; gap: 5px; background: var(--field-bg);
+    border: 1px solid var(--pill-border); color: var(--label-blue); font-weight: 700;
+    font-size: 11.5px; padding: 3px 10px; border-radius: 20px; cursor: pointer; white-space: nowrap;
+  }
+  .dep-img-btn:hover { border-color: var(--accent-gold); }
   .dep-rcard-id { font-family: var(--font-mono); font-weight: 700; color: var(--ink); font-size: 14px; }
   .dep-rcard-tm { font-size: 12px; color: var(--ink-soft); margin-left: auto; }
   .dep-rcard-b { padding: 14px 16px; }
@@ -137,6 +143,13 @@
   }
   .dep-btn-sub:hover { transform: translateY(-1px); }
   .dep-btn-sub:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+  .dep-btn-clear {
+    width: 100%; padding: 10px; background: transparent; color: #e5304a;
+    border: 1.5px solid #e5304a; border-radius: 12px; font-size: 13px; font-weight: 700;
+    cursor: pointer; margin-top: 8px; transition: all 0.15s ease;
+  }
+  .dep-btn-clear:hover { background: #e5304a; color: #fff; }
+  .dep-btn-clear:disabled { opacity: 0.5; cursor: not-allowed; background: transparent; color: #e5304a; }
   .dep-toast { display: none; text-align: center; padding: 8px; font-size: 13px; font-weight: 700; border-radius: 10px; margin-top: 8px; }
   .dep-tok { background: rgba(34,197,94,0.14); color: #16a34a; }
   .dep-ter { background: rgba(224,87,122,0.14); color: #e0577a; }
@@ -163,6 +176,14 @@
 </style>
 </head>
 <body>
+  <!-- Image lightbox — reuses the same .attach-lightbox styling as threads.html.
+       Just displays the URL from the sheet's Image Link column directly;
+       no server proxy, no KV, no storage of any kind. -->
+  <div class="attach-lightbox" id="imgLightbox">
+    <button type="button" class="attach-lightbox-close" id="imgLightboxClose" title="Close">✕</button>
+    <div class="attach-lightbox-body" id="imgLightboxBody"></div>
+  </div>
+
   <header class="topbar">
     <div class="topbar-left">
       <img src="/assets/img/logo.webp" alt="HeyVIP" class="logo-img" />
@@ -228,6 +249,7 @@
             <div class="dep-fg2"><label class="dep-fl2">Status CS (col R)</label><input class="dep-fi" id="ef-statuscs" placeholder="Status CS..."></div>
             <div class="dep-fg2"><label class="dep-fl2">Correct UID (col S)</label><input class="dep-fi" id="ef-uid" placeholder="Correct UID..."></div>
             <button class="dep-btn-sub" id="depSub">Submit — Update Sheet</button>
+            <button class="dep-btn-clear" id="depClear">Clear All — Update Sheet</button>
             <div class="dep-toast" id="depT"></div>
           </div>
         </div>
@@ -368,24 +390,57 @@
     window._dep = data;
     if (!data.length) { gi('depRes').innerHTML = '<div class="dep-state">No results found.</div>'; return; }
     gi('depRes').innerHTML = data.map(function(r,i){
+      var imgBtn = r.imageLink ? '<span class="dep-img-btn" id="img-'+i+'">🖼️ Image</span>' : '';
       return '<div class="dep-rcard"><div class="dep-rcard-h">'
         +'<span class="dep-tab-pill">'+escapeHtml(r.tabName)+'</span>'
-        +'<span class="dep-rcard-id">'+escapeHtml(r.transaction)+'</span><span class="dep-rcard-tm">'+escapeHtml(r.requestTime)+'</span></div>'
+        +'<span class="dep-rcard-id">'+escapeHtml(r.transaction)+'</span>'
+        +imgBtn
+        +'<span class="dep-rcard-tm">'+escapeHtml(r.requestTime)+'</span></div>'
         +'<div class="dep-rcard-b"><div class="dep-fg">'
         +f('Channel',r.channel)+f('Agent Number',r.agentNumber)
         +f('Username',r.username)+f('Reference',r.reference)
         +f('Cash Out Number',r.cashOutNumber)+f('Amount',r.amount)
-        +fp('Status PG',r.statusPG)+f('Cart ID',r.cartId)
-        +f('Support PIC',r.supportPIC)+f('CS PIC',r.csPIC)
-        +f('Player Contact No',r.playerContactNo)+fp('Status CS',r.statusCS)
-        +f('Correct UID',r.correctUid)
+        +fp('Status PG',r.statusPG)+fErr('Transaction Error',r.transactionError)
+        +f('Cart ID',r.cartId)+f('Support PIC',r.supportPIC)
+        +f('CS PIC',r.csPIC)+f('Player Contact No',r.playerContactNo)
+        +fp('Status CS',r.statusCS)+f('Correct UID',r.correctUid)
         +'</div></div>'
         +'<div class="dep-rcard-f"><button class="dep-btn-ed" id="deb-'+i+'">Edit</button></div></div>';
     }).join('');
-    data.forEach(function(_,i){ gi('deb-'+i).addEventListener('click', function(){ openDep(i); }); });
+    data.forEach(function(r,i){
+      gi('deb-'+i).addEventListener('click', function(){ openDep(i); });
+      if (r.imageLink) gi('img-'+i).addEventListener('click', function(){ openImageLightbox(r.imageLink); });
+    });
   }
 
-  function openDep(i) {
+  // Transaction Error doesn't have a fixed list of values like Status PG
+  // does, so instead of guessing keywords, every distinct string gets a
+  // consistent color deterministically hashed from its text — same value
+  // always gets the same color, and it's picked from a vibrant palette,
+  // never gray. (If you'd rather have an exact category->color mapping
+  // like Status PG, send me the real list of Transaction Error values and
+  // I'll swap this for an explicit map.)
+  var ERROR_PALETTE = ['dep-p-red','dep-p-orange','dep-p-purple','dep-p-teal','dep-p-blue'];
+  function hashColor(str) {
+    var h = 0;
+    for (var i = 0; i < str.length; i++) { h = (h * 31 + str.charCodeAt(i)) | 0; }
+    return ERROR_PALETTE[Math.abs(h) % ERROR_PALETTE.length];
+  }
+  function fErr(l, v) {
+    if (!v) return '<div class="dep-fr"><span class="dep-fl">'+l+'</span><span class="dep-fv"><span class="dep-pill dep-py">—</span></span></div>';
+    var c = hashColor(v.toLowerCase().trim());
+    return '<div class="dep-fr"><span class="dep-fl">'+l+'</span><span class="dep-fv"><span class="dep-pill '+c+'">'+escapeHtml(v)+'</span></span></div>';
+  }
+
+  function openImageLightbox(url) {
+    var box = gi('imgLightbox'), body = gi('imgLightboxBody');
+    body.innerHTML = '<img src="'+escapeHtml(url)+'" alt="Deposit slip" onerror="this.parentNode.innerHTML=\'<div class=&quot;attach-lightbox-status attach-lightbox-error&quot;>Couldn\\\'t load this image — the link may not point directly to an image file.</div>\'" />';
+    box.classList.add('is-open');
+  }
+  function closeImageLightbox() { gi('imgLightbox').classList.remove('is-open'); gi('imgLightboxBody').innerHTML = ''; }
+  gi('imgLightboxClose').addEventListener('click', closeImageLightbox);
+  gi('imgLightbox').addEventListener('click', function(e){ if (e.target === gi('imgLightbox')) closeImageLightbox(); });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && gi('imgLightbox').classList.contains('is-open')) closeImageLightbox(); });
     var r = window._dep[i]; curDep = r;
     document.querySelectorAll('.dep-btn-ed').forEach(function(b){b.classList.remove('active');});
     gi('deb-'+i).classList.add('active');
@@ -423,27 +478,53 @@
     }
   }
 
+  async function sendUpdate(values) {
+    const res = await window.AgentAuth.authFetch('/api/deposit-issue/update', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ tabName: curDep.tabName, rowIndex: curDep.rowIndex, ...values })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      curDep.csPIC = values.csPIC; curDep.playerContactNo = values.playerContactNo;
+      curDep.statusCS = values.statusCS; curDep.correctUid = values.correctUid;
+    }
+    return data;
+  }
+
   async function subDep() {
     if (!curDep) return;
     var btn = gi('depSub'); btn.disabled = true; btn.textContent = 'Updating...';
     try {
-      const res = await window.AgentAuth.authFetch('/api/deposit-issue/update', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({
-          tabName: curDep.tabName, rowIndex: curDep.rowIndex,
-          csPIC: gi('ef-piccs').value, playerContactNo: gi('ef-pcoNo').value,
-          statusCS: gi('ef-statuscs').value, correctUid: gi('ef-uid').value,
-        })
+      const data = await sendUpdate({
+        csPIC: gi('ef-piccs').value, playerContactNo: gi('ef-pcoNo').value,
+        statusCS: gi('ef-statuscs').value, correctUid: gi('ef-uid').value,
       });
-      const data = await res.json();
       btn.disabled = false; btn.textContent = 'Submit — Update Sheet';
       showT('depT', data.ok, data.error);
-      if (data.ok) {
-        curDep.csPIC = gi('ef-piccs').value; curDep.playerContactNo = gi('ef-pcoNo').value;
-        curDep.statusCS = gi('ef-statuscs').value; curDep.correctUid = gi('ef-uid').value;
-      }
     } catch (e) {
       btn.disabled = false; btn.textContent = 'Submit — Update Sheet';
+      showT('depT', false, e.message);
+    }
+  }
+
+  // Clears all 4 CS-editable fields AND writes the blanks straight to the
+  // Sheet in one click — for when the whole row's CS data was wrong from
+  // the start (e.g. edited the wrong row) rather than just one field.
+  // Confirms first since, unlike Submit, this is inherently destructive.
+  async function clearAndUpdate() {
+    if (!curDep) return;
+    var hadAnything = gi('ef-piccs').value || gi('ef-pcoNo').value || gi('ef-statuscs').value || gi('ef-uid').value;
+    if (hadAnything && !confirm('Clear CS PIC, Player Contact No, Status CS, and Correct UID for ' + curDep.transaction + ' — and update the Sheet immediately?\n\nThis can\'t be undone from here.')) return;
+    var btn = gi('depClear'); btn.disabled = true; btn.textContent = 'Clearing...';
+    try {
+      const data = await sendUpdate({ csPIC: '', playerContactNo: '', statusCS: '', correctUid: '' });
+      btn.disabled = false; btn.textContent = 'Clear All — Update Sheet';
+      showT('depT', data.ok, data.error);
+      if (data.ok) {
+        gi('ef-piccs').value = ''; gi('ef-pcoNo').value = ''; gi('ef-statuscs').value = ''; gi('ef-uid').value = '';
+      }
+    } catch (e) {
+      btn.disabled = false; btn.textContent = 'Clear All — Update Sheet';
       showT('depT', false, e.message);
     }
   }
@@ -451,6 +532,7 @@
   gi('depBtn').addEventListener('click', doDep);
   gi('depQ').addEventListener('keydown', function(e){ if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); doDep(); } });
   gi('depSub').addEventListener('click', subDep);
+  gi('depClear').addEventListener('click', clearAndUpdate);
 </script>
 </body>
 </html>

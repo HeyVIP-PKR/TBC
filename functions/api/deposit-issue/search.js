@@ -156,6 +156,8 @@ async function handleSearch({ request, env }) {
         agentNumber: get(COLS.agentNumber),
         username: get(COLS.username),
         date: get(COLS.date),
+        imageLink: get(COLS.imageLink),
+        transactionError: get(COLS.transactionError),
         statusPG: get(COLS.statusPG),
         cartId: get(COLS.cartId),
         reference,

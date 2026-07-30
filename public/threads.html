@@ -617,24 +617,6 @@
         queueAttachments(Array.from(e.target.files || []));
         e.target.value = ""; // reset so picking the same file again still fires "change"
       });
-      // Paste a screenshot (or any copied file) straight into the reply
-      // box — no need to save it to disk first, then click the 🔗 button
-      // to find it again. Clipboard items with kind "file" are actual
-      // files (screenshots, copied images, sometimes video); kind
-      // "string" is normal text, which should paste into the input as
-      // usual, so only intercept when there's at least one real file.
-      document.getElementById("replyInput").addEventListener("paste", (e) => {
-        const items = Array.from(e.clipboardData?.items || []);
-        const files = items.filter((it) => it.kind === "file").map((it) => it.getAsFile()).filter(Boolean);
-        if (!files.length) return; // plain text paste — let the browser handle it normally
-        e.preventDefault();
-        // Clipboard screenshots often come through with a generic name
-        // like "image.png" with no useful info — good enough as-is, but
-        // give it a timestamp so multiple pastes don't look identical in
-        // the chip row.
-        const named = files.map((f, i) => (f.name && f.name !== "image.png") ? f : new File([f], `pasted-${Date.now()}-${i}.${(f.type.split("/")[1] || "png")}`, { type: f.type }));
-        queueAttachments(named);
-      });
       renderAttachPreview();
       scrollConversation(true);
       polishEmoji();
@@ -1422,6 +1404,37 @@
     document.getElementById("attachLightboxClose").addEventListener("click", closeAttachLightbox);
     attachLightbox.addEventListener("click", (e) => { if (e.target === attachLightbox) closeAttachLightbox(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && attachLightbox.classList.contains("is-open")) closeAttachLightbox(); });
+
+    // Paste-anywhere, like Telegram desktop: copy a screenshot and just
+    // Ctrl+V / ⌘V while a thread is open — no need to click into the
+    // reply box first. Scoped with guards instead of to one element:
+    //   - no thread open → nothing to attach it to, let it fall through
+    //   - an edit/forward modal is open → that modal has its own scoped
+    //     paste handling (see onWindowPaste in openForwardModal), let it
+    //     own the paste instead of double-queuing onto the reply below
+    //   - the attachment lightbox is open → the person is VIEWING an
+    //     existing attachment, not composing a new reply
+    // Only acts when the clipboard actually contains a file — a normal
+    // text paste (kind "string") always falls through untouched,
+    // wherever on the page it happens.
+    document.addEventListener("paste", (e) => {
+      if (!selectedThread) return;
+      if (document.querySelector(".edit-details-overlay")) return;
+      if (attachLightbox.classList.contains("is-open")) return;
+      const items = Array.from(e.clipboardData?.items || []);
+      const files = items.filter((it) => it.kind === "file").map((it) => it.getAsFile()).filter(Boolean);
+      if (!files.length) return;
+      e.preventDefault();
+      // Clipboard screenshots often come through with a generic name
+      // like "image.png" with no useful info — good enough as-is, but
+      // give it a timestamp so multiple pastes don't look identical in
+      // the chip row.
+      const named = files.map((f, i) => (f.name && f.name !== "image.png") ? f : new File([f], `pasted-${Date.now()}-${i}.${(f.type.split("/")[1] || "png")}`, { type: f.type }));
+      queueAttachments(named);
+      // Land focus in the reply box so the caption is easy to type right
+      // after pasting, same as if the person had clicked 🔗 first.
+      document.getElementById("replyInput")?.focus();
+    });
 
     bootDashboard();
 

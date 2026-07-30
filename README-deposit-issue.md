@@ -18,6 +18,21 @@ for you in this zip; you just need to fill in the 2 placeholders and deploy.
 - ✅ **Real home page card added** — `public/index.html` now has a
   "Deposit Issue" tool-card next to "Promo Code Search", linking to
   `/deposit-issue.html`.
+- ✅ **Restyled to match your real site** — `deposit-issue.html` now uses
+  your actual `/assets/style.css` (same `--card-bg`/`--border`/`--ink`
+  variables, `.topbar`, `.back-pill`, light/dark theme toggle, starfield
+  background) instead of its own standalone dark theme. Same visual
+  language as `promo.html`/`threads.html`, just with its own `dep-`
+  prefixed classes for the parts unique to this page (brand dropdown,
+  result cards, edit panel).
+- ✅ **Tab-name mismatch is no longer silent** — this is what caused your
+  "No results found" earlier: `search.js` now calls the Sheets API to get
+  the sheet's REAL tab names first, and only queries tabs that actually
+  match `TAB_NAMES` (same trick `promo-search.js` already used). If a
+  configured tab doesn't exist, the page shows a yellow warning banner
+  listing exactly what's missing and what the sheet's real tab names are
+  — so a typo/rename shows up immediately instead of quietly returning 0
+  results forever.
 
 ## Sheet ID & tab name — already filled in
 ```
@@ -63,8 +78,3 @@ variables — just confirm both **Production** and **Preview** have all three:
   Agent Number (D) — substring, case-insensitive.
 - **Performance**: reads the whole tab on every search — fine for a few
   thousand rows, may need optimizing if this sheet gets very large.
-- **Theme**: `deposit-issue.html` uses its own fixed dark styling rather
-  than your site's light/dark toggle (`data-theme` on `<html>`) — it'll
-  always render dark regardless of the user's saved theme preference.
-  Cosmetic only, doesn't affect functionality; let me know if you want it
-  reskinned to fully match `style.css` and follow the toggle.

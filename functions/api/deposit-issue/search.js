@@ -44,6 +44,30 @@ const COLS = {
 const LAST_COL = "W"; // must match the last key in COLS above
 const MAX_RESULTS = 500;
 
+// Same normalization promo-search.js uses — folds invisible differences
+// (double spaces, stray whitespace, fullwidth punctuation) so a tab name
+// that LOOKS identical to the human eye still matches.
+function normalizeTabName(name) {
+  return String(name).normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+// Sheet's real tab titles rarely change — cache per Worker isolate for a
+// few minutes instead of re-fetching metadata on every search.
+let cachedTabTitles = null; // { titles, expiresAt }
+const TAB_CACHE_MS = 5 * 60 * 1000;
+
+async function resolveExistingTabs(accessToken) {
+  const now = Date.now();
+  if (cachedTabTitles && cachedTabTitles.expiresAt > now) return cachedTabTitles.titles;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties.title`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`Could not read sheet tab list: ${data.error?.message || res.status}`);
+  const titles = (data.sheets || []).map((s) => s.properties.title);
+  cachedTabTitles = { titles, expiresAt: now + TAB_CACHE_MS };
+  return titles;
+}
+
 export async function onRequestPost(context) {
   try {
     return await handleSearch(context);
@@ -75,11 +99,32 @@ async function handleSearch({ request, env }) {
   if (!queries.length) return json({ ok: false, error: "No valid search terms." }, 400);
 
   const accessToken = await getAccessToken(env);
+
+  // Resolve configured tab names against what actually exists on the
+  // sheet — a mistyped/renamed tab becomes a warning in the response
+  // instead of a silent "0 results" (this is what happened before: the
+  // configured TAB_NAMES didn't match the sheet's real tab title, so
+  // every search legitimately found nothing rather than erroring).
+  let realTitles;
+  try {
+    realTitles = await resolveExistingTabs(accessToken);
+  } catch (e) {
+    return json({ ok: false, error: String(e.message || e) }, 502);
+  }
+  const realByNormalized = new Map(realTitles.map((t) => [normalizeTabName(t), t]));
+  const tabsToQuery = []; // real title strings only
+  const missingTabs = [];
+  for (const configured of TAB_NAMES) {
+    const real = realByNormalized.get(normalizeTabName(configured));
+    if (real) tabsToQuery.push(real);
+    else missingTabs.push(configured);
+  }
+
   const results = [];
 
-  for (const tab of TAB_NAMES) {
+  for (const tab of tabsToQuery) {
     if (results.length >= MAX_RESULTS) break;
-    const range = `'${tab}'!A2:${LAST_COL}`;
+    const range = `'${tab.replace(/'/g, "''")}'!A2:${LAST_COL}`;
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     const data = await res.json();
@@ -126,7 +171,14 @@ async function handleSearch({ request, env }) {
     });
   }
 
-  return json({ ok: true, results });
+  return json({
+    ok: true,
+    results,
+    missingTabs: missingTabs.length ? missingTabs : undefined,
+    // Only included when something's misconfigured — lets you see the
+    // sheet's real tab names without opening the sheet.
+    actualSheetTabs: missingTabs.length ? realTitles : undefined,
+  });
 }
 
 // Converts a column letter like "P" to a 0-based array index (15).

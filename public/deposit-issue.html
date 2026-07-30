@@ -460,9 +460,18 @@
     gi('ef-statuscs').value = r.statusCS || ''; gi('ef-uid').value = r.correctUid || '';
   }
 
+  function resetEditPanel() {
+    curDep = null;
+    document.querySelectorAll('.dep-btn-ed').forEach(function(b){ b.classList.remove('active'); });
+    gi('depHint').style.display = 'block';
+    gi('depEF').style.display = 'none';
+    gi('depT').style.display = 'none';
+  }
+
   async function doDep() {
     var raw = gi('depQ').value.trim(); if (!raw) return;
     var queries = parseQueries(raw); renderChips(queries);
+    resetEditPanel(); // new search — whatever was being edited belongs to the old results, drop it
     var btn = gi('depBtn'); btn.disabled = true;
     gi('depRes').innerHTML = '<div class="dep-state">Searching…</div>';
     try {

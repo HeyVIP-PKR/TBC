@@ -169,6 +169,8 @@ async function handleSearch({ request, env }) {
         playerContactNo: get(COLS.playerContactNo),
         statusCS: get(COLS.statusCS),
         correctUid: get(COLS.correctUid),
+        playersCartId: get(COLS.playersCartId),
+        paymentStatus: get(COLS.paymentStatus),
       });
     });
   }

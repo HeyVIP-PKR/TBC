@@ -104,5 +104,12 @@ variables — just confirm both **Production** and **Preview** have all three:
   shows whatever was last successfully written (this was already true
   before this change — Submit updates the local copy of that row, so
   re-clicking Edit shows the latest values, not stale ones).
+- **Player's Cart ID (col T)** and **Payment Status (col U)** are now
+  shown in each result card. Payment Status is colored to match your
+  Sheet's own conditional formatting (maroon for Not Receive/Duplicate/
+  Agent Close, lavender for Refund Success, amber for CS-Ignore, green
+  for Manually Credited, navy for Provide Correct UID, blue for Approved
+  by System). Any value not in that list falls back to the same
+  hash-based color assignment as Transaction Error — still never gray.
 - **Performance**: reads the whole tab on every search — fine for a few
   thousand rows, may need optimizing if this sheet gets very large.

@@ -121,6 +121,10 @@
   .dep-p-blue   { background: #2f6fed; color: #fff; }
   .dep-p-purple { background: #8b5cf6; color: #fff; }
   .dep-p-teal   { background: #14b8a6; color: #04201c; }
+  .dep-p-maroon { background: #8f1414; color: #fff; }
+  .dep-p-lavender { background: #e6d9f5; color: #5b21a6; }
+  .dep-p-amber  { background: #a8611a; color: #ffe9c9; }
+  .dep-p-navy   { background: #10244a; color: #cfe0ff; }
   .dep-py { background: var(--field-bg); color: var(--ink-soft); font-weight: 700; }
   .dep-dash { color: var(--ink-soft); }
   .dep-rcard-f { padding: 8px 16px; border-top: 1px solid var(--border); }
@@ -404,6 +408,7 @@
         +f('Cart ID',r.cartId)+f('Support PIC',r.supportPIC)
         +f('CS PIC',r.csPIC)+f('Player Contact No',r.playerContactNo)
         +fp('Status CS',r.statusCS)+f('Correct UID',r.correctUid)
+        +f('Player\'s Cart ID',r.playersCartId)+fPay('Payment Status',r.paymentStatus)
         +'</div></div>'
         +'<div class="dep-rcard-f"><button class="dep-btn-ed" id="deb-'+i+'">Edit</button></div></div>';
     }).join('');
@@ -429,6 +434,30 @@
   function fErr(l, v) {
     if (!v) return '<div class="dep-fr"><span class="dep-fl">'+l+'</span><span class="dep-fv"><span class="dep-pill dep-py">—</span></span></div>';
     var c = hashColor(v.toLowerCase().trim());
+    return '<div class="dep-fr"><span class="dep-fl">'+l+'</span><span class="dep-fv"><span class="dep-pill '+c+'">'+escapeHtml(v)+'</span></span></div>';
+  }
+
+  // Payment Status colors follow the same scheme as your Sheet's own
+  // conditional formatting (see the screenshot you sent): red family for
+  // "not received"/negative outcomes, lavender for refunds, amber for
+  // ignore/hold, green for successfully credited, navy/blue for
+  // system-verified states. Unlisted values fall back to the same
+  // hash-based palette as Transaction Error — still never gray.
+  var PAYMENT_STATUS_COLOR = {
+    "not receive": "dep-p-maroon",
+    "pyt-agent close": "dep-p-maroon",
+    "duplicate": "dep-p-maroon",
+    "refund success": "dep-p-lavender",
+    "cs - ignore": "dep-p-amber",
+    "cs-ignore": "dep-p-amber",
+    "manually credited": "dep-p-green",
+    "provide correct uid": "dep-p-navy",
+    "approved by system": "dep-p-blue",
+  };
+  function fPay(l, v) {
+    if (!v) return '<div class="dep-fr"><span class="dep-fl">'+l+'</span><span class="dep-fv"><span class="dep-pill dep-py">—</span></span></div>';
+    var key = v.toLowerCase().trim();
+    var c = PAYMENT_STATUS_COLOR[key] || hashColor(key);
     return '<div class="dep-fr"><span class="dep-fl">'+l+'</span><span class="dep-fv"><span class="dep-pill '+c+'">'+escapeHtml(v)+'</span></span></div>';
   }
 

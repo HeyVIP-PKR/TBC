@@ -7,7 +7,15 @@
  *   curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
  *     -d "url=https://inrtg-control.pages.dev/api/telegram-webhook" \
  *     -d "secret_token=<TELEGRAM_WEBHOOK_SECRET>" \
- *     -d "allowed_updates=[\"message\"]"
+ *     -d "allowed_updates=[\"message\",\"edited_message\"]"
+ *
+ * NOTE the "edited_message" entry above — if this webhook was registered
+ * with an earlier version of this file (before edit-tracking existed),
+ * Telegram is still only configured to send plain "message" updates and
+ * won't call this endpoint at all when someone edits a message, no matter
+ * what the code below does. Re-run setWebhook with the command above
+ * (once, from your own machine) to pick up edits going forward — nothing
+ * else needs to change server-side.
  *
  * `TELEGRAM_WEBHOOK_SECRET` is a string you make up yourself (any random
  * value works) and set as a Cloudflare secret with that same name — it's
@@ -26,8 +34,17 @@
  * isn't a real reply, or a reply to some message outside this chain — is
  * intentionally ignored rather than guessed at, so a message never lands
  * on the wrong ticket.
+ *
+ * edited_message updates (someone editing a reply they already sent,
+ * directly inside Telegram) are handled separately, below — see
+ * handleEditedMessage(). This only ever applies to a message a HUMAN
+ * sent: our own bot-sent messages can only be changed through the Bot
+ * API (the dashboard's ✏️ edit buttons — see functions/api/threads/
+ * [id].js), which write straight to storage themselves and never go
+ * through this webhook either way, so there's no risk of double-handling
+ * the same edit from two different paths.
  */
-import { findThreadIdByMessage, appendMessage } from "../_shared/threads.js";
+import { findThreadIdByMessage, appendMessage, editIncomingMessageInThread } from "../_shared/threads.js";
 
 export async function onRequestPost({ request, env }) {
   // Verify the request really came from Telegram.
@@ -56,6 +73,7 @@ export async function onRequestPost({ request, env }) {
 
 async function handleUpdate(env, update) {
   if (!env.THREADS_KV) return;
+  if (update.edited_message) return handleEditedMessage(env, update.edited_message);
   const msg = update.message;
   if (!msg || msg.from?.is_bot) return;
   const hasContent = msg.text || msg.caption || msg.photo || msg.document || msg.video || msg.voice || msg.sticker;
@@ -112,4 +130,21 @@ async function handleUpdate(env, update) {
     messageId: msg.message_id,
     replyToMessageId: replyTarget.message_id,
   });
+}
+
+// Someone edited a message directly inside Telegram — message_id stays
+// the same as the original send, only the content and edit_date change,
+// so we can look it up in msgid: the exact same way a brand-new reply
+// does (findThreadIdByMessage). Only ever fires for a message a HUMAN
+// sent (see the is_bot check below) — our own bot-sent messages are only
+// ever edited through the dashboard's own ✏️ buttons, a completely
+// separate path (functions/api/threads/[id].js) that never touches this
+// webhook, so there's no double-handling risk between the two.
+async function handleEditedMessage(env, msg) {
+  if (!msg || msg.from?.is_bot) return;
+  const hasContent = msg.text || msg.caption;
+  if (!hasContent) return; // e.g. only the attached media changed, no caption either way — nothing to show
+  const threadId = await findThreadIdByMessage(env, msg.chat.id, msg.message_id);
+  if (!threadId) return; // editing something we're not tracking — ignore, don't guess
+  await editIncomingMessageInThread(env, threadId, msg.message_id, msg.text || msg.caption);
 }

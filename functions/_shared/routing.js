@@ -360,7 +360,7 @@ export const PROMOTION_SHEET_CONFIG = {
     tidColumn: "A",
     columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
   },
-  "superbaji|Download SuberBaji APP & Claim Cash": {
+  "superbaji|Download SuperBaji APP & Claim Cash": {
     sheetId: "1k_Nn-NPLHVogFZjDdMuAVCRJFDM6wsAplrpYfNfidEc",
     tab: "Download & Claim",
     startColumn: "A",
@@ -482,7 +482,7 @@ export const PROMOTION_MESSAGE_TEMPLATE = {
   "heybaji|Birthday Bonus": PROMOTION_ROWS_PKR,
   "heybaji|Download HeyBaji APP & Claim Cash": PROMOTION_ROWS_PKR,
   "superbaji|Birthday Bonus": PROMOTION_ROWS_PKR,
-  "superbaji|Download SuberBaji APP & Claim Cash": PROMOTION_ROWS_PKR,
+  "superbaji|Download SuperBaji APP & Claim Cash": PROMOTION_ROWS_PKR,
   "sbj66|Birthday Bonus": PROMOTION_ROWS_PKR,
   "sbj66|Download SBJ66 APP & Claim Cash": PROMOTION_ROWS_PKR,
   "kv8|Birthday Bonus": PROMOTION_ROWS_PKR,

@@ -434,13 +434,22 @@
 
   function openImageLightbox(url) {
     var box = gi('imgLightbox'), body = gi('imgLightboxBody');
-    body.innerHTML = '<img src="'+escapeHtml(url)+'" alt="Deposit slip" onerror="this.parentNode.innerHTML=\'<div class=&quot;attach-lightbox-status attach-lightbox-error&quot;>Couldn\\\'t load this image — the link may not point directly to an image file.</div>\'" />';
+    body.innerHTML = '';
+    var img = document.createElement('img');
+    img.src = url;
+    img.alt = 'Deposit slip';
+    img.addEventListener('error', function () {
+      body.innerHTML = '<div class="attach-lightbox-status attach-lightbox-error">Couldn\u2019t load this image — the link may not point directly to an image file.</div>';
+    });
+    body.appendChild(img);
     box.classList.add('is-open');
   }
   function closeImageLightbox() { gi('imgLightbox').classList.remove('is-open'); gi('imgLightboxBody').innerHTML = ''; }
   gi('imgLightboxClose').addEventListener('click', closeImageLightbox);
   gi('imgLightbox').addEventListener('click', function(e){ if (e.target === gi('imgLightbox')) closeImageLightbox(); });
   document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && gi('imgLightbox').classList.contains('is-open')) closeImageLightbox(); });
+
+  function openDep(i) {
     var r = window._dep[i]; curDep = r;
     document.querySelectorAll('.dep-btn-ed').forEach(function(b){b.classList.remove('active');});
     gi('deb-'+i).classList.add('active');

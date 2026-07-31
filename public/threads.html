@@ -1279,6 +1279,29 @@
       };
       return map[(mimeType || "").split(";")[0].trim().toLowerCase()] || null;
     }
+
+    // Last-resort universal fallback: for OLDER tickets (submitted before
+    // today's fix, or ones where Telegram genuinely never retained a
+    // resolvable filename/extension on its own side), neither the
+    // filename NOR the server's declared Content-Type can be trusted —
+    // there's simply no metadata left to guess from. Rather than give
+    // up, read the file's own first few bytes and check them against
+    // known "magic number" signatures every one of these formats starts
+    // with. This works regardless of what any filename or header claims,
+    // because it's reading the actual file content, not a label someone
+    // else attached to it.
+    async function sniffTypeFromBlob(blob) {
+      const head = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
+      const hex = Array.from(head).map((b) => b.toString(16).padStart(2, "0")).join("");
+      if (hex.startsWith("25504446")) return "application/pdf"; // %PDF
+      if (hex.startsWith("ffd8ff")) return "image/jpeg";
+      if (hex.startsWith("89504e47")) return "image/png";
+      if (hex.startsWith("474946383761") || hex.startsWith("474946383961")) return "image/gif"; // GIF87a / GIF89a
+      if (hex.startsWith("52494646") && hex.slice(16, 24) === "57454250") return "image/webp"; // RIFF....WEBP
+      if (hex.startsWith("504b0304")) return "application/zip"; // also covers docx/xlsx/pptx (all zip-based)
+      return null;
+    }
+
     function withExtension(name, mimeType) {
       if (/\.[a-zA-Z0-9]{2,5}$/.test(name)) return name; // already has something extension-shaped
       const ext = guessExtensionFromMime(mimeType);
@@ -1319,7 +1342,15 @@
             throw new Error(msg || "Couldn't load this attachment.");
           }
           const blob = await res.blob();
-          return { url: URL.createObjectURL(blob), type: blob.type || "" };
+          let type = blob.type || "";
+          // Server had nothing better to declare than the generic
+          // catch-all (see the comment on sniffTypeFromBlob above) — try
+          // reading the actual bytes before giving up on knowing the type.
+          if (!type || type === "application/octet-stream") {
+            const sniffed = await sniffTypeFromBlob(blob).catch(() => null);
+            if (sniffed) type = sniffed;
+          }
+          return { url: URL.createObjectURL(blob), type };
         })());
       }
       return attachmentCache.get(fileId);

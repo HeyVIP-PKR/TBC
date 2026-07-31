@@ -1,5 +1,5 @@
 import { getAccessToken } from "../../_shared/googleOAuth.js";
-import { verifyRequest } from "../../_shared/accounts.js";
+import { verifyRequest, canSeeBrand } from "../../_shared/accounts.js";
 import { PKR_BRANDS, getDepositSheetOverride } from "../../_shared/depositSheets.js";
 
 // Stable identifier for this module's slot in the "Deposit Sheet Link"
@@ -118,9 +118,17 @@ async function handleSearch({ request, env }) {
   if (!queries.length) return json({ ok: false, error: "No valid search terms." }, 400);
 
   // Figure out which brand(s) to actually search, and resolve each one's
-  // { sheetId, tabNames } up front.
-  const brandsToSearch = requestedBrand ? PKR_BRANDS.filter((b) => b.id === requestedBrand) : PKR_BRANDS;
-  if (requestedBrand && !brandsToSearch.length) return json({ ok: false, error: `Unknown brand "${requestedBrand}".` }, 400);
+  // { sheetId, tabNames } up front. Brand-level permission (same
+  // canSeeBrand() used by submit.js) is enforced here — an agent scoped
+  // to only Crickex, for example, can't search or see any other brand's
+  // Deposit Issue data, same as every other module in the hub.
+  if (requestedBrand) {
+    const brandMeta = PKR_BRANDS.find((b) => b.id === requestedBrand);
+    if (!brandMeta) return json({ ok: false, error: `Unknown brand "${requestedBrand}".` }, 400);
+    if (!canSeeBrand(account, brandMeta.name)) return json({ ok: false, error: "You don't have access to this brand." }, 403);
+  }
+  const brandsToSearch = (requestedBrand ? PKR_BRANDS.filter((b) => b.id === requestedBrand) : PKR_BRANDS)
+    .filter((b) => canSeeBrand(account, b.name));
 
   const targets = []; // { brandId, brandName, sheetId, tabNames }
   const unconfiguredBrands = [];

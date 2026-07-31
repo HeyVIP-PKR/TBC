@@ -31,6 +31,16 @@
   .dep-open-sheet:hover { transform: translateY(-1px); }
   .dep-open-sheet.is-hidden { display: none; }
 
+  .dep-dir-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 14px;
+    padding: 12px 16px; margin-bottom: 10px; box-shadow: var(--shadow);
+  }
+  .dep-dir-left { display: flex; align-items: center; gap: 10px; }
+  .dep-dir-logo { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; border: 1.5px solid var(--pill-border); }
+  .dep-dir-name { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+  .dep-dir-unconfigured { font-size: 12px; color: var(--ink-soft); font-style: italic; }
+
   /* Brand dropdown */
   .dep-brand-wrap { position: relative; margin-bottom: 16px; z-index: 50; }
   .dep-brand-trigger {
@@ -220,10 +230,10 @@
 
     <div class="dep-brand-wrap" id="brandWrap">
       <div class="dep-brand-trigger" id="brandTrigger">
-        <div class="dep-brand-abbr" id="brandIcon">ALL</div>
+        <div class="dep-brand-abbr" id="brandIcon">CX</div>
         <div>
           <div class="dep-brand-label">Filter by Brand</div>
-          <div class="dep-brand-value" id="brandValue">All Brands</div>
+          <div class="dep-brand-value" id="brandValue">Crickex</div>
         </div>
         <span class="dep-brand-arrow">▾</span>
       </div>
@@ -279,12 +289,17 @@
   function cell(v) { v = (v ?? "").toString().trim(); return v ? escapeHtml(v) : '<span class="dep-dash">—</span>'; }
   function gi(id) { return document.getElementById(id); }
 
-  var _selBrand = "", _ddOpen = false, curDep = null;
+  var _selBrand = '', _ddOpen = false, curDep = null; // '' = All Brands (directory mode), default on load
+  var VISIBLE_BRANDS = window.AgentAuth.filterAllowedBrands(BRANDS);
 
   function buildBrandMenu() {
     var list = gi('brandMenu'); list.innerHTML = '';
+    // "All Brands" is a directory view, not a cross-brand search (see
+    // showBrandDirectory() below for why) — only real brands the agent
+    // has access to (via filterAllowedBrands, same helper the home page
+    // and submission form use) get listed after it.
     list.appendChild(mkBrandItem('', 'All Brands', null, true));
-    BRANDS.forEach(function (b) { list.appendChild(mkBrandItem(b.id, b.name, b.id, false)); });
+    VISIBLE_BRANDS.forEach(function (b) { list.appendChild(mkBrandItem(b.id, b.name, b.id, false)); });
     gi('brandTrigger').addEventListener('click', toggleBrandMenu);
     document.addEventListener('click', function (e) { if (!gi('brandWrap').contains(e.target)) closeBrandMenu(); });
   }
@@ -320,8 +335,12 @@
     }
     gi('brandMenu').querySelectorAll('.dep-brand-item').forEach(function(el){ el.classList.toggle('selected', el.dataset.id===id); });
     closeBrandMenu();
+    resetEditPanel();
+    if (id === '') showBrandDirectory();
+    else gi('depRes').innerHTML = '<div class="dep-state">Select brand (optional) then enter one or more IDs to search</div>';
   }
   buildBrandMenu();
+  selectBrand('', 'All Brands', null); // land on the directory view by default
 
   function parseQueries(str) { return str.split(/[\n,]+/).map(function(q){return q.trim();}).filter(Boolean); }
 
@@ -519,7 +538,42 @@
     gi('depT').style.display = 'none';
   }
 
+  // "All Brands" is a directory, not a search — see doDep()'s guard
+  // below for why actual searching is blocked in this mode. Fetches
+  // each accessible brand's Sheet ID once and renders a simple
+  // "<Brand> Deposit Gsheet — Open Sheet" card per brand, matching the
+  // reference screenshot (HEYVIP Deposit Backup card style).
+  async function showBrandDirectory() {
+    gi('depLbl').textContent = 'All Brands';
+    gi('depRes').innerHTML = '<div class="dep-state">Loading brand sheets…</div>';
+    try {
+      const res = await window.AgentAuth.authFetch('/api/deposit-issue/sheet-links');
+      const data = await res.json();
+      if (!data.ok) { gi('depRes').innerHTML = '<div class="dep-state err">'+escapeHtml(data.error||'Failed to load.')+'</div>'; syncEditPanelHeight(); return; }
+      if (!data.brands.length) { gi('depRes').innerHTML = '<div class="dep-state">No brands available.</div>'; syncEditPanelHeight(); return; }
+      gi('depRes').innerHTML = data.brands.map(function (b) {
+        var logo = '<img src="'+logoPath(b.id)+'" alt="" class="dep-dir-logo" onerror="this.style.display=\'none\'" />';
+        var openBtn = b.sheetId
+          ? '<a class="dep-open-sheet" href="https://docs.google.com/spreadsheets/d/'+encodeURIComponent(b.sheetId)+'/edit" target="_blank" rel="noopener">📄 Open Sheet</a>'
+          : '<span class="dep-dir-unconfigured">Not linked yet</span>';
+        return '<div class="dep-dir-row">'
+          + '<div class="dep-dir-left">'+logo+'<span class="dep-dir-name">'+escapeHtml(b.name)+' Deposit Gsheet</span></div>'
+          + openBtn
+          + '</div>';
+      }).join('');
+    } catch (e) {
+      gi('depRes').innerHTML = '<div class="dep-state err">Failed to load — check your connection.</div>';
+    }
+    syncEditPanelHeight();
+  }
+
   async function doDep() {
+    if (_selBrand === '') {
+      gi('depChips').innerHTML = '';
+      gi('depRes').innerHTML = '<div class="dep-state err">Please select a specific brand before searching — "All Brands" is a directory of sheet links only.</div>';
+      syncEditPanelHeight();
+      return;
+    }
     var raw = gi('depQ').value.trim(); if (!raw) return;
     var queries = parseQueries(raw); renderChips(queries);
     resetEditPanel(); // new search — whatever was being edited belongs to the old results, drop it

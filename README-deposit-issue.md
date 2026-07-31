@@ -1,5 +1,65 @@
 # Deposit Issue module — now merged into your real repo
 
+## Update: "All Brands" redesigned as a Sheet directory (not a search)
+Instead of removing "All Brands" outright, it's now repurposed: selecting
+it (or just landing on the page — it's the default) shows a simple list
+of every accessible brand's own Sheet, each with its logo and an
+"📄 Open Sheet" button that opens that brand's actual Google Sheet in a
+new tab — same idea as the "HEYVIP Deposit Backup" reference card you
+sent. It's a directory, not a search: trying to actually search while
+"All Brands" is selected shows an inline message ("Please select a
+specific brand before searching...") instead of firing a request, so the
+scaling problem (fanning a search out across up to ~100 sheets) never
+happens — searching still requires picking one specific brand first.
+
+**New file:**
+- `functions/api/deposit-issue/sheet-links.js` — GET-only, returns each
+  accessible brand's Sheet ID (or `null` if not linked yet) for the
+  directory view. Same `canSeeBrand()` filtering as search.js/update.js —
+  an agent scoped to one brand only ever gets that one brand back.
+
+**Changed:**
+- `public/deposit-issue.html` — "All Brands" is back in the dropdown
+  (first item, above the real brands), defaults to selected on load;
+  `showBrandDirectory()` renders the card list; `doDep()` now guards
+  against searching while in this mode.
+
+## Update: "All Brands" removed + real per-brand access control
+Two related changes, both about scaling toward ~100 brand sheets:
+
+1. **"All Brands" option removed from the search dropdown.** Fanning a
+   search out across every configured brand's sheet doesn't scale — each
+   brand is a separate round-trip to the Sheets API, sequentially. At 9
+   brands it's tolerable; approaching 100 it would blow past Cloudflare's
+   sub-request limit per request and take far too long either way. A
+   specific brand must now be selected before searching (defaults to the
+   first brand in the list). The backend (`search.js`) still technically
+   supports an empty `brand` (fans out, same as before) as a safety net /
+   for any future internal use, but nothing in the UI can trigger it
+   anymore.
+2. **Real per-brand access control, finally wired in.** Previously
+   flagged as a known gap (any logged-in agent could search/update any
+   brand regardless of their assigned scope) — now uses the exact same
+   mechanism as the rest of the hub, on both ends:
+   - **Frontend**: the brand dropdown is filtered through
+     `window.AgentAuth.filterAllowedBrands()` — the same helper the home
+     page and ticket submission form already use. An agent scoped to
+     Crickex only never even SEES the other 8 brands as an option, not
+     just gets blocked after picking one.
+   - **Backend** (defense in depth, in case anyone ever calls the API
+     directly instead of through the page): `search.js` rejects an
+     explicitly-requested brand the account can't see (403) via
+     `canSeeBrand()`, same check `submit.js` uses. `update.js` resolves
+     which brand a given `sheetId` belongs to, then checks `canSeeBrand()`
+     before allowing the write — so an agent scoped to Crickex only can't
+     update Betjili's sheet even if they somehow knew/guessed its Sheet ID.
+   - An account with `allowedBrands: "all"` (or Admin/SuperAdmin rank)
+     still sees/can act on everything, same as everywhere else in the hub.
+   - **Nothing to configure** — this reuses each account's existing
+     `allowedBrands` setting from Account Management; if it was already
+     set up for the ticket modules, Deposit Issue now respects the same
+     scoping automatically.
+
 ## Update: now covers all 9 PKR brands (not just Crickex)
 The "Deposit Sheet Link" admin page has been restructured to fully mirror
 TG Group/Channel's layout: a left-side list of all 9 PKR brands

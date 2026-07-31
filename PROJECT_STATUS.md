@@ -1254,3 +1254,205 @@ later:**
   is what the mouse-parallax + shading layers already provide.
 
 
+## Deposit Issue module — built this session, current state
+
+A brand-new module, built from scratch across a very long session. It's
+a search + inline-edit tool against **other departments' own Google
+Sheets** (not this project's own R2/KV-backed tickets) — a department
+hands you a Sheet, you configure it once, agents search and update
+specific columns on it directly from the hub.
+
+**Where it lives:** home page → "Deposit Issue" card → `/deposit-issue.html`.
+Backend: `functions/api/deposit-issue/search.js`, `update.js`,
+`sheet-links.js`. Shared: `functions/_shared/googleOAuth.js`,
+`functions/_shared/depositSheets.js`. Admin panel:
+`functions/api/admin/deposit-sheets.js` + a "Deposit Sheet Link" section
+in `public/index.html`'s Account Management.
+
+### Auth model — deliberately NOT the service account
+
+Every other module in this hub (submit.js, googleSheets.js, etc.) writes
+to Sheets via the `pkr-tbc@tonal-unity-503006-u6.iam.gserviceaccount.com`
+service account, which only works if the Sheet owner explicitly shares it
+with that email. Deposit Issue's Sheets are **owned by other
+departments** who won't do that. Instead it uses real **OAuth 2.0**
+against a real Google account (`bjpkr2024@gmail.com`) that already has
+Editor access — the site "acts as" that person. Credentials
+(`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,
+`GOOGLE_OAUTH_REFRESH_TOKEN`) are set as Cloudflare secrets (Production +
+Preview), confirmed working, confirmed long-lived (had to explicitly flip
+the Google Cloud OAuth consent screen from "Testing" to "In production" —
+Testing-mode refresh tokens silently expire after 7 days, which bit us
+once before the fix).
+
+### What's actually built and working
+
+- **Search**: matches Transaction ID, Reference, Username, or Agent
+  Number, comma-separated multi-search, per-brand (not global — "All
+  Brands" was deliberately turned into a non-searching Sheet-link
+  directory instead, see "Scaling" below for why).
+- **Edit panel**: writes CS PIC / Player Contact No / Status CS /
+  Correct UID (columns P–S) back to the exact row. "Clear All — Update
+  Sheet" does a confirmed one-click wipe+write of all 4. Edit panel
+  auto-resets on every new search and its height auto-syncs to match the
+  first result card.
+- **Per-row deep link**: the brand+tab pill on each result card is a
+  clickable link straight to that row/tab in Google Sheets (uses the
+  tab's real `gid`, not just the spreadsheet ID).
+- **Image viewer**: reuses `threads.html`'s `.attach-lightbox` lightbox
+  CSS. Resolves the actual file type via MIME sniffing AND (as a
+  last-resort fallback for old rows with no usable filename/MIME
+  metadata) raw magic-byte sniffing of the file's first bytes — this
+  matters because these Sheets/links predate the current code and often
+  have missing/wrong metadata.
+- **Color coding**: Status PG and Payment Status use an explicit,
+  business-meaning-based color map (not keyword guessing) covering every
+  real dropdown value the business gave us; Transaction Error (no fixed
+  value list given) uses a deterministic hash-to-color fallback instead.
+- **Per-brand access control**: uses the exact same `canSeeBrand()`
+  check as submit.js. Enforced on BOTH ends — the brand dropdown itself
+  is filtered client-side via the existing
+  `window.AgentAuth.filterAllowedBrands()` helper (unauthorized brands
+  never appear as an option), and server-side in search.js/update.js as
+  defense in depth (an agent can't point an update at a brand's sheetId
+  they don't have access to, even if they somehow knew it).
+- **"Deposit Sheet Link" admin page** (Account Management): same
+  brand-sidebar UI pattern as "TG Group / Channel". Per brand: Sheet
+  URL/ID (auto-extracts the ID from a full URL, trailing `?gid=`/`#`
+  params and all) + tab name(s) (comma-separated if data spans multiple
+  tabs — e.g. Crickex's real data is split across `CX PKR` AND `Call
+  List`). Changes take effect on the next search, no redeploy. A
+  tab-name mismatch surfaces as an inline warning banner on the search
+  page listing the Sheet's actual tab names (this is what caught the
+  original "no results" bug — the configured tab name didn't match).
+- **Deposit Backup — config only, no search page yet**: same admin panel
+  also has "This Month" (editable) / "Last Month" (read-only) rows per
+  brand, plus a "Transfer" button that atomically rolls This Month into
+  Last Month (discarding the old Last Month) so the new month's link can
+  be pasted in. This is pure prep — there is no actual Deposit Backup
+  search page built. Home page shows a grayed-out "Coming soon" card for
+  it (💻 icon, no link).
+- **Only Crickex has real data configured right now** — Sheet ID
+  `1HByPuZMuuYZL9S5fPPGjb8RAmCwNVgKXvuLgVBbVM-E`, tabs `CX PKR, Call
+  List`. This is baked in as `search.js`/`update.js`'s hardcoded
+  fallback default AND is what shows in the admin panel as Crickex's
+  "default" row. The other 8 brands are unconfigured placeholders
+  (empty until someone pastes a link in) — the business owner is
+  actively onboarding them, expects to reach "close to 100" Sheets
+  total eventually (see "Scaling" below).
+
+### Scaling — flagged, partially addressed, needs revisiting
+
+The business owner explicitly said they may end up connecting **close
+to 100 separate Sheets** (one per brand/department, onboarded over the
+next ~2 weeks and beyond). Two real scaling problems were identified:
+
+1. **"All Brands" search doesn't scale** — searching every configured
+   brand's Sheet in one request means a sequential Sheets API round-trip
+   per brand; at ~100 brands this would blow past Cloudflare's
+   per-request sub-request cap and be very slow regardless. **Fixed by
+   removing "All Brands" as a search mode entirely** — it's now a
+   Sheet-link directory (see above), and a specific brand must be picked
+   to search. This fully sidesteps the problem rather than optimizing
+   around it.
+2. **No caching layer** — every search hits the Google Sheets API live,
+   every time. Fine at the current ~1-9 configured brands. Discussed at
+   length with the business owner: **deliberately left as pending/not
+   built** — they confirmed they're not at the scale where it's needed
+   yet, but flagged that once they're up around 30–40+ configured
+   Sheets, a background-refreshed cache (same architecture as this
+   project's own existing "S10-style" Deposit Backup caching pattern —
+   a separate Cloudflare Worker on a Cron Trigger, writing into KV,
+   searches read the cache instead of hitting Sheets live) should be
+   built proactively, not reactively. **This has NOT been started.** If
+   a new conversation is picking this up: check with the business owner
+   how many brands are actually configured now before deciding whether
+   this is now urgent.
+
+### Fixed this session (real bugs, not hypothetical)
+
+- A JS syntax error (bad nested-quote escaping in the image-lightbox
+  code) silently broke the ENTIRE page's JS — nothing worked (brand
+  filter, search button, all dead) until caught and fixed. Also
+  accidentally deleted a function declaration line during the same edit,
+  causing a second, separate syntax error. Both confirmed fixed via
+  `node --check` on the extracted inline `<script>` — this is now the
+  standard verification step before shipping any HTML file with inline
+  JS in this project, not just for Deposit Issue.
+- Edit panel wasn't resetting between searches (fixed — see above).
+- Tab-mismatch warning banner used to get silently overwritten by the
+  results render when there WERE some results (only survived on a
+  fully-empty result set) — now always shows.
+- `GET /api/admin/deposit-sheets` was fetching each brand's Deposit
+  Backup config sequentially (9 round-trips, one at a time) instead of
+  in parallel — made the admin modal noticeably slow to open. Fixed with
+  `Promise.all`, matching the pattern the Deposit Issue sheets fetch
+  already used.
+- A `z-index` on the brand-filter dropdown was set higher than the
+  sticky page header's, so scrolling could make it visually paint over
+  the header. Root cause was actually simpler than first diagnosed
+  (first fix attempt — lowering the z-index — didn't fully fix it): the
+  page's main content wrapper (`.dep-shell`) had **zero top padding**,
+  so content could sit flush against the sticky header with no breathing
+  room at all once scrolled. Fixed by adding top padding, not further
+  z-index tweaking.
+- Old ticket attachments downloaded as e.g. `ticket-attachment-1` with
+  **no file extension** (a placeholder name used whenever the original
+  filename was never captured), so the OS had no idea which app to open
+  them with — looked like "corrupted" downloads but the bytes were
+  always fine. Fixed in `threads.html` with a two-layer fix: (1) infer
+  the extension from the actual detected MIME type when the filename has
+  none, (2) for older rows where even the MIME type is generic/unknown,
+  fall back to raw magic-byte sniffing of the file's own header bytes
+  (`%PDF`, JPEG/PNG/GIF/WEBP/ZIP signatures) — this is a general fix,
+  not Deposit-Issue-specific, and also benefits the existing TG Reply
+  Threads attachment viewer.
+
+### Home page visual polish — currently reverted back to original sizing
+
+The three (now four, with the Deposit Backup placeholder) tool-cards on
+the home page went through several rounds of resizing (small → medium
+→ large → back down) and a full icon redesign (emoji → custom SVG →
+back to emoji) based on live back-and-forth feedback. **Current state:
+back to the ORIGINAL sizing** (480px container / 520px card grid / 36px
+icons / 14.5px title / 11.5px description — i.e. the values from before
+any of this session's resizing started), but keeping two things the
+business owner explicitly wanted kept from the redesign exploration:
+a bottom-right arrow icon on each card, and a per-card colored hover glow
+(each card's border/shadow glows in its own `--tool-accent` color on
+hover, instead of all cards using the same generic gold hover color).
+Icon backgrounds were explicitly stripped back to plain (no colored
+square behind the emoji) per direct request.
+
+Known cosmetic non-issue, don't re-litigate: the 💳 (Deposit Issue) emoji
+renders as a thin monochrome glyph instead of the full-color credit-card
+image on at least one tested browser/OS combination. Confirmed this is
+OS/browser emoji-font rendering, not a CSS centering bug (the icon
+container IS correctly centered via flexbox) — was offered a custom-SVG
+fix, which was tried and then explicitly reverted back to real emoji per
+request ("我要那种emoji的，不要这种假的" / "I want the real emoji, not
+this fake one"). If this comes up again: it's an accepted, known
+limitation of using real emoji characters, not a bug to keep fixing.
+
+### User-facing documentation
+
+Two finished, standalone hand-off documents were written for the CS team
+(not this dev-facing status doc) — a plain usage guide covering brand
+selection, searching, reading results, editing, permissions, and the
+admin-side Sheet Link/Backup rotation workflow. Exists in both Chinese
+(`Deposit-Issue-使用说明.md`) and English (`Deposit-Issue-User-Guide.md`)
+— NOT included in this project zip (they were delivered as separate
+chat attachments, not part of the deployed site), so regenerate them
+from this section if they're needed again and the originals weren't
+kept.
+
+### Still pending for Deposit Issue specifically
+
+- Deposit Backup's actual search page (only the Sheet-link admin config
+  exists so far).
+- The caching/scaling work described above, once brand count grows.
+- 8 of 9 brands still need their real Sheet links added via the Deposit
+  Sheet Link admin page as the business owner gets access to each
+  department's Sheet — this is expected to happen gradually over the
+  next couple of weeks, not a code task.
+

@@ -66,6 +66,23 @@ function normalizeTabName(name) {
   return String(name).normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
+// Sortable epoch-ms timestamp built from Date (col F) + Request Time
+// (col B) — results are sorted newest first before being returned (see
+// bottom of handleSearch), instead of staying grouped by
+// brand/tab/sheet-row order. Rows with an unparseable/missing date sort
+// to the very bottom (return 0 — effectively "1970") rather than
+// throwing or being dropped.
+function sortTimestamp(dateRaw, timeRaw) {
+  const dm = String(dateRaw || "").trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!dm) return 0;
+  const tm = String(timeRaw || "").trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  const hh = tm ? tm[1].padStart(2, "0") : "00";
+  const mm = tm ? tm[2] : "00";
+  const ss = tm ? tm[3] || "00" : "00";
+  const ts = Date.parse(`${dm[1]}-${dm[2]}-${dm[3]}T${hh}:${mm}:${ss}`);
+  return Number.isNaN(ts) ? 0 : ts;
+}
+
 // Sheet's real tab titles rarely change — cache per Worker isolate for a
 // few minutes instead of re-fetching metadata on every search. Keyed by
 // sheetId (a Map, since "All Brands" mode may query several different
@@ -199,6 +216,7 @@ async function handleSearch({ request, env }) {
 
         const rowIndex = i + 2; // actual row number in the sheet (header is row 1)
         results.push({
+          _sortTs: sortTimestamp(get(COLS.date), get(COLS.requestTime)),
           brand: target.brandId,
           brandName: target.brandName,
           sheetName: target.brandName,
@@ -234,6 +252,13 @@ async function handleSearch({ request, env }) {
       });
     }
   }
+
+  // Newest first — matters most in "All Brands" mode, where results from
+  // several different brands' sheets would otherwise stay grouped by
+  // which brand/sheet they came from instead of being interleaved by
+  // actual transaction time.
+  results.sort((a, b) => b._sortTs - a._sortTs);
+  results.forEach((r) => { delete r._sortTs; });
 
   return json({
     ok: true,

@@ -81,6 +81,23 @@ function formatRequestDateTime(dateRaw, timeRaw) {
   return d || t;
 }
 
+// Sortable epoch-ms timestamp built from the same raw Date (col F) +
+// Request Time (col B) values used above — results are sorted newest
+// first before being returned (see bottom of handleSearch). Rows with
+// an unparseable/missing date sort to the very bottom (return 0 —
+// effectively "1970", always older than any real row) rather than
+// throwing or being dropped.
+function sortTimestamp(dateRaw, timeRaw) {
+  const dm = String(dateRaw || "").trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!dm) return 0;
+  const tm = String(timeRaw || "").trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  const hh = tm ? tm[1].padStart(2, "0") : "00";
+  const mm = tm ? tm[2] : "00";
+  const ss = tm ? tm[3] || "00" : "00";
+  const ts = Date.parse(`${dm[1]}-${dm[2]}-${dm[3]}T${hh}:${mm}:${ss}`);
+  return Number.isNaN(ts) ? 0 : ts;
+}
+
 // Same per-isolate tab-title cache pattern as Deposit Issue's search.js.
 const tabTitleCache = new Map(); // sheetId -> { tabs: [{title, gid}], expiresAt }
 const TAB_CACHE_MS = 5 * 60 * 1000;
@@ -197,6 +214,7 @@ async function handleSearch({ request, env }) {
 
         const rowIndex = i + 2;
         results.push({
+          _sortTs: sortTimestamp(get(COLS.date), get(COLS.requestTime)),
           brand: requestedBrand,
           brandName: brandMeta.name,
           month: month.key,
@@ -230,6 +248,12 @@ async function handleSearch({ request, env }) {
       });
     }
   }
+
+  // Newest first — This Month and Last Month (and Success/Trx error
+  // within each) get interleaved by actual transaction time instead of
+  // staying grouped by sheet/tab order.
+  results.sort((a, b) => b._sortTs - a._sortTs);
+  results.forEach((r) => { delete r._sortTs; });
 
   return json({
     ok: true,

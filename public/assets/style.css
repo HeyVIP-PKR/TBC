@@ -671,7 +671,8 @@ a { color: inherit; text-decoration: none; }
 .status-badge-corner {
   position: fixed;
   left: 330px;
-  bottom: 24px;
+  bottom: 32px;
+  z-index: 15;
 }
 @media (max-width: 720px) {
   .status-badge-corner { position: static; display: inline-flex; margin-top: 24px; }

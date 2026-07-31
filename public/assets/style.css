@@ -550,7 +550,6 @@ a { color: inherit; text-decoration: none; }
 
 /* ---- Sidebar hub layout ---- */
 .hub-layout {
-  position: relative;
   display: flex;
   min-height: calc(100vh - 60px);
 }
@@ -685,13 +684,8 @@ a { color: inherit; text-decoration: none; }
 }
 .hub-main .inner { max-width: 480px; }
 .status-badge-corner {
-  position: absolute;
-  left: 330px;
-  bottom: 32px;
-  z-index: 15;
-}
-@media (max-width: 720px) {
-  .status-badge-corner { position: static; display: inline-flex; margin-top: 24px; }
+  display: inline-flex;
+  margin-top: 24px;
 }
 .hub-main h1 { font-family: var(--font-display); font-weight: 600; font-size: 28px; margin: 0 0 10px; letter-spacing: -0.01em; }
 .hub-main p { color: var(--ink-soft); margin: 0 0 24px; line-height: 1.6; }

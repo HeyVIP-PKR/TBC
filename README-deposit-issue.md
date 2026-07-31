@@ -1,5 +1,30 @@
 # Deposit Issue module — now merged into your real repo
 
+## Update: "Deposit Backup" This Month / Last Month rotation (config only)
+Added to the same "Deposit Sheet Link" admin page, two more rows per
+brand — this is config/prep only, no actual Deposit Backup search page
+built yet (that's a separate future feature, this just gets the Sheet
+links ready for it, same idea as how Deposit Issue's own admin config
+came before its search page).
+
+- **💻 Deposit Backup — This month**: directly editable, same as Deposit
+  Issue's row (paste URL + tab name(s), Save/Clear).
+- **💻 Deposit Backup — Last month**: **read-only** — no Save/Reset, by
+  design. It only ever changes via the rollover button below.
+- **🔄 Roll to Next Month** button: shifts whatever's currently in This
+  Month into Last Month (discarding whatever Last Month held before),
+  and clears This Month out. Two-step workflow, exactly as you
+  described: (1) click Roll — This Month's July sheet becomes the new
+  Last Month, old June is discarded, This Month goes empty; (2) paste
+  the new August link into This Month and Save. Confirms before running,
+  since it's destructive to the old Last Month.
+
+**New KV shape** (`functions/_shared/depositSheets.js`): one combined
+entry per brand at `deposit-backup:<brandId>` holding both
+`{thisMonth, lastMonth}` together — the rollover is a single atomic
+write, not two separate ones, so there's no window where it could end
+up half-updated.
+
 ## Update: clickable ↗️ jumps straight to the row in Google Sheets
 The merged "Crickex - CX PKR" pill on each result card now has a small
 ↗️ icon — clicking it opens that exact row, in that exact tab, directly

@@ -761,7 +761,7 @@
 
     function renderDepositSheets() {
       if (!acctDepositSheetsData) return;
-      const { brands, sheets } = acctDepositSheetsData;
+      const { brands, sheets, backup } = acctDepositSheetsData;
       const canEdit = canEditAdminSection("depositSheets");
       const roAttr = canEdit ? "" : "disabled";
 
@@ -770,6 +770,9 @@
       `).join("");
 
       const slot = sheets[acctDepositSheetsSelectedBrand] || { sheetId: "", tabNames: [], isOverride: false };
+      const bkp = backup[acctDepositSheetsSelectedBrand] || { thisMonth: null, lastMonth: null };
+      const thisMonth = bkp.thisMonth;
+      const lastMonth = bkp.lastMonth;
 
       acctBody.innerHTML = `
         <div class="tgroute-layout">
@@ -788,11 +791,39 @@
                 </div>` : ""}
               </div>
             </div>
+
+            <div class="tgroute-row" data-brand="${acctEsc(acctDepositSheetsSelectedBrand)}">
+              <div class="tgroute-mod-name">💻 Deposit Backup — This month
+                <span class="route-tag${thisMonth ? " custom" : ""}">${thisMonth ? "set" : "empty"}</span>
+              </div>
+              <div class="tgroute-fields">
+                <input type="text" class="depbackup-tm-url" placeholder="Sheet URL e.g. https://docs.google.com/spreadsheets/d/.../edit" value="${thisMonth ? acctEsc(thisMonth.sheetId) : ""}" ${roAttr} autocomplete="off" />
+                <input type="text" class="depbackup-tm-tabs" placeholder="Tab name e.g. July" value="${thisMonth ? acctEsc((thisMonth.tabNames || []).join(", ")) : ""}" ${roAttr} autocomplete="off" />
+                ${canEdit ? `<div class="tgroute-row-actions">
+                  <button type="button" class="tgroute-action-btn depbackup-tm-save">Save</button>
+                  ${thisMonth ? '<button type="button" class="tgroute-action-btn tgroute-action-secondary depbackup-tm-clear">Clear</button>' : ""}
+                </div>` : ""}
+              </div>
+            </div>
+
+            <div class="tgroute-row" data-brand="${acctEsc(acctDepositSheetsSelectedBrand)}">
+              <div class="tgroute-mod-name">💻 Deposit Backup — Last month
+                <span class="route-tag">read-only</span>
+              </div>
+              <div class="tgroute-fields">
+                <input type="text" value="${lastMonth ? acctEsc(lastMonth.sheetId) : "(empty)"}" disabled />
+                <input type="text" value="${lastMonth ? acctEsc((lastMonth.tabNames || []).join(", ")) : ""}" disabled />
+                ${canEdit ? `<div class="tgroute-row-actions">
+                  <button type="button" class="tgroute-action-btn depbackup-roll" data-brand="${acctEsc(acctDepositSheetsSelectedBrand)}">Transfer</button>
+                </div>` : ""}
+              </div>
+            </div>
           </div>
         </div>
         <hr class="tgroute-divider" />
         ${canEdit ? "" : '<p class="edit-modal-note">View only.</p>'}
-        <p class="edit-modal-note tgroute-footnote">Changes apply to the very next search — no redeploy needed. Paste each brand's Sheet URL here as you get access to it; "default" means Crickex's hardcoded value (every other brand starts unconfigured until a link is saved), "custom" means it's been overridden here.</p>`;
+        <p class="edit-modal-note tgroute-footnote">Changes apply to the very next search — no redeploy needed. Paste each brand's Sheet URL here as you get access to it; "default" means Crickex's hardcoded value (every other brand starts unconfigured until a link is saved), "custom" means it's been overridden here.</p>
+        <p class="edit-modal-note tgroute-footnote">At the start of a new month: <span style="color:#e5304a; font-weight:800;">Transfer from This Month</span> into Last Month (discarding old Last Month), then paste + Save the new month's link above.</p>`;
 
       acctBody.querySelectorAll(".tgroute-brand").forEach((el) => {
         el.addEventListener("click", () => {
@@ -806,6 +837,15 @@
       });
       acctBody.querySelectorAll(".depsheet-reset").forEach((btn) => {
         btn.addEventListener("click", () => resetDepositSheetRow(btn.closest(".tgroute-row")));
+      });
+      acctBody.querySelectorAll(".depbackup-tm-save").forEach((btn) => {
+        btn.addEventListener("click", () => saveDepositBackupThisMonth(btn.closest(".tgroute-row")));
+      });
+      acctBody.querySelectorAll(".depbackup-tm-clear").forEach((btn) => {
+        btn.addEventListener("click", () => clearDepositBackupThisMonth(btn.closest(".tgroute-row")));
+      });
+      acctBody.querySelectorAll(".depbackup-roll").forEach((btn) => {
+        btn.addEventListener("click", () => rollDepositBackup(btn.dataset.brand));
       });
     }
 
@@ -838,6 +878,57 @@
       if (!data.ok) return setAcctNote(data.error || "Reset failed.", "err");
       acctDepositSheetsData.sheets[brandId] = data.sheet;
       setAcctNote("Reset to default.", "ok");
+      renderDepositSheets();
+    }
+
+    async function saveDepositBackupThisMonth(row) {
+      const brandId = row.dataset.brand;
+      const sheetUrlOrId = row.querySelector(".depbackup-tm-url").value.trim();
+      const tabNames = row.querySelector(".depbackup-tm-tabs").value.trim();
+      if (!sheetUrlOrId) return setAcctNote("Sheet URL or ID is required.", "err");
+      if (!tabNames) return setAcctNote("At least one tab name is required.", "err");
+      setAcctNote("Saving…");
+      const res = await window.AgentAuth.authFetch("/api/admin/deposit-sheets", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "saveBackupThisMonth", brandId, sheetUrlOrId, tabNames }),
+      });
+      const data = await res.json();
+      if (!data.ok) return setAcctNote(data.error || "Save failed.", "err");
+      acctDepositSheetsData.backup[brandId] = data.backup;
+      setAcctNote("Saved.", "ok");
+      renderDepositSheets();
+    }
+
+    async function clearDepositBackupThisMonth(row) {
+      const brandId = row.dataset.brand;
+      if (!confirm("Clear This Month's backup sheet link? Last Month is not affected.")) return;
+      setAcctNote("Clearing…");
+      const res = await window.AgentAuth.authFetch("/api/admin/deposit-sheets", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "clearBackupThisMonth", brandId }),
+      });
+      const data = await res.json();
+      if (!data.ok) return setAcctNote(data.error || "Clear failed.", "err");
+      acctDepositSheetsData.backup[brandId] = data.backup;
+      setAcctNote("Cleared.", "ok");
+      renderDepositSheets();
+    }
+
+    async function rollDepositBackup(brandId) {
+      const current = (acctDepositSheetsData.backup[brandId] || {}).thisMonth;
+      const msg = current
+        ? "This Month's sheet will become the new Last Month (replacing whatever's there now), and This Month will be cleared so you can paste in the new link. Continue?"
+        : "This Month is currently empty — rolling will just clear out the old Last Month. Continue?";
+      if (!confirm(msg)) return;
+      setAcctNote("Rolling over…");
+      const res = await window.AgentAuth.authFetch("/api/admin/deposit-sheets", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "rollBackup", brandId }),
+      });
+      const data = await res.json();
+      if (!data.ok) return setAcctNote(data.error || "Rollover failed.", "err");
+      acctDepositSheetsData.backup[brandId] = data.backup;
+      setAcctNote("Rolled over — paste the new month's link and Save.", "ok");
       renderDepositSheets();
     }
 

@@ -98,3 +98,67 @@ export async function saveDepositSheetOverride(env, moduleSlot, brandId, { sheet
 export async function deleteDepositSheetOverride(env, moduleSlot, brandId) {
   await env.THREADS_KV.delete(sheetKey(moduleSlot, brandId));
 }
+
+/**
+ * ── Deposit Backup: "This Month" / "Last Month" rotation ──
+ *
+ * Deliberately stored as ONE combined KV entry per brand (not two
+ * separate keys) so the rollover operation below is a single atomic
+ * write — no risk of "This Month cleared but Last Month write failed"
+ * leaving things half-updated.
+ *
+ *   deposit-backup:<brandId> -> { thisMonth: {sheetId,tabNames}|null,
+ *                                  lastMonth: {sheetId,tabNames}|null }
+ *
+ * Only "This Month" is ever directly editable — "Last Month" is
+ * read-only in the UI and only ever changes via rollDepositBackup()
+ * below, by design (see the admin page for the reasoning): it's always
+ * "whatever This Month was, before the most recent rollover."
+ */
+function backupKey(brandId) {
+  return `deposit-backup:${brandId}`;
+}
+
+export async function getDepositBackup(env, brandId) {
+  if (!env.THREADS_KV) return { thisMonth: null, lastMonth: null };
+  const raw = await env.THREADS_KV.get(backupKey(brandId));
+  if (!raw) return { thisMonth: null, lastMonth: null };
+  try {
+    const parsed = JSON.parse(raw);
+    return { thisMonth: parsed.thisMonth || null, lastMonth: parsed.lastMonth || null };
+  } catch {
+    return { thisMonth: null, lastMonth: null };
+  }
+}
+
+export async function saveDepositBackupThisMonth(env, brandId, { sheetUrlOrId, tabNames }) {
+  const sheetId = extractSheetId(sheetUrlOrId);
+  if (!sheetId) throw new Error("Couldn't find a Sheet ID in that link — paste the full Google Sheets URL or just the ID.");
+  const cleanTabs = String(tabNames || "").split(",").map((t) => t.trim()).filter(Boolean);
+  if (!cleanTabs.length) throw new Error("At least one tab name is required.");
+  const current = await getDepositBackup(env, brandId);
+  const updated = { thisMonth: { sheetId, tabNames: cleanTabs }, lastMonth: current.lastMonth };
+  await env.THREADS_KV.put(backupKey(brandId), JSON.stringify(updated));
+  return updated;
+}
+
+// Clears This Month only (no hardcoded default to "reset" back to, for
+// backup sheets — unlike Deposit Issue's Crickex default). Last Month is
+// left untouched.
+export async function clearDepositBackupThisMonth(env, brandId) {
+  const current = await getDepositBackup(env, brandId);
+  const updated = { thisMonth: null, lastMonth: current.lastMonth };
+  await env.THREADS_KV.put(backupKey(brandId), JSON.stringify(updated));
+  return updated;
+}
+
+// The rollover: whatever's currently in This Month becomes the new Last
+// Month (discarding whatever was there before), and This Month is
+// cleared out ready for the new link to be pasted in via
+// saveDepositBackupThisMonth() as a separate, explicit next step.
+export async function rollDepositBackup(env, brandId) {
+  const current = await getDepositBackup(env, brandId);
+  const updated = { thisMonth: null, lastMonth: current.thisMonth };
+  await env.THREADS_KV.put(backupKey(brandId), JSON.stringify(updated));
+  return updated;
+}

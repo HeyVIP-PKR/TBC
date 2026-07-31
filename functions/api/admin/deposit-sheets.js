@@ -5,7 +5,10 @@
  * row per PKR brand, each independently overridable.
  *
  *   GET
- *     -> { ok: true, brands: [{id,name}], sheets: { [brandId]: { sheetId, tabNames, isOverride } } }
+ *     -> { ok: true, brands: [{id,name}],
+ *          sheets: { [brandId]: { sheetId, tabNames, isOverride } },
+ *          backup: { [brandId]: { thisMonth: {sheetId,tabNames}|null,
+ *                                  lastMonth: {sheetId,tabNames}|null } } }
  *        `isOverride: true` means it's a live KV override (edited through
  *        this page); `false` means it's still showing the hardcoded
  *        default (only "crickex" has one baked into search.js right now —
@@ -21,13 +24,34 @@
  *     that brand back to its hardcoded default (empty, for every brand
  *     except crickex). Requires canEditAdminSection(..., "depositSheets").
  *
+ *   Deposit Backup — "This Month" / "Last Month" rotation. Only This
+ *   Month is ever directly editable; Last Month is read-only in the UI
+ *   and only changes via the rollover action. See depositSheets.js for
+ *   the full reasoning.
+ *   POST { action:"saveBackupThisMonth", brandId, sheetUrlOrId, tabNames }
+ *     -> overwrites This Month only, leaves Last Month untouched.
+ *   POST { action:"clearBackupThisMonth", brandId }
+ *     -> clears This Month only (no hardcoded default to fall back to).
+ *   POST { action:"rollBackup", brandId }
+ *     -> This Month becomes the new Last Month (discarding whatever was
+ *        there), This Month is cleared out ready for the new link.
+ *
  * MODULE_SLOT / DEFAULT_CRICKEX below are hand-copied from
  * functions/api/deposit-issue/search.js's own constants — keep in sync
  * if that file's hardcoded default ever changes directly instead of
  * through this admin page.
  */
 import { authenticateStaff, ROLE_RANK, canSeeAdminSection, canEditAdminSection } from "../../_shared/accounts.js";
-import { PKR_BRANDS, getAllDepositSheetOverrides, saveDepositSheetOverride, deleteDepositSheetOverride } from "../../_shared/depositSheets.js";
+import {
+  PKR_BRANDS,
+  getAllDepositSheetOverrides,
+  saveDepositSheetOverride,
+  deleteDepositSheetOverride,
+  getDepositBackup,
+  saveDepositBackupThisMonth,
+  clearDepositBackupThisMonth,
+  rollDepositBackup,
+} from "../../_shared/depositSheets.js";
 
 const MODULE_SLOT = "depositIssue";
 // Only Crickex has a real hardcoded fallback (this was the one working
@@ -68,7 +92,15 @@ async function handleGet({ request, env }) {
       : { ...defaultFor(brandId), isOverride: false };
   }
 
-  return json({ ok: true, brands: PKR_BRANDS, sheets });
+  // Deposit Backup: This Month / Last Month, no hardcoded default for
+  // any brand (unlike Deposit Issue's Crickex fallback) — every brand
+  // starts fully empty until someone saves a link.
+  const backup = {};
+  for (const brandId of brandIds) {
+    backup[brandId] = await getDepositBackup(env, brandId);
+  }
+
+  return json({ ok: true, brands: PKR_BRANDS, sheets, backup });
 }
 
 export async function onRequestPost(context) {
@@ -109,6 +141,24 @@ async function handlePost({ request, env }) {
   if (body.action === "reset") {
     await deleteDepositSheetOverride(env, MODULE_SLOT, brandId);
     return json({ ok: true, brandId, sheet: { ...defaultFor(brandId), isOverride: false } });
+  }
+
+  // ── Deposit Backup actions ──
+  if (body.action === "saveBackupThisMonth") {
+    try {
+      const updated = await saveDepositBackupThisMonth(env, brandId, { sheetUrlOrId: body.sheetUrlOrId, tabNames: body.tabNames });
+      return json({ ok: true, brandId, backup: updated });
+    } catch (e) {
+      return json({ ok: false, error: String(e.message || e) }, 400);
+    }
+  }
+  if (body.action === "clearBackupThisMonth") {
+    const updated = await clearDepositBackupThisMonth(env, brandId);
+    return json({ ok: true, brandId, backup: updated });
+  }
+  if (body.action === "rollBackup") {
+    const updated = await rollDepositBackup(env, brandId);
+    return json({ ok: true, brandId, backup: updated });
   }
 
   return json({ ok: false, error: `Unknown action "${body.action}".` }, 400);

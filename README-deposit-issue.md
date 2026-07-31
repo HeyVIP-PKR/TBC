@@ -1,5 +1,60 @@
 # Deposit Issue module — now merged into your real repo
 
+## Update: now covers all 9 PKR brands (not just Crickex)
+The "Deposit Sheet Link" admin page has been restructured to fully mirror
+TG Group/Channel's layout: a left-side list of all 9 PKR brands
+(Crickex, Betjili, Mostplay, Jeetwin, Sbj66, Heybaji, Superbaji, KV8,
+Darazplay), click one, edit/save its Sheet URL + tab name(s) on the
+right. This replaces the earlier single "Deposit Issue" row version.
+
+**Why:** only Crickex's sheet is actually in hand right now, but this
+gets the other 8 brands ready as slots — as you get access to each
+department's sheet, just click that brand and paste the link in, no code
+changes needed, ever.
+
+**What changed:**
+- `functions/_shared/depositSheets.js` — now keyed by `(moduleSlot,
+  brandId)` instead of just `moduleSlot`; exports `PKR_BRANDS` and
+  `getAllDepositSheetOverrides()` for batch reads.
+- `functions/api/admin/deposit-sheets.js` — GET now returns `{ brands,
+  sheets: { [brandId]: {...} } }` (same shape as `/api/admin/routes`);
+  POST takes `brandId` instead of `slotId`. Only Crickex has a hardcoded
+  default; every other brand starts at `sheetId: ""` (unconfigured) until
+  you save one.
+- `functions/api/deposit-issue/search.js` — now takes an optional `brand`
+  in the request body:
+  - **A specific brand selected** → searches only that brand's sheet. If
+    it has no link saved yet, returns `{ notConfigured: true }` instead
+    of a confusing empty result set.
+  - **"All Brands" (no brand sent)** → fans the search out across every
+    *currently configured* brand's sheet (skips any brand with no link
+    saved, listed back as `unconfiguredBrands` so you can see what's
+    still missing), merging results together, respecting the 500-result
+    cap across the whole batch. Each result now carries `brand`/
+    `brandName` so the UI can show which brand it came from.
+  - Tab-name mismatches are now reported per-brand in a `tabWarnings`
+    array (was a single flat `missingTabs`/`actualSheetTabs` pair before)
+    — necessary since "All Brands" can hit several sheets in one request.
+- `functions/api/deposit-issue/update.js` — now requires `sheetId` in the
+  request body (since different brands may write to different sheets;
+  before, there was only ever one sheet, so this wasn't needed). Validates
+  the given `sheetId` is actually one of the currently-configured brand
+  sheets before writing, so a logged-in agent can't point an update at an
+  arbitrary Sheet ID.
+- `public/deposit-issue.html` — search request now includes
+  `brand: _selBrand` (the existing brand dropdown, previously UI-only,
+  now actually drives which sheet(s) get searched); update request now
+  includes `sheetId: curDep.sheetId`; result cards show a brand pill;
+  handles the `notConfigured` and per-brand `tabWarnings` responses.
+- `public/index.html` — Deposit Sheet Link now uses the exact same
+  brand-sidebar markup/CSS classes as TG Group/Channel
+  (`.tgroute-layout` / `.tgroute-brands` / `.tgroute-brand`), including
+  the same click-to-select-brand behavior.
+
+**Nothing needs re-entering** — Crickex's existing working config (the
+`1HByPuZMuuYZL9S5fPPGjb8RAmCwNVgKXvuLgVBbVM-E` / `CX PKR` you already
+have live) is preserved as its hardcoded default, exactly as before.
+
 ## New: "Deposit Sheet Link" admin page
 Added under Account Management, next to TG Group / Channel (same
 override-over-code-default pattern, same permission system). Lets a

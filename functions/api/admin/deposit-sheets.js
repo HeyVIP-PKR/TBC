@@ -1,43 +1,45 @@
 /**
  * /api/admin/deposit-sheets  ("Deposit Sheet Link" admin page)
  *
+ * Same brand-sidebar shape as /api/admin/routes (TG Group/Channel) — one
+ * row per PKR brand, each independently overridable.
+ *
  *   GET
- *     -> { ok: true, slots: [{ id, name, sheetId, tabNames, isOverride }] }
+ *     -> { ok: true, brands: [{id,name}], sheets: { [brandId]: { sheetId, tabNames, isOverride } } }
  *        `isOverride: true` means it's a live KV override (edited through
  *        this page); `false` means it's still showing the hardcoded
- *        default baked into that module's own API file.
+ *        default (only "crickex" has one baked into search.js right now —
+ *        every other brand shows sheetId:"" until someone saves a link).
  *     Requires canSeeAdminSection(..., "depositSheets").
  *
- *   POST { action:"save", slotId, sheetUrlOrId, tabNames } -> store an
- *     override in THREADS_KV. `tabNames` is a comma-separated string
- *     (matches how it's typed in the form). Takes effect on the very
- *     next search/update against that module — no redeploy needed.
- *     Requires canEditAdminSection(..., "depositSheets").
+ *   POST { action:"save", brandId, sheetUrlOrId, tabNames } -> store an
+ *     override in THREADS_KV. `tabNames` is a comma-separated string.
+ *     Takes effect on the very next search/update for that brand — no
+ *     redeploy needed. Requires canEditAdminSection(..., "depositSheets").
  *
- *   POST { action:"reset", slotId } -> delete the override, reverting
- *     that module back to its hardcoded default.
- *     Requires canEditAdminSection(..., "depositSheets").
+ *   POST { action:"reset", brandId } -> delete the override, reverting
+ *     that brand back to its hardcoded default (empty, for every brand
+ *     except crickex). Requires canEditAdminSection(..., "depositSheets").
  *
- * DEFAULTS shown here (used only for the GET response's "isOverride:
- * false" fallback display) are hand-copied from each module's own
- * SHEET_ID/TAB_NAMES constants — see functions/api/deposit-issue/search.js.
- * Keep these two in sync if you ever change the hardcoded default there
- * directly instead of through this admin page.
+ * MODULE_SLOT / DEFAULT_CRICKEX below are hand-copied from
+ * functions/api/deposit-issue/search.js's own constants — keep in sync
+ * if that file's hardcoded default ever changes directly instead of
+ * through this admin page.
  */
 import { authenticateStaff, ROLE_RANK, canSeeAdminSection, canEditAdminSection } from "../../_shared/accounts.js";
-import { getDepositSheetOverride, saveDepositSheetOverride, deleteDepositSheetOverride } from "../../_shared/depositSheets.js";
+import { PKR_BRANDS, getAllDepositSheetOverrides, saveDepositSheetOverride, deleteDepositSheetOverride } from "../../_shared/depositSheets.js";
 
-// One entry per Deposit-type module. Add a row here (and give the new
-// module's search.js/update.js the same getDepositSheetOverride() lookup
-// — see deposit-issue's for the pattern) when Deposit Backup is built.
-const SLOTS = [
-  {
-    id: "depositIssue",
-    name: "Deposit Issue",
-    defaultSheetId: "1HByPuZMuuYZL9S5fPPGjb8RAmCwNVgKXvuLgVBbVM-E",
-    defaultTabNames: ["CX PKR"],
-  },
-];
+const MODULE_SLOT = "depositIssue";
+// Only Crickex has a real hardcoded fallback (this was the one working
+// Sheet before this admin page existed). Every other brand starts with
+// no default at all — until a link is saved here, that brand's Deposit
+// Issue search returns "not configured" rather than silently reading
+// the wrong department's data.
+const DEFAULT_CRICKEX = { sheetId: "1HByPuZMuuYZL9S5fPPGjb8RAmCwNVgKXvuLgVBbVM-E", tabNames: ["CX PKR"] };
+
+function defaultFor(brandId) {
+  return brandId === "crickex" ? DEFAULT_CRICKEX : { sheetId: "", tabNames: [] };
+}
 
 export async function onRequestGet(context) {
   try {
@@ -55,16 +57,18 @@ async function handleGet({ request, env }) {
     return json({ ok: false, error: "You don't have access to Deposit Sheet Link." }, 403);
   }
 
-  const slots = [];
-  for (const slot of SLOTS) {
-    const override = await getDepositSheetOverride(env, slot.id);
-    slots.push(
-      override
-        ? { id: slot.id, name: slot.name, sheetId: override.sheetId, tabNames: override.tabNames, isOverride: true }
-        : { id: slot.id, name: slot.name, sheetId: slot.defaultSheetId, tabNames: slot.defaultTabNames, isOverride: false }
-    );
+  const brandIds = PKR_BRANDS.map((b) => b.id);
+  const overrides = await getAllDepositSheetOverrides(env, MODULE_SLOT, brandIds);
+
+  const sheets = {};
+  for (const brandId of brandIds) {
+    const override = overrides[brandId];
+    sheets[brandId] = override
+      ? { sheetId: override.sheetId, tabNames: override.tabNames, isOverride: true }
+      : { ...defaultFor(brandId), isOverride: false };
   }
-  return json({ ok: true, slots });
+
+  return json({ ok: true, brands: PKR_BRANDS, sheets });
 }
 
 export async function onRequestPost(context) {
@@ -90,21 +94,21 @@ async function handlePost({ request, env }) {
     return json({ ok: false, error: "Invalid JSON body." }, 400);
   }
 
-  const slot = SLOTS.find((s) => s.id === body.slotId);
-  if (!slot) return json({ ok: false, error: `Unknown slot "${body.slotId}".` }, 400);
+  const brandId = body.brandId;
+  if (!PKR_BRANDS.some((b) => b.id === brandId)) return json({ ok: false, error: `Unknown brand "${brandId}".` }, 400);
 
   if (body.action === "save") {
     try {
-      const saved = await saveDepositSheetOverride(env, slot.id, { sheetUrlOrId: body.sheetUrlOrId, tabNames: body.tabNames });
-      return json({ ok: true, slot: { id: slot.id, name: slot.name, ...saved, isOverride: true } });
+      const saved = await saveDepositSheetOverride(env, MODULE_SLOT, brandId, { sheetUrlOrId: body.sheetUrlOrId, tabNames: body.tabNames });
+      return json({ ok: true, brandId, sheet: { ...saved, isOverride: true } });
     } catch (e) {
       return json({ ok: false, error: String(e.message || e) }, 400);
     }
   }
 
   if (body.action === "reset") {
-    await deleteDepositSheetOverride(env, slot.id);
-    return json({ ok: true, slot: { id: slot.id, name: slot.name, sheetId: slot.defaultSheetId, tabNames: slot.defaultTabNames, isOverride: false } });
+    await deleteDepositSheetOverride(env, MODULE_SLOT, brandId);
+    return json({ ok: true, brandId, sheet: { ...defaultFor(brandId), isOverride: false } });
   }
 
   return json({ ok: false, error: `Unknown action "${body.action}".` }, 400);

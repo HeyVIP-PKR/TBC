@@ -4,24 +4,34 @@
  * KV-backed overrides for which Google Sheet a "Deposit *" module reads
  * from — same layering pattern as routes.js (TG Group/Channel): a
  * hardcoded default lives in code, and this lets a SuperAdmin change it
- * live from the browser (the "Deposit Sheet Link" admin page) instead of
- * needing a code edit + redeploy every time the other department swaps
- * in a new Sheet.
+ * live from the browser (the "Deposit Sheet Link" admin page, which now
+ * mirrors TG Group/Channel's brand-sidebar layout) instead of needing a
+ * code edit + redeploy every time a department swaps in a new Sheet.
  *
  * Stored in the same THREADS_KV namespace as accounts/offices/routes,
  * under its own key prefix:
- *   deposit-sheet:<slotId>  ->  { sheetId, tabNames: string[] }
+ *   deposit-sheet:<moduleSlot>:<brandId>  ->  { sheetId, tabNames: string[] }
  *
- * `slotId` is a stable identifier for WHICH module this sheet feeds —
- * "depositIssue" today. Deliberately keyed this way (not hardcoded to
- * one single value) so a future "Deposit Backup" module can register its
- * own slotId ("depositBackup", or one per brand/period if it ends up
- * needing several) without touching this file — see search.js/update.js
- * for how "depositIssue" is consumed today.
+ * `moduleSlot` is a stable identifier for WHICH module this sheet feeds
+ * ("depositIssue" today) so a future "Deposit Backup" module can reuse
+ * this same file/pattern under its own slot ("depositBackup") without
+ * colliding with Deposit Issue's per-brand entries.
  */
 
-function sheetKey(slotId) {
-  return `deposit-sheet:${slotId}`;
+export const PKR_BRANDS = [
+  { id: "crickex", name: "Crickex" },
+  { id: "betjili", name: "Betjili" },
+  { id: "mostplay", name: "Mostplay" },
+  { id: "jeetwin", name: "Jeetwin" },
+  { id: "sbj66", name: "Sbj66" },
+  { id: "heybaji", name: "Heybaji" },
+  { id: "superbaji", name: "Superbaji" },
+  { id: "kv8", name: "KV8" },
+  { id: "darazplay", name: "Darazplay" },
+];
+
+function sheetKey(moduleSlot, brandId) {
+  return `deposit-sheet:${moduleSlot}:${brandId}`;
 }
 
 // Accepts either a raw Sheet ID or a full Google Sheets URL (any of the
@@ -51,16 +61,28 @@ function parseConfig(raw) {
   }
 }
 
-// Used at request time (search.js/update.js) — a single KV read, null if
-// nothing's been overridden for this slot (caller falls back to its own
-// hardcoded default).
-export async function getDepositSheetOverride(env, slotId) {
+// Single-brand read — used at request time (search.js/update.js) when a
+// specific brand is targeted. Returns null if nothing's been configured
+// for this brand yet (caller decides what the fallback default is, if
+// any — e.g. search.js only has a hardcoded fallback for "crickex").
+export async function getDepositSheetOverride(env, moduleSlot, brandId) {
   if (!env.THREADS_KV) return null;
-  const raw = await env.THREADS_KV.get(sheetKey(slotId));
+  const raw = await env.THREADS_KV.get(sheetKey(moduleSlot, brandId));
   return parseConfig(raw);
 }
 
-export async function saveDepositSheetOverride(env, slotId, { sheetUrlOrId, tabNames }) {
+// Batch read across all brands — used by the admin GET endpoint and by
+// search.js's "All Brands" mode (which needs to know every configured
+// sheet up front to fan the search out across all of them).
+export async function getAllDepositSheetOverrides(env, moduleSlot, brandIds) {
+  if (!env.THREADS_KV) return {};
+  const entries = await Promise.all(
+    brandIds.map(async (brandId) => [brandId, parseConfig(await env.THREADS_KV.get(sheetKey(moduleSlot, brandId)))])
+  );
+  return Object.fromEntries(entries.filter(([, v]) => v !== null));
+}
+
+export async function saveDepositSheetOverride(env, moduleSlot, brandId, { sheetUrlOrId, tabNames }) {
   const sheetId = extractSheetId(sheetUrlOrId);
   if (!sheetId) throw new Error("Couldn't find a Sheet ID in that link — paste the full Google Sheets URL or just the ID.");
   const cleanTabs = String(tabNames || "")
@@ -69,10 +91,10 @@ export async function saveDepositSheetOverride(env, slotId, { sheetUrlOrId, tabN
     .filter(Boolean);
   if (!cleanTabs.length) throw new Error("At least one tab name is required.");
   const value = { sheetId, tabNames: cleanTabs };
-  await env.THREADS_KV.put(sheetKey(slotId), JSON.stringify(value));
+  await env.THREADS_KV.put(sheetKey(moduleSlot, brandId), JSON.stringify(value));
   return value;
 }
 
-export async function deleteDepositSheetOverride(env, slotId) {
-  await env.THREADS_KV.delete(sheetKey(slotId));
+export async function deleteDepositSheetOverride(env, moduleSlot, brandId) {
+  await env.THREADS_KV.delete(sheetKey(moduleSlot, brandId));
 }

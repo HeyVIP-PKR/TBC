@@ -416,7 +416,8 @@
     gi('depRes').innerHTML = data.map(function(r,i){
       var imgBtn = r.imageLink ? '<span class="dep-img-btn" id="img-'+i+'">🖼️ Image</span>' : '';
       return '<div class="dep-rcard"><div class="dep-rcard-h">'
-        +'<span class="dep-tab-pill">'+escapeHtml(r.tabName)+'</span>'
+        +'<span class="dep-tab-pill">'+escapeHtml(r.brandName)+'</span>'
+        +'<span class="dep-tab-pill" style="opacity:.7">'+escapeHtml(r.tabName)+'</span>'
         +'<span class="dep-rcard-id">'+escapeHtml(r.transaction)+'</span>'
         +imgBtn
         +'<span class="dep-rcard-tm">'+escapeHtml(r.requestTime)+'</span></div>'
@@ -504,7 +505,7 @@
     document.querySelectorAll('.dep-btn-ed').forEach(function(b){b.classList.remove('active');});
     gi('deb-'+i).classList.add('active');
     gi('depHint').style.display = 'none'; gi('depEF').style.display = 'block';
-    gi('depEL').textContent = ' — ' + r.transaction + ' (' + r.tabName + ')';
+    gi('depEL').textContent = ' — ' + r.transaction + ' (' + r.brandName + ' / ' + r.tabName + ')';
     gi('depT').style.display = 'none';
     gi('ef-piccs').value = r.csPIC || ''; gi('ef-pcoNo').value = r.playerContactNo || '';
     gi('ef-statuscs').value = r.statusCS || ''; gi('ef-uid').value = r.correctUid || '';
@@ -527,16 +528,26 @@
     try {
       const res = await window.AgentAuth.authFetch('/api/deposit-issue/search', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ query: raw })
+        body: JSON.stringify({ query: raw, brand: _selBrand })
       });
       const data = await res.json();
       btn.disabled = false;
       if (!data.ok) { gi('depRes').innerHTML = '<div class="dep-state err">'+escapeHtml(data.error||'Search failed.')+'</div>'; syncEditPanelHeight(); return; }
-      var warningHtml = (data.missingTabs && data.missingTabs.length)
-        ? '<div class="dep-tab-warning">⚠️ Skipped ' + data.missingTabs.length + ' tab(s) not found on the sheet (name mismatch?): ' + data.missingTabs.map(escapeHtml).join(', ')
-          + (data.actualSheetTabs ? '<br/><br/>Sheet\'s actual tabs: ' + data.actualSheetTabs.map(escapeHtml).join(', ') : '')
-          + '</div>'
-        : '';
+      if (data.notConfigured) {
+        gi('depRes').innerHTML = '<div class="dep-state">This brand doesn\u2019t have a Deposit Issue sheet linked yet. Add it in Account Management \u2192 Deposit Sheet Link.</div>';
+        syncEditPanelHeight();
+        return;
+      }
+      var warningHtml = (data.tabWarnings || []).map(function (w) {
+        var head = w.error
+          ? '\u26a0\ufe0f ' + escapeHtml(w.brand) + ': ' + escapeHtml(w.error)
+          : '\u26a0\ufe0f ' + escapeHtml(w.brand) + ' \u2014 tab(s) not found (name mismatch?): ' + w.missingTabs.map(escapeHtml).join(', ')
+            + (w.actualSheetTabs && w.actualSheetTabs.length ? '<br/>Sheet\'s actual tabs: ' + w.actualSheetTabs.map(escapeHtml).join(', ') : '');
+        return '<div class="dep-tab-warning">' + head + '</div>';
+      }).join('');
+      if (data.unconfiguredBrands && data.unconfiguredBrands.length) {
+        warningHtml += '<div class="dep-tab-warning">\u2139\ufe0f Not searched (no sheet linked yet): ' + data.unconfiguredBrands.map(escapeHtml).join(', ') + '</div>';
+      }
       showDep(data.results || []);
       if (warningHtml) gi('depRes').innerHTML = warningHtml + gi('depRes').innerHTML;
     } catch (e) {
@@ -549,7 +560,7 @@
   async function sendUpdate(values) {
     const res = await window.AgentAuth.authFetch('/api/deposit-issue/update', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ tabName: curDep.tabName, rowIndex: curDep.rowIndex, ...values })
+      body: JSON.stringify({ sheetId: curDep.sheetId, tabName: curDep.tabName, rowIndex: curDep.rowIndex, ...values })
     });
     const data = await res.json();
     if (data.ok) {

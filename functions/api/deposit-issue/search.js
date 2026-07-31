@@ -1,37 +1,36 @@
 import { getAccessToken } from "../../_shared/googleOAuth.js";
 import { verifyRequest } from "../../_shared/accounts.js";
-import { getDepositSheetOverride } from "../../_shared/depositSheets.js";
+import { PKR_BRANDS, getDepositSheetOverride } from "../../_shared/depositSheets.js";
 
 // Stable identifier for this module's slot in the "Deposit Sheet Link"
-// admin page (Account Management → Deposit Sheet Link) — must match the
-// `id` used in functions/api/admin/deposit-sheets.js's SLOTS array.
-const SLOT_ID = "depositIssue";
+// admin page — must match MODULE_SLOT in functions/api/admin/deposit-sheets.js.
+const MODULE_SLOT = "depositIssue";
 
 /**
  * ══════════════════════════════════════════════════════════════════
- *  HARDCODED DEFAULTS — only used if nothing's been saved through the
- *  "Deposit Sheet Link" admin page yet. Once someone saves a link there,
- *  THAT value wins and these two are ignored — see resolveSheetConfig().
+ *  HARDCODED DEFAULT — only used for Crickex, and only if nothing's
+ *  been saved for Crickex through the "Deposit Sheet Link" admin page
+ *  yet. Every other brand has NO hardcoded fallback: until someone
+ *  saves a link for that brand in the admin page, searching that brand
+ *  returns "not configured" rather than guessing.
  * ══════════════════════════════════════════════════════════════════
  */
-// The Sheet ID from the Gsheet's URL:
-// https://docs.google.com/spreadsheets/d/<THIS PART>/edit
-const SHEET_ID = "1HByPuZMuuYZL9S5fPPGjb8RAmCwNVgKXvuLgVBbVM-E";
+const DEFAULT_CRICKEX = { sheetId: "1HByPuZMuuYZL9S5fPPGjb8RAmCwNVgKXvuLgVBbVM-E", tabNames: ["CX PKR"] };
 
-// One tab name, or several if the data is split across tabs (e.g. by
-// month). Every tab listed here gets searched on every request.
-const TAB_NAMES = ["CX PKR"];
-
-// Resolves the actual Sheet ID + tab names to use for this request:
-// live KV override (set via the admin page) if one exists, otherwise
-// the hardcoded defaults above.
-async function resolveSheetConfig(env) {
-  const override = await getDepositSheetOverride(env, SLOT_ID);
-  return override ? { sheetId: override.sheetId, tabNames: override.tabNames } : { sheetId: SHEET_ID, tabNames: TAB_NAMES };
+// Resolves the { sheetId, tabNames } to use for ONE brand: live KV
+// override if one exists, else the hardcoded Crickex default, else null
+// ("not configured yet" — every non-Crickex brand until it's set up).
+async function resolveBrandSheet(env, brandId) {
+  const override = await getDepositSheetOverride(env, MODULE_SLOT, brandId);
+  if (override) return { sheetId: override.sheetId, tabNames: override.tabNames };
+  if (brandId === "crickex") return DEFAULT_CRICKEX;
+  return null;
 }
 
 // Column layout confirmed from the real sheet (row 1 = headers, data
-// starts row 2). If the department ever reorders columns, update here.
+// starts row 2). If a department ever reorders columns, update here.
+// (Assumes every brand's sheet uses this same layout — true for Crickex
+// today; revisit if a future brand's sheet turns out to differ.)
 const COLS = {
   transactionId: "A",
   requestTime: "B",
@@ -58,7 +57,7 @@ const COLS = {
   remark: "W",
 };
 const LAST_COL = "W"; // must match the last key in COLS above
-const MAX_RESULTS = 500;
+const MAX_RESULTS = 500; // global cap across ALL brands searched in one request
 
 // Same normalization promo-search.js uses — folds invisible differences
 // (double spaces, stray whitespace, fullwidth punctuation) so a tab name
@@ -69,20 +68,21 @@ function normalizeTabName(name) {
 
 // Sheet's real tab titles rarely change — cache per Worker isolate for a
 // few minutes instead of re-fetching metadata on every search. Keyed by
-// sheetId so the cache self-invalidates if the admin page points this
-// module at a different Sheet.
-let cachedTabTitles = null; // { sheetId, titles, expiresAt }
+// sheetId (a Map, since "All Brands" mode may query several different
+// sheets in one request).
+const tabTitleCache = new Map(); // sheetId -> { titles, expiresAt }
 const TAB_CACHE_MS = 5 * 60 * 1000;
 
 async function resolveExistingTabs(accessToken, sheetId) {
   const now = Date.now();
-  if (cachedTabTitles && cachedTabTitles.sheetId === sheetId && cachedTabTitles.expiresAt > now) return cachedTabTitles.titles;
+  const cached = tabTitleCache.get(sheetId);
+  if (cached && cached.expiresAt > now) return cached.titles;
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties.title`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   const data = await res.json();
   if (!res.ok) throw new Error(`Could not read sheet tab list: ${data.error?.message || res.status}`);
   const titles = (data.sheets || []).map((s) => s.properties.title);
-  cachedTabTitles = { sheetId, titles, expiresAt: now + TAB_CACHE_MS };
+  tabTitleCache.set(sheetId, { titles, expiresAt: now + TAB_CACHE_MS });
   return titles;
 }
 
@@ -111,94 +111,122 @@ async function handleSearch({ request, env }) {
 
   const raw = (body && body.query || "").trim();
   if (!raw) return json({ ok: false, error: "Missing query." }, 400);
+  const requestedBrand = (body && body.brand || "").trim(); // "" = All Brands
 
   // Same comma/newline-separated multi-query parsing as the rest of the hub.
   const queries = raw.split(/[\n,]+/).map((q) => q.trim()).filter(Boolean).map((q) => q.toLowerCase());
   if (!queries.length) return json({ ok: false, error: "No valid search terms." }, 400);
 
+  // Figure out which brand(s) to actually search, and resolve each one's
+  // { sheetId, tabNames } up front.
+  const brandsToSearch = requestedBrand ? PKR_BRANDS.filter((b) => b.id === requestedBrand) : PKR_BRANDS;
+  if (requestedBrand && !brandsToSearch.length) return json({ ok: false, error: `Unknown brand "${requestedBrand}".` }, 400);
+
+  const targets = []; // { brandId, brandName, sheetId, tabNames }
+  const unconfiguredBrands = [];
+  for (const b of brandsToSearch) {
+    const sheet = await resolveBrandSheet(env, b.id);
+    if (sheet) targets.push({ brandId: b.id, brandName: b.name, sheetId: sheet.sheetId, tabNames: sheet.tabNames });
+    else unconfiguredBrands.push(b.name);
+  }
+
+  // Specifically asked for one brand, and it has no Sheet linked yet —
+  // tell the frontend plainly instead of returning a confusing "0 results".
+  if (requestedBrand && !targets.length) {
+    return json({ ok: true, results: [], notConfigured: true, brand: requestedBrand });
+  }
+
   const accessToken = await getAccessToken(env);
-  const { sheetId, tabNames } = await resolveSheetConfig(env);
-
-  // Resolve configured tab names against what actually exists on the
-  // sheet — a mistyped/renamed tab becomes a warning in the response
-  // instead of a silent "0 results".
-  let realTitles;
-  try {
-    realTitles = await resolveExistingTabs(accessToken, sheetId);
-  } catch (e) {
-    return json({ ok: false, error: String(e.message || e) }, 502);
-  }
-  const realByNormalized = new Map(realTitles.map((t) => [normalizeTabName(t), t]));
-  const tabsToQuery = []; // real title strings only
-  const missingTabs = [];
-  for (const configured of tabNames) {
-    const real = realByNormalized.get(normalizeTabName(configured));
-    if (real) tabsToQuery.push(real);
-    else missingTabs.push(configured);
-  }
-
   const results = [];
+  const tabWarnings = []; // [{ brand, missingTabs, actualSheetTabs }] — only for sheets with a mismatch
 
-  for (const tab of tabsToQuery) {
+  for (const target of targets) {
     if (results.length >= MAX_RESULTS) break;
-    const range = `'${tab.replace(/'/g, "''")}'!A2:${LAST_COL}`;
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(`Sheets API error reading "${tab}": ${data.error?.message || res.status}`);
-    }
-    const rows = data.values || [];
-    rows.forEach((row, i) => {
-      if (results.length >= MAX_RESULTS) return;
-      const get = (colLetter) => row[colIndex(colLetter)] || "";
-      const transactionId = get(COLS.transactionId);
-      const reference = get(COLS.reference);
-      const username = get(COLS.username);
-      const agentNumber = get(COLS.agentNumber);
-      // Match if ANY query is a substring of Transaction ID, Reference,
-      // Username, or Agent Number.
-      const haystack = (transactionId + " " + reference + " " + username + " " + agentNumber).toLowerCase();
-      const isMatch = queries.some((q) => haystack.includes(q));
-      if (!isMatch) return;
 
-      results.push({
-        sheetName: "PKR Deposit Support", // adjust label shown in the UI if you want
-        tabName: tab,
-        sheetId,
-        rowIndex: i + 2, // actual row number in the sheet (header is row 1)
-        transaction: transactionId,
-        requestTime: get(COLS.requestTime),
-        channel: get(COLS.channel),
-        agentNumber: get(COLS.agentNumber),
-        username: get(COLS.username),
-        date: get(COLS.date),
-        imageLink: get(COLS.imageLink),
-        transactionError: get(COLS.transactionError),
-        statusPG: get(COLS.statusPG),
-        cartId: get(COLS.cartId),
-        reference,
-        cashOutNumber: get(COLS.cashOutNumber),
-        amount: get(COLS.amount),
-        supportPIC: get(COLS.supportPIC),
-        pg: get(COLS.pg),
-        csPIC: get(COLS.csPIC),
-        playerContactNo: get(COLS.playerContactNo),
-        statusCS: get(COLS.statusCS),
-        correctUid: get(COLS.correctUid),
-        playersCartId: get(COLS.playersCartId),
-        paymentStatus: get(COLS.paymentStatus),
+    let realTitles;
+    try {
+      realTitles = await resolveExistingTabs(accessToken, target.sheetId);
+    } catch (e) {
+      // One brand's sheet being unreachable shouldn't kill results from
+      // the others — record it as a warning and keep going.
+      tabWarnings.push({ brand: target.brandName, missingTabs: target.tabNames, actualSheetTabs: [], error: String(e.message || e) });
+      continue;
+    }
+    const realByNormalized = new Map(realTitles.map((t) => [normalizeTabName(t), t]));
+    const tabsToQuery = [];
+    const missingTabs = [];
+    for (const configured of target.tabNames) {
+      const real = realByNormalized.get(normalizeTabName(configured));
+      if (real) tabsToQuery.push(real);
+      else missingTabs.push(configured);
+    }
+    if (missingTabs.length) tabWarnings.push({ brand: target.brandName, missingTabs, actualSheetTabs: realTitles });
+
+    for (const tab of tabsToQuery) {
+      if (results.length >= MAX_RESULTS) break;
+      const range = `'${tab.replace(/'/g, "''")}'!A2:${LAST_COL}`;
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${target.sheetId}/values/${encodeURIComponent(range)}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+      const data = await res.json();
+      if (!res.ok) {
+        tabWarnings.push({ brand: target.brandName, missingTabs: [], actualSheetTabs: [], error: `Sheets API error reading "${tab}": ${data.error?.message || res.status}` });
+        continue;
+      }
+      const rows = data.values || [];
+      rows.forEach((row, i) => {
+        if (results.length >= MAX_RESULTS) return;
+        const get = (colLetter) => row[colIndex(colLetter)] || "";
+        const transactionId = get(COLS.transactionId);
+        const reference = get(COLS.reference);
+        const username = get(COLS.username);
+        const agentNumber = get(COLS.agentNumber);
+        // Match if ANY query is a substring of Transaction ID, Reference,
+        // Username, or Agent Number.
+        const haystack = (transactionId + " " + reference + " " + username + " " + agentNumber).toLowerCase();
+        const isMatch = queries.some((q) => haystack.includes(q));
+        if (!isMatch) return;
+
+        results.push({
+          brand: target.brandId,
+          brandName: target.brandName,
+          sheetName: target.brandName,
+          tabName: tab,
+          sheetId: target.sheetId,
+          rowIndex: i + 2, // actual row number in the sheet (header is row 1)
+          transaction: transactionId,
+          requestTime: get(COLS.requestTime),
+          channel: get(COLS.channel),
+          agentNumber: get(COLS.agentNumber),
+          username: get(COLS.username),
+          date: get(COLS.date),
+          imageLink: get(COLS.imageLink),
+          transactionError: get(COLS.transactionError),
+          statusPG: get(COLS.statusPG),
+          cartId: get(COLS.cartId),
+          reference,
+          cashOutNumber: get(COLS.cashOutNumber),
+          amount: get(COLS.amount),
+          supportPIC: get(COLS.supportPIC),
+          pg: get(COLS.pg),
+          csPIC: get(COLS.csPIC),
+          playerContactNo: get(COLS.playerContactNo),
+          statusCS: get(COLS.statusCS),
+          correctUid: get(COLS.correctUid),
+          playersCartId: get(COLS.playersCartId),
+          paymentStatus: get(COLS.paymentStatus),
+        });
       });
-    });
+    }
   }
 
   return json({
     ok: true,
     results,
-    missingTabs: missingTabs.length ? missingTabs : undefined,
-    // Only included when something's misconfigured — lets you see the
-    // sheet's real tab names without opening the sheet.
-    actualSheetTabs: missingTabs.length ? realTitles : undefined,
+    tabWarnings: tabWarnings.length ? tabWarnings : undefined,
+    // Brands with no Sheet linked at all yet — only surfaced in "All
+    // Brands" mode, as a gentle heads-up, not an error (perfectly normal
+    // while you're still onboarding the other 8 brands).
+    unconfiguredBrands: !requestedBrand && unconfiguredBrands.length ? unconfiguredBrands : undefined,
   });
 }
 

@@ -454,14 +454,14 @@
       acctBody.innerHTML = '<p class="edit-modal-note">Loading…</p>';
       acctBackdrop.classList.add("is-open");
       const modalEl = acctBackdrop.querySelector(".edit-modal");
-      modalEl.classList.toggle("wide", mode === "profile" || mode === "tgroutes");
-      // Both "profile" and "tgroutes" use per-row inline save buttons
-      // instead of one global footer Save (too many independently-
-      // editable rows for a single "Save" to mean anything useful).
-      // With Cancel removed (closing is via the X button now), the whole
-      // actions row would otherwise just be dead space when Save is
-      // hidden — hide the row itself, not just the button inside it.
-      const showFooterSave = mode !== "profile" && mode !== "tgroutes";
+      modalEl.classList.toggle("wide", mode === "profile" || mode === "tgroutes" || mode === "depositsheets");
+      // "profile", "tgroutes", and "depositsheets" all use per-row inline
+      // save buttons instead of one global footer Save (too many
+      // independently-editable rows for a single "Save" to mean anything
+      // useful). With Cancel removed (closing is via the X button now),
+      // the whole actions row would otherwise just be dead space when
+      // Save is hidden — hide the row itself, not just the button inside it.
+      const showFooterSave = mode !== "profile" && mode !== "tgroutes" && mode !== "depositsheets";
       document.getElementById("acctModalSave").style.display = showFooterSave ? "" : "none";
       document.getElementById("acctModalActions").style.display = showFooterSave ? "" : "none";
       const roleFilterEl = document.getElementById("acctProfileRoleFilter");
@@ -738,13 +738,12 @@
       renderTgRoutes();
     }
 
-    // ---- Deposit Sheet Link (live-editable Google Sheet source) ----
-    // One row per Deposit-type module (just "Deposit Issue" for now —
-    // Deposit Backup will add a second row here once built, no new UI
-    // pattern needed, see functions/api/admin/deposit-sheets.js). Backed
-    // by /api/admin/deposit-sheets, same override-over-code-default
-    // layering as TG Group/Channel above.
-    let acctDepositSheetsData = null;
+    // ---- Deposit Sheet Link (live-editable Google Sheet source, per brand) ----
+    // Same brand-sidebar layout/pattern as TG Group/Channel above — one
+    // row per PKR brand, each independently overridable. Backed by
+    // /api/admin/deposit-sheets, same override-over-code-default layering.
+    let acctDepositSheetsData = null; // { brands, sheets }
+    let acctDepositSheetsSelectedBrand = null;
 
     async function loadDepositSheets() {
       const res = await window.AgentAuth.authFetch("/api/admin/deposit-sheets");
@@ -753,36 +752,55 @@
         acctBody.innerHTML = `<p class="edit-modal-note err">${acctEsc(data.error || "Failed to load.")}</p>`;
         return;
       }
-      acctDepositSheetsData = data.slots;
+      acctDepositSheetsData = data;
+      if (!acctDepositSheetsSelectedBrand || !data.brands.some((b) => b.id === acctDepositSheetsSelectedBrand)) {
+        acctDepositSheetsSelectedBrand = data.brands[0]?.id || null;
+      }
       renderDepositSheets();
     }
 
     function renderDepositSheets() {
       if (!acctDepositSheetsData) return;
+      const { brands, sheets } = acctDepositSheetsData;
       const canEdit = canEditAdminSection("depositSheets");
       const roAttr = canEdit ? "" : "disabled";
 
-      const rowsHtml = acctDepositSheetsData.map((slot) => `
-        <div class="tgroute-row" data-slot="${acctEsc(slot.id)}">
-          <div class="tgroute-mod-name">📊 ${acctEsc(slot.name)}
-            <span class="route-tag${slot.isOverride ? " custom" : ""}">${slot.isOverride ? "custom" : "default"}</span>
-          </div>
-          <div class="tgroute-fields" style="flex-direction:column; align-items:stretch; gap:8px;">
-            <input type="text" class="depsheet-url" placeholder="Paste the full Google Sheets URL (or just the Sheet ID)" value="${acctEsc(slot.sheetId)}" ${roAttr} autocomplete="off" />
-            <input type="text" class="depsheet-tabs" placeholder="Tab name(s), comma-separated if more than one" value="${acctEsc((slot.tabNames || []).join(", "))}" ${roAttr} autocomplete="off" />
-            ${canEdit ? `<div class="tgroute-row-actions">
-              <button type="button" class="tgroute-action-btn depsheet-save">Save</button>
-              ${slot.isOverride ? '<button type="button" class="tgroute-action-btn tgroute-action-secondary depsheet-reset">Reset</button>' : ""}
-            </div>` : ""}
-          </div>
-        </div>`).join("");
+      const brandListHtml = brands.map((b) => `
+        <div class="tgroute-brand${b.id === acctDepositSheetsSelectedBrand ? " selected" : ""}" data-brand="${acctEsc(b.id)}">${acctEsc(b.name)}</div>
+      `).join("");
+
+      const slot = sheets[acctDepositSheetsSelectedBrand] || { sheetId: "", tabNames: [], isOverride: false };
 
       acctBody.innerHTML = `
-        <div class="tgroute-modules">${rowsHtml}</div>
+        <div class="tgroute-layout">
+          <div class="tgroute-brands">${brandListHtml}</div>
+          <div class="tgroute-modules">
+            <div class="tgroute-row" data-brand="${acctEsc(acctDepositSheetsSelectedBrand)}">
+              <div class="tgroute-mod-name">📊 Deposit Issue
+                <span class="route-tag${slot.isOverride ? " custom" : ""}">${slot.isOverride ? "custom" : "default"}</span>
+              </div>
+              <div class="tgroute-fields">
+                <input type="text" class="depsheet-url" placeholder="Sheet URL e.g. https://docs.google.com/spreadsheets/d/.../edit" value="${slot.isOverride ? acctEsc(slot.sheetId) : ""}" ${roAttr} autocomplete="off" />
+                <input type="text" class="depsheet-tabs" placeholder="Tab name e.g. CX PKR" value="${slot.isOverride ? acctEsc((slot.tabNames || []).join(", ")) : ""}" ${roAttr} autocomplete="off" />
+                ${canEdit ? `<div class="tgroute-row-actions">
+                  <button type="button" class="tgroute-action-btn depsheet-save">Save</button>
+                  ${slot.isOverride ? '<button type="button" class="tgroute-action-btn tgroute-action-secondary depsheet-reset">Reset</button>' : ""}
+                </div>` : ""}
+              </div>
+            </div>
+          </div>
+        </div>
         <hr class="tgroute-divider" />
         ${canEdit ? "" : '<p class="edit-modal-note">View only.</p>'}
-        <p class="edit-modal-note tgroute-footnote">Changes apply to the very next search — no redeploy needed. Paste the new Sheet's URL here whenever the other department swaps it out; "default" rows are still using the value built into the code, "custom" rows have been overridden here.</p>`;
+        <p class="edit-modal-note tgroute-footnote">Changes apply to the very next search — no redeploy needed. Paste each brand's Sheet URL here as you get access to it; "default" means Crickex's hardcoded value (every other brand starts unconfigured until a link is saved), "custom" means it's been overridden here.</p>`;
 
+      acctBody.querySelectorAll(".tgroute-brand").forEach((el) => {
+        el.addEventListener("click", () => {
+          acctDepositSheetsSelectedBrand = el.dataset.brand;
+          setAcctNote("");
+          renderDepositSheets();
+        });
+      });
       acctBody.querySelectorAll(".depsheet-save").forEach((btn) => {
         btn.addEventListener("click", () => saveDepositSheetRow(btn.closest(".tgroute-row")));
       });
@@ -792,7 +810,7 @@
     }
 
     async function saveDepositSheetRow(row) {
-      const slotId = row.dataset.slot;
+      const brandId = row.dataset.brand;
       const sheetUrlOrId = row.querySelector(".depsheet-url").value.trim();
       const tabNames = row.querySelector(".depsheet-tabs").value.trim();
       if (!sheetUrlOrId) return setAcctNote("Sheet URL or ID is required.", "err");
@@ -800,27 +818,25 @@
       setAcctNote("Saving…");
       const res = await window.AgentAuth.authFetch("/api/admin/deposit-sheets", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "save", slotId, sheetUrlOrId, tabNames }),
+        body: JSON.stringify({ action: "save", brandId, sheetUrlOrId, tabNames }),
       });
       const data = await res.json();
       if (!data.ok) return setAcctNote(data.error || "Save failed.", "err");
-      const idx = acctDepositSheetsData.findIndex((s) => s.id === slotId);
-      if (idx >= 0) acctDepositSheetsData[idx] = data.slot;
+      acctDepositSheetsData.sheets[brandId] = data.sheet;
       setAcctNote("Saved — takes effect on the next search.", "ok");
       renderDepositSheets();
     }
 
     async function resetDepositSheetRow(row) {
-      const slotId = row.dataset.slot;
+      const brandId = row.dataset.brand;
       setAcctNote("Resetting…");
       const res = await window.AgentAuth.authFetch("/api/admin/deposit-sheets", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reset", slotId }),
+        body: JSON.stringify({ action: "reset", brandId }),
       });
       const data = await res.json();
       if (!data.ok) return setAcctNote(data.error || "Reset failed.", "err");
-      const idx = acctDepositSheetsData.findIndex((s) => s.id === slotId);
-      if (idx >= 0) acctDepositSheetsData[idx] = data.slot;
+      acctDepositSheetsData.sheets[brandId] = data.sheet;
       setAcctNote("Reset to default.", "ok");
       renderDepositSheets();
     }

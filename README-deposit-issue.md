@@ -1,5 +1,12 @@
 # Deposit Issue module — now merged into your real repo
 
+## Fix: "Deposit Sheet Link" modal was slow to open
+`GET /api/admin/deposit-sheets` was fetching each brand's Deposit Backup
+config one at a time (9 sequential KV round-trips) instead of in
+parallel like the Deposit Issue sheets fetch already did — noticeably
+slow. Now uses `Promise.all` the same way, should open close to
+instantly.
+
 ## Update: "Deposit Backup" This Month / Last Month rotation (config only)
 Added to the same "Deposit Sheet Link" admin page, two more rows per
 brand — this is config/prep only, no actual Deposit Backup search page

@@ -94,11 +94,12 @@ async function handleGet({ request, env }) {
 
   // Deposit Backup: This Month / Last Month, no hardcoded default for
   // any brand (unlike Deposit Issue's Crickex fallback) — every brand
-  // starts fully empty until someone saves a link.
-  const backup = {};
-  for (const brandId of brandIds) {
-    backup[brandId] = await getDepositBackup(env, brandId);
-  }
+  // starts fully empty until someone saves a link. Fetched in parallel
+  // (not one brand at a time) — same reason getAllDepositSheetOverrides()
+  // above does too: 9 sequential KV round-trips is what was making this
+  // modal noticeably slow to open.
+  const backupEntries = await Promise.all(brandIds.map(async (brandId) => [brandId, await getDepositBackup(env, brandId)]));
+  const backup = Object.fromEntries(backupEntries);
 
   return json({ ok: true, brands: PKR_BRANDS, sheets, backup });
 }

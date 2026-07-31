@@ -65,6 +65,22 @@ function normalizeTabName(name) {
   return String(name).normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
+// Sheet stores Date (col F, e.g. "2026-06-28") and Request Time (col B,
+// time-only, e.g. "9:28:31") as two separate columns. Combined for
+// display into a single "DD/MM/YYYY HH:MM:SS" string, day-first to match
+// the rest of the hub (Deposit Issue's own sheet uses the same day/month/
+// year convention). Falls back gracefully if either half is missing or
+// isn't in the expected shape — never throws, worst case just shows
+// whatever raw text was in the cell.
+function formatRequestDateTime(dateRaw, timeRaw) {
+  let d = String(dateRaw || "").trim();
+  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) d = `${m[3]}/${m[2]}/${m[1]}`;
+  const t = String(timeRaw || "").trim();
+  if (d && t) return `${d} ${t}`;
+  return d || t;
+}
+
 // Same per-isolate tab-title cache pattern as Deposit Issue's search.js.
 const tabTitleCache = new Map(); // sheetId -> { tabs: [{title, gid}], expiresAt }
 const TAB_CACHE_MS = 5 * 60 * 1000;
@@ -190,7 +206,7 @@ async function handleSearch({ request, env }) {
           rowIndex,
           sheetUrl: `https://docs.google.com/spreadsheets/d/${month.sheetId}/edit#gid=${gid}&range=A${rowIndex}`,
           transaction: transactionId,
-          requestTime: get(COLS.requestTime),
+          requestTime: formatRequestDateTime(get(COLS.date), get(COLS.requestTime)),
           channel: get(COLS.channel),
           agentNumber: get(COLS.agentNumber),
           username: get(COLS.username),

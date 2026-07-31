@@ -141,6 +141,24 @@
   .dep-p-navy   { background: #10244a; color: #cfe0ff; }
   .dep-py { background: var(--field-bg); color: var(--ink-soft); font-weight: 700; }
   .dep-dash { color: var(--ink-soft); }
+
+  /* Compact results table (replaces the Deposit Issue-style expanded
+     cards — Deposit Backup is read-only/high-volume browsing, so a
+     dense table matches the reference layout better than one big card
+     per result). */
+  .dep-table-wrap { overflow-x: auto; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .dep-table { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: auto; }
+  .dep-table th {
+    text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.03em;
+    color: var(--ink-soft); font-weight: 700; padding: 10px 12px; white-space: nowrap;
+    background: var(--field-bg); position: sticky; top: 0;
+  }
+  .dep-table td { padding: 10px 12px; vertical-align: middle; color: var(--ink); border-top: 1px solid var(--border); white-space: nowrap; }
+  .dep-table tr:first-child td { border-top: none; }
+  .dep-table-idx { color: var(--ink-soft); }
+  .dep-tid-cell { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-weight: 700; color: var(--label-blue); text-decoration: none; }
+  .dep-tid-cell:hover { text-decoration: underline; }
+  .dep-img-icon { cursor: pointer; font-size: 13px; }
   .dep-rcard-f { padding: 8px 16px; border-top: 1px solid var(--border); }
   .dep-btn-ed {
     padding: 5px 13px; font-size: 12px; border: 1.5px solid var(--label-blue);
@@ -383,21 +401,24 @@
     "testing": "dep-p-teal",
     "no sms": "dep-p-teal",
   };
-  function fp(l, v) {
-    if (!v) return '<div class="dep-fr"><span class="dep-fl">'+l+'</span><span class="dep-fv"><span class="dep-pill dep-py">—</span></span></div>';
-    var c = STATUS_COLOR[v.toLowerCase().trim()] || 'dep-p-blue'; // never gray — unmapped values default to blue, not a dull neutral
-    return '<div class="dep-fr"><span class="dep-fl">'+l+'</span><span class="dep-fv"><span class="dep-pill '+c+'">'+escapeHtml(v)+'</span></span></div>';
+  // Returns just the colored pill span (no label/row wrapper) — used
+  // inside a <td>, unlike Deposit Issue's fp()/fPay() which built a
+  // whole labeled row for the card layout.
+  function pillPG(v) {
+    if (!v) return '<span class="dep-pill dep-py">—</span>';
+    var c = STATUS_COLOR[v.toLowerCase().trim()] || 'dep-p-blue'; // never gray — unmapped values default to blue
+    return '<span class="dep-pill ' + c + '">' + escapeHtml(v) + '</span>';
   }
-  function f(l, v) { return '<div class="dep-fr"><span class="dep-fl">'+l+'</span><span class="dep-fv">'+cell(v)+'</span></div>'; }
 
   // Read-only page — no edit panel, so this is a no-op left in place only
-  // so the shared syncEditPanelHeight() call sites (copied from Deposit
-  // Issue) don't need to be individually stripped out.
+  // so any leftover call sites (copied from Deposit Issue) don't need to
+  // be individually stripped out.
   function syncEditPanelHeight() {}
 
-  // Deposit Backup's month pill: green-tinted "This Month" vs a muted
-  // "Last Month" — distinct from the blue brand/tab pill so a result's
-  // recency is visible at a glance, not just readable in the tab name.
+  // Deposit Backup's "Source" column: which of This Month / Last Month a
+  // row came from (brand isn't repeated per-row since it's already fixed
+  // by the brand dropdown above — searching is always one brand at a
+  // time). Green-tinted for This Month, muted for Last Month.
   function monthPill(r) {
     var cls = r.month === 'thisMonth' ? 'dep-p-green' : 'dep-py';
     return '<span class="dep-pill ' + cls + '">' + escapeHtml(r.monthLabel || '') + '</span>';
@@ -406,61 +427,58 @@
   function showDep(data) {
     gi('depLbl').textContent = 'Results (' + data.length + (data.length>=500?' — max 500':'') + ')';
     window._dep = data;
-    if (!data.length) { gi('depRes').innerHTML = '<div class="dep-state">No results found.</div>'; syncEditPanelHeight(); return; }
-    gi('depRes').innerHTML = data.map(function(r,i){
-      var imgBtn = r.imageLink ? '<span class="dep-img-btn" id="img-'+i+'">🖼️ Image</span>' : '';
-      var pillLabel = escapeHtml(r.tabName);
-      var tabPill = r.sheetUrl
-        ? '<a class="dep-tab-pill dep-tab-pill-link" href="'+escapeHtml(r.sheetUrl)+'" target="_blank" rel="noopener" title="Open in Google Sheets">'+pillLabel+' <span class="dep-pill-arrow">↗️</span></a>'
-        : '<span class="dep-tab-pill">'+pillLabel+'</span>';
-      return '<div class="dep-rcard"><div class="dep-rcard-h">'
-        +monthPill(r)
-        +tabPill
-        +'<span class="dep-rcard-id">'+escapeHtml(r.transaction)+'</span>'
-        +imgBtn
-        +'<span class="dep-rcard-tm">'+escapeHtml(r.requestTime)+'</span></div>'
-        +'<div class="dep-rcard-b"><div class="dep-fg">'
-        +f('Channel',r.channel)+f('Agent Number',r.agentNumber)
-        +f('Username',r.username)+f('Reference',r.reference)
-        +f('Cash Out Number',r.cashOutNumber)+f('Amount',r.amount)
-        +fp('Status PG',r.statusPG)+fErr('Transaction Error',r.transactionError)
-        +f('Cart ID',r.cartId)+f('Support PIC',r.supportPIC)
-        +f('CS PIC',r.csPIC)+f('Player Contact No',r.playerContactNo)
-        +fp('Status CS',r.statusCS)+f('Correct UID',r.correctUid)
-        +f('Player\'s Cart ID',r.playersCartId)+fPay('Payment Status',r.paymentStatus)
-        +'</div></div></div>';
+    if (!data.length) { gi('depRes').innerHTML = '<div class="dep-state">No results found.</div>'; return; }
+    var rows = data.map(function(r,i){
+      var idCell = r.sheetUrl
+        ? '<a class="dep-tid-cell" href="'+escapeHtml(r.sheetUrl)+'" target="_blank" rel="noopener" title="Open in Google Sheets">'+escapeHtml(r.transaction)+'</a>'
+        : '<span class="dep-tid-cell">'+escapeHtml(r.transaction)+'</span>';
+      var imgIcon = r.imageLink ? ' <span class="dep-img-icon" id="img-'+i+'" title="View image">🖼️</span>' : '';
+      return '<tr>'
+        + '<td class="dep-table-idx">'+(i+1)+'</td>'
+        + '<td>'+monthPill(r)+'</td>'
+        + '<td><span class="dep-tab-pill">'+escapeHtml(r.tabName)+'</span></td>'
+        + '<td>'+idCell+imgIcon+'</td>'
+        + '<td>'+cell(r.requestTime)+'</td>'
+        + '<td>'+cell(r.channel)+'</td>'
+        + '<td>'+cell(r.agentNumber)+'</td>'
+        + '<td>'+cell(r.username)+'</td>'
+        + '<td>'+cell(r.playerContactNo)+'</td>'
+        + '<td>'+cell(r.cashOutNumber)+'</td>'
+        + '<td>'+cell(r.amount)+'</td>'
+        + '<td>'+pillPG(r.statusPG)+'</td>'
+        + '<td>'+cell(r.cartId)+'</td>'
+        + '<td>'+pillPay(r.paymentStatus)+'</td>'
+        + '</tr>';
     }).join('');
+    gi('depRes').innerHTML = '<div class="dep-table-wrap"><table class="dep-table"><thead><tr>'
+      + '<th>#</th><th>Source</th><th>Tab</th><th>TRX ID</th><th>Request Time</th><th>Channel</th>'
+      + '<th>Agent Number</th><th>Username</th><th>Player Number</th><th>Cash Out No</th><th>Amount</th>'
+      + '<th>PG Status</th><th>Success Cart ID</th><th>Payment Status</th>'
+      + '</tr></thead><tbody>'+rows+'</tbody></table></div>';
     data.forEach(function(r,i){
       if (r.imageLink) gi('img-'+i).addEventListener('click', function(){ openImageLightbox(r.imageLink); });
     });
-    syncEditPanelHeight();
   }
 
   // Transaction Error doesn't have a fixed list of values like Status PG
   // does, so instead of guessing keywords, every distinct string gets a
   // consistent color deterministically hashed from its text — same value
-  // always gets the same color, and it's picked from a vibrant palette,
-  // never gray. (If you'd rather have an exact category->color mapping
-  // like Status PG, send me the real list of Transaction Error values and
-  // I'll swap this for an explicit map.)
+  // always gets the same color, picked from a vibrant palette, never
+  // gray. Kept here as the shared fallback hashColor() below also uses
+  // for any unmapped Payment Status value.
   var ERROR_PALETTE = ['dep-p-red','dep-p-orange','dep-p-purple','dep-p-teal','dep-p-blue'];
   function hashColor(str) {
     var h = 0;
     for (var i = 0; i < str.length; i++) { h = (h * 31 + str.charCodeAt(i)) | 0; }
     return ERROR_PALETTE[Math.abs(h) % ERROR_PALETTE.length];
   }
-  function fErr(l, v) {
-    if (!v) return '<div class="dep-fr"><span class="dep-fl">'+l+'</span><span class="dep-fv"><span class="dep-pill dep-py">—</span></span></div>';
-    var c = hashColor(v.toLowerCase().trim());
-    return '<div class="dep-fr"><span class="dep-fl">'+l+'</span><span class="dep-fv"><span class="dep-pill '+c+'">'+escapeHtml(v)+'</span></span></div>';
-  }
 
-  // Payment Status colors follow the same scheme as your Sheet's own
-  // conditional formatting (see the screenshot you sent): red family for
-  // "not received"/negative outcomes, lavender for refunds, amber for
-  // ignore/hold, green for successfully credited, navy/blue for
-  // system-verified states. Unlisted values fall back to the same
-  // hash-based palette as Transaction Error — still never gray.
+  // Payment Status colors follow the same scheme as the Sheet's own
+  // conditional formatting: red family for "not received"/negative
+  // outcomes, lavender for refunds, amber for ignore/hold, green for
+  // successfully credited, navy/blue for system-verified states.
+  // Unlisted values fall back to the hash-based palette above — still
+  // never gray.
   var PAYMENT_STATUS_COLOR = {
     "not receive": "dep-p-maroon",
     "pyt-agent close": "dep-p-maroon",
@@ -472,11 +490,11 @@
     "provide correct uid": "dep-p-navy",
     "approved by system": "dep-p-blue",
   };
-  function fPay(l, v) {
-    if (!v) return '<div class="dep-fr"><span class="dep-fl">'+l+'</span><span class="dep-fv"><span class="dep-pill dep-py">—</span></span></div>';
+  function pillPay(v) {
+    if (!v) return '<span class="dep-pill dep-py">—</span>';
     var key = v.toLowerCase().trim();
     var c = PAYMENT_STATUS_COLOR[key] || hashColor(key);
-    return '<div class="dep-fr"><span class="dep-fl">'+l+'</span><span class="dep-fv"><span class="dep-pill '+c+'">'+escapeHtml(v)+'</span></span></div>';
+    return '<span class="dep-pill ' + c + '">' + escapeHtml(v) + '</span>';
   }
 
   function openImageLightbox(url) {

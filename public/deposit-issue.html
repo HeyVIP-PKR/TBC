@@ -111,8 +111,9 @@
   .dep-rcard { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden; }
   .dep-rcard-h { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
   .dep-tab-pill { background: var(--field-bg); border: 1px solid var(--pill-border); color: var(--label-blue); font-weight: 700; font-size: 11.5px; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
-  .dep-pill-link { margin-left: 5px; text-decoration: none; cursor: pointer; opacity: 0.85; }
-  .dep-pill-link:hover { opacity: 1; }
+  .dep-tab-pill-link { text-decoration: none; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; transition: opacity 0.15s ease, border-color 0.15s ease; }
+  .dep-tab-pill-link:hover { opacity: 0.85; border-color: var(--accent-gold); }
+  .dep-pill-arrow { font-size: 10px; }
   .dep-img-btn {
     display: inline-flex; align-items: center; gap: 5px; background: var(--field-bg);
     border: 1px solid var(--pill-border); color: var(--label-blue); font-weight: 700;
@@ -436,9 +437,12 @@
     if (!data.length) { gi('depRes').innerHTML = '<div class="dep-state">No results found.</div>'; syncEditPanelHeight(); return; }
     gi('depRes').innerHTML = data.map(function(r,i){
       var imgBtn = r.imageLink ? '<span class="dep-img-btn" id="img-'+i+'">🖼️ Image</span>' : '';
-      var sheetLinkIcon = r.sheetUrl ? '<a href="'+escapeHtml(r.sheetUrl)+'" target="_blank" rel="noopener" class="dep-pill-link" title="Open in Google Sheets">↗️</a>' : '';
+      var pillLabel = escapeHtml(r.brandName)+' - '+escapeHtml(r.tabName);
+      var tabPill = r.sheetUrl
+        ? '<a class="dep-tab-pill dep-tab-pill-link" href="'+escapeHtml(r.sheetUrl)+'" target="_blank" rel="noopener" title="Open in Google Sheets">'+pillLabel+' <span class="dep-pill-arrow">↗️</span></a>'
+        : '<span class="dep-tab-pill">'+pillLabel+'</span>';
       return '<div class="dep-rcard"><div class="dep-rcard-h">'
-        +'<span class="dep-tab-pill">'+escapeHtml(r.brandName)+' - '+escapeHtml(r.tabName)+sheetLinkIcon+'</span>'
+        +tabPill
         +'<span class="dep-rcard-id">'+escapeHtml(r.transaction)+'</span>'
         +imgBtn
         +'<span class="dep-rcard-tm">'+escapeHtml(r.requestTime)+'</span></div>'

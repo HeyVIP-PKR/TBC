@@ -1261,6 +1261,30 @@
 
     // ---- Attachment lightbox ----
     //
+    // Reverse of the server's guessContentType() in
+    // functions/api/attachment/[fileId].js — given a MIME type, returns
+    // the file extension a downloaded file should have. Needed because
+    // "ticket-attachment-N" (the placeholder name used when we never
+    // captured the agent's original filename — see the comment above)
+    // has NO extension at all; downloading a file with no extension
+    // means the OS has no idea which app to open it with, which is
+    // exactly why a downloaded PDF can look "broken" even though the
+    // actual bytes came through Telegram completely intact.
+    function guessExtensionFromMime(mimeType) {
+      const map = {
+        "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp",
+        "image/bmp": "bmp", "image/heic": "heic", "image/heif": "heif",
+        "video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm", "video/3gpp": "3gp",
+        "application/pdf": "pdf",
+      };
+      return map[(mimeType || "").split(";")[0].trim().toLowerCase()] || null;
+    }
+    function withExtension(name, mimeType) {
+      if (/\.[a-zA-Z0-9]{2,5}$/.test(name)) return name; // already has something extension-shaped
+      const ext = guessExtensionFromMime(mimeType);
+      return ext ? `${name}.${ext}` : name;
+    }
+
     // Fetches the real bytes live from /api/attachment/<fileId> only at
     // the moment someone clicks — nothing is pre-fetched or cached
     // beyond the browser's own in-memory object URL for as long as the
@@ -1336,7 +1360,8 @@
             img.className = "inline-attach-media";
             img.addEventListener("error", () => {
               if (!document.body.contains(slot)) return;
-              slot.innerHTML = `<a href="${url}" download="${escapeAttr(name)}" class="inline-attach-file">📎 ${escapeHtml(name)} — click to download</a>`;
+              const downloadName = withExtension(name, type);
+              slot.innerHTML = `<a href="${url}" download="${escapeAttr(downloadName)}" class="inline-attach-file">📎 ${escapeHtml(downloadName)} — click to download</a>`;
             }, { once: true });
             slot.innerHTML = "";
             slot.appendChild(img);

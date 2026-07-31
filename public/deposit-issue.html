@@ -9,7 +9,7 @@
 <script src="/assets/starfield.js" defer></script>
 <script src="/assets/authguard.js"></script>
 <style>
-  .dep-shell { max-width: 1500px; margin: 0 auto; padding: 0 24px 80px; }
+  .dep-shell { max-width: 1500px; margin: 0 auto; padding: 20px 24px 80px; }
 
   .dep-header-card {
     display: flex; align-items: flex-start; justify-content: space-between;
@@ -111,6 +111,8 @@
   .dep-rcard { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden; }
   .dep-rcard-h { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
   .dep-tab-pill { background: var(--field-bg); border: 1px solid var(--pill-border); color: var(--label-blue); font-weight: 700; font-size: 11.5px; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
+  .dep-pill-link { margin-left: 5px; text-decoration: none; cursor: pointer; opacity: 0.85; }
+  .dep-pill-link:hover { opacity: 1; }
   .dep-img-btn {
     display: inline-flex; align-items: center; gap: 5px; background: var(--field-bg);
     border: 1px solid var(--pill-border); color: var(--label-blue); font-weight: 700;
@@ -434,9 +436,9 @@
     if (!data.length) { gi('depRes').innerHTML = '<div class="dep-state">No results found.</div>'; syncEditPanelHeight(); return; }
     gi('depRes').innerHTML = data.map(function(r,i){
       var imgBtn = r.imageLink ? '<span class="dep-img-btn" id="img-'+i+'">🖼️ Image</span>' : '';
+      var sheetLinkIcon = r.sheetUrl ? '<a href="'+escapeHtml(r.sheetUrl)+'" target="_blank" rel="noopener" class="dep-pill-link" title="Open in Google Sheets">↗️</a>' : '';
       return '<div class="dep-rcard"><div class="dep-rcard-h">'
-        +'<span class="dep-tab-pill">'+escapeHtml(r.brandName)+'</span>'
-        +'<span class="dep-tab-pill" style="opacity:.7">'+escapeHtml(r.tabName)+'</span>'
+        +'<span class="dep-tab-pill">'+escapeHtml(r.brandName)+' - '+escapeHtml(r.tabName)+sheetLinkIcon+'</span>'
         +'<span class="dep-rcard-id">'+escapeHtml(r.transaction)+'</span>'
         +imgBtn
         +'<span class="dep-rcard-tm">'+escapeHtml(r.requestTime)+'</span></div>'

@@ -69,21 +69,24 @@ function normalizeTabName(name) {
 // Sheet's real tab titles rarely change — cache per Worker isolate for a
 // few minutes instead of re-fetching metadata on every search. Keyed by
 // sheetId (a Map, since "All Brands" mode may query several different
-// sheets in one request).
-const tabTitleCache = new Map(); // sheetId -> { titles, expiresAt }
+// sheets in one request). Now also carries each tab's `gid` (its
+// internal numeric sheetId — different from the spreadsheet's own ID),
+// needed to build a direct link straight to that specific tab in Google
+// Sheets: https://docs.google.com/spreadsheets/d/<sheetId>/edit#gid=<gid>
+const tabTitleCache = new Map(); // sheetId -> { tabs: [{title, gid}], expiresAt }
 const TAB_CACHE_MS = 5 * 60 * 1000;
 
 async function resolveExistingTabs(accessToken, sheetId) {
   const now = Date.now();
   const cached = tabTitleCache.get(sheetId);
-  if (cached && cached.expiresAt > now) return cached.titles;
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties.title`;
+  if (cached && cached.expiresAt > now) return cached.tabs;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties(title,sheetId)`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   const data = await res.json();
   if (!res.ok) throw new Error(`Could not read sheet tab list: ${data.error?.message || res.status}`);
-  const titles = (data.sheets || []).map((s) => s.properties.title);
-  tabTitleCache.set(sheetId, { titles, expiresAt: now + TAB_CACHE_MS });
-  return titles;
+  const tabs = (data.sheets || []).map((s) => ({ title: s.properties.title, gid: s.properties.sheetId }));
+  tabTitleCache.set(sheetId, { tabs, expiresAt: now + TAB_CACHE_MS });
+  return tabs;
 }
 
 export async function onRequestPost(context) {
@@ -151,26 +154,26 @@ async function handleSearch({ request, env }) {
   for (const target of targets) {
     if (results.length >= MAX_RESULTS) break;
 
-    let realTitles;
+    let realTabs;
     try {
-      realTitles = await resolveExistingTabs(accessToken, target.sheetId);
+      realTabs = await resolveExistingTabs(accessToken, target.sheetId);
     } catch (e) {
       // One brand's sheet being unreachable shouldn't kill results from
       // the others — record it as a warning and keep going.
       tabWarnings.push({ brand: target.brandName, missingTabs: target.tabNames, actualSheetTabs: [], error: String(e.message || e) });
       continue;
     }
-    const realByNormalized = new Map(realTitles.map((t) => [normalizeTabName(t), t]));
-    const tabsToQuery = [];
+    const realByNormalized = new Map(realTabs.map((t) => [normalizeTabName(t.title), t]));
+    const tabsToQuery = []; // [{title, gid}]
     const missingTabs = [];
     for (const configured of target.tabNames) {
       const real = realByNormalized.get(normalizeTabName(configured));
       if (real) tabsToQuery.push(real);
       else missingTabs.push(configured);
     }
-    if (missingTabs.length) tabWarnings.push({ brand: target.brandName, missingTabs, actualSheetTabs: realTitles });
+    if (missingTabs.length) tabWarnings.push({ brand: target.brandName, missingTabs, actualSheetTabs: realTabs.map((t) => t.title) });
 
-    for (const tab of tabsToQuery) {
+    for (const { title: tab, gid } of tabsToQuery) {
       if (results.length >= MAX_RESULTS) break;
       const range = `'${tab.replace(/'/g, "''")}'!A2:${LAST_COL}`;
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${target.sheetId}/values/${encodeURIComponent(range)}`;
@@ -194,13 +197,18 @@ async function handleSearch({ request, env }) {
         const isMatch = queries.some((q) => haystack.includes(q));
         if (!isMatch) return;
 
+        const rowIndex = i + 2; // actual row number in the sheet (header is row 1)
         results.push({
           brand: target.brandId,
           brandName: target.brandName,
           sheetName: target.brandName,
           tabName: tab,
           sheetId: target.sheetId,
-          rowIndex: i + 2, // actual row number in the sheet (header is row 1)
+          rowIndex,
+          // Direct link to this exact row, in this exact tab — Google
+          // Sheets understands #gid=<tab> + range=<cell> in the URL and
+          // will jump straight there, scroll included.
+          sheetUrl: `https://docs.google.com/spreadsheets/d/${target.sheetId}/edit#gid=${gid}&range=A${rowIndex}`,
           transaction: transactionId,
           requestTime: get(COLS.requestTime),
           channel: get(COLS.channel),

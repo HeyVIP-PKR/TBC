@@ -1,5 +1,19 @@
 # Deposit Issue module — now merged into your real repo
 
+## Update: clickable ↗️ jumps straight to the row in Google Sheets
+The merged "Crickex - CX PKR" pill on each result card now has a small
+↗️ icon — clicking it opens that exact row, in that exact tab, directly
+in Google Sheets (new tab), instead of just opening the spreadsheet at
+its default view. Works via `#gid=<tab's internal id>&range=A<row>` in
+the URL, which Google Sheets understands natively.
+
+- `search.js` now also fetches each tab's `gid` (its internal numeric
+  sheet ID — different from the spreadsheet's own ID) alongside its
+  title, and includes a ready-to-use `sheetUrl` on every result.
+- `deposit-issue.html` renders it as a tiny link inside the pill; if a
+  result somehow has no `sheetUrl` (shouldn't normally happen), the icon
+  is simply omitted rather than showing a broken link.
+
 ## Update: "All Brands" redesigned as a Sheet directory (not a search)
 Instead of removing "All Brands" outright, it's now repurposed: selecting
 it (or just landing on the page — it's the default) shows a simple list

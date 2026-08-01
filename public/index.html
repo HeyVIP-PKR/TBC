@@ -1078,6 +1078,14 @@
       acctFeatureStatusData.statuses[itemId] = data.status;
       setAcctNote("Saved — takes effect on the next request.", "ok");
       renderFeatureStatus();
+      // Update the Home card/sidebar link behind the modal from the data
+      // this Save call just returned — NOT a fresh /api/feature-status
+      // fetch, since Cloudflare KV is only eventually consistent and a
+      // re-read right after put() can still come back stale.
+      applyFeatureStatusItem(itemId, {
+        status: data.status.status,
+        blocked: data.status.status !== "active" && !data.status.bypassRoles.includes(authInfo?.role),
+      });
     }
 
     async function resetFeatureStatusRow(row) {
@@ -1092,6 +1100,7 @@
       acctFeatureStatusData.statuses[itemId] = data.status;
       setAcctNote("Reset to Active.", "ok");
       renderFeatureStatus();
+      applyFeatureStatusItem(itemId, { status: "active", blocked: false });
     }
 
     let acctOfficesById = {};

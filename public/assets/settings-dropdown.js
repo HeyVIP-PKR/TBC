@@ -80,9 +80,17 @@ function initFsDropdowns(container, { onStatusChange, onRoleToggle } = {}) {
   linkFsDropdownMenus(container);
 
   container.querySelectorAll(".fs-dropdown-trigger").forEach((trigger) => {
-    if (trigger.disabled) return;
     trigger.addEventListener("click", (e) => {
       e.stopPropagation();
+      // Checked at click time, not at bind time — a trigger can start
+      // disabled (e.g. the roles picker while status is "active") and
+      // later become enabled via onStatusChange's live toggle, without
+      // this listener ever being re-attached. Skipping the bind step
+      // for a then-disabled trigger was the bug: switching status would
+      // flip `trigger.disabled` back to false, but the click handler
+      // was never there to begin with, so the dropdown just silently
+      // never opened.
+      if (trigger.disabled) return;
       const dd = trigger.closest(".fs-dropdown");
       if (dd.classList.contains("fs-dropdown-na")) return;
       toggleFsDropdown(dd, trigger);

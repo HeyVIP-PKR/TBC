@@ -1036,7 +1036,7 @@
       }).join("");
 
       acctBody.innerHTML = `
-        <div class="tgroute-modules">${rowsHtml}</div>
+        <div class="tgroute-modules fs-scroll">${rowsHtml}</div>
         <hr class="tgroute-divider" />
         ${canEdit ? "" : '<p class="edit-modal-note">View only.</p>'}
         <p class="edit-modal-note tgroute-footnote">Maintenance/Coming soon blocks everyone whose role isn't checked in the second dropdown — Home page, form page, and the API itself. Owner is always allowed through even if unchecked. Changes apply on the next request once you hit Save — no redeploy needed.</p>`;

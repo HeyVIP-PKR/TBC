@@ -45,3 +45,9 @@
 .fs-dropdown-option .fs-check { color: var(--accent-gold); font-weight: 700; visibility: hidden; }
 .fs-dropdown-option.selected { background: rgba(200, 145, 47, 0.14); }
 .fs-dropdown-option.selected .fs-check { visibility: visible; }
+
+/* Freezes the modal's title/close button in place while the row list
+   scrolls internally — without this, the list keeps growing the whole
+   .edit-modal taller than the viewport and the BACKDROP ends up
+   scrolling instead, taking the header out of view along with it. */
+.fs-scroll { max-height: min(55vh, calc(100vh - 260px)); overflow-y: auto; padding-right: 4px; }

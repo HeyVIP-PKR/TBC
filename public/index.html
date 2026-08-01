@@ -6,10 +6,12 @@
 <title>PKR CS Team - TBC</title>
 <link rel="stylesheet" href="/assets/style.css" />
 <link rel="stylesheet" href="/assets/feature-status.css" />
+<link rel="stylesheet" href="/assets/settings-dropdown.css" />
 <script src="/assets/theme.js"></script>
 <script src="/assets/starfield.js" defer></script>
 <script src="/assets/authguard.js"></script>
 <script src="/assets/apply-feature-status.js"></script>
+<script src="/assets/settings-dropdown.js"></script>
 </head>
 <body>
   <header class="topbar">
@@ -78,22 +80,24 @@
       </a>
       <div id="sidebarList"></div>
 
-      <div class="sidebar-item expandable" id="acctMgmtToggle">
-        <div class="icon" style="background:#a78bfa33;">🛡️</div>
-        <div class="text">
-          <div class="name">Account Management</div>
-          <div class="desc">Accounts, offices & passwords</div>
+      <div class="am-group" id="acctMgmtGroup">
+        <div class="sidebar-item am-toggle expandable" id="acctMgmtToggle">
+          <div class="icon" style="background:#a78bfa33;">🛡️</div>
+          <div class="text">
+            <div class="name">Account Management</div>
+            <div class="desc">Accounts, offices & passwords</div>
+          </div>
+          <span class="arrow">&rarr;</span>
         </div>
-        <span class="arrow">&rarr;</span>
-      </div>
-      <div class="sidebar-subitems" id="acctMgmtSubitems">
-        <div class="sidebar-subitem" id="subCreateAccount" style="display:none;"><span class="sub-icon">➕</span> Create Account</div>
-        <div class="sidebar-subitem" id="subWhitelistIp" style="display:none;"><span class="sub-icon">🌐</span> Whitelist IP</div>
-        <div class="sidebar-subitem" id="subTgRoutes" style="display:none;"><span class="sub-icon">📡</span> TG Group / Channel</div>
-        <div class="sidebar-subitem" id="subDepositSheets" style="display:none;"><span class="sub-icon">📊</span> Deposit Sheet Link</div>
-        <div class="sidebar-subitem" id="subSettings" style="display:none;"><span class="sub-icon">🚧</span> Settings</div>
-        <div class="sidebar-subitem" id="subResetPassword"><span class="sub-icon">🔑</span> Reset Password</div>
-        <div class="sidebar-subitem" id="subAgentProfile" style="display:none;"><span class="sub-icon">🪪</span> Agent Profile</div>
+        <div class="sidebar-subitems" id="acctMgmtSubitems">
+          <div class="sidebar-subitem" id="subCreateAccount" style="--sub-accent:#a78bfa33; display:none;"><span class="sub-icon">➕</span> Create Account</div>
+          <div class="sidebar-subitem" id="subWhitelistIp" style="--sub-accent:#60a5fa33; display:none;"><span class="sub-icon">🌐</span> Whitelist IP</div>
+          <div class="sidebar-subitem" id="subTgRoutes" style="--sub-accent:#38bdf833; display:none;"><span class="sub-icon">📡</span> TG Group / Channel</div>
+          <div class="sidebar-subitem" id="subDepositSheets" style="--sub-accent:#4fa6f533; display:none;"><span class="sub-icon">📊</span> Deposit Sheet Link</div>
+          <div class="sidebar-subitem" id="subSettings" style="--sub-accent:#f59e0b33; display:none;"><span class="sub-icon">🚧</span> Settings</div>
+          <div class="sidebar-subitem" id="subResetPassword" style="--sub-accent:#f3c46333;"><span class="sub-icon">🔑</span> Reset Password</div>
+          <div class="sidebar-subitem" id="subAgentProfile" style="--sub-accent:#34d39933; display:none;"><span class="sub-icon">🪪</span> Agent Profile</div>
+        </div>
       </div>
     </aside>
     <main class="hub-main">
@@ -968,7 +972,19 @@
       { value: "maintenance", label: "🚧 Maintenance" },
       { value: "coming_soon", label: "🔜 Coming soon" },
     ];
-    const FS_ROLE_OPTIONS = ["agent", "senior", "admin", "superadmin", "owner"];
+    const FS_ROLE_OPTIONS = [
+      { value: "agent", label: "Agent" },
+      { value: "senior", label: "Senior" },
+      { value: "admin", label: "Admin" },
+      { value: "superadmin", label: "SuperAdmin" },
+      { value: "owner", label: "Owner" },
+    ];
+    const FS_ROLE_LABEL = Object.fromEntries(FS_ROLE_OPTIONS.map((r) => [r.value, r.label]));
+
+    function fsRoleSummary(bypassRoles) {
+      if (!bypassRoles || !bypassRoles.length) return "No one";
+      return bypassRoles.map((r) => FS_ROLE_LABEL[r] || r).join(", ");
+    }
 
     async function loadFeatureStatus() {
       const res = await window.AgentAuth.authFetch("/api/admin/feature-status");
@@ -989,9 +1005,13 @@
 
       const rowsHtml = items.map((item) => {
         const s = statuses[item.id] || { status: "active", bypassRoles: ["superadmin", "owner"] };
-        const statusOptionsHtml = FS_STATUS_OPTIONS.map((o) => `<option value="${o.value}"${o.value === s.status ? " selected" : ""}>${o.label}</option>`).join("");
-        const roleCheckboxesHtml = FS_ROLE_OPTIONS.map((r) => `
-          <label class="fs-role-check"><input type="checkbox" class="fs-role" value="${r}" ${s.bypassRoles.includes(r) ? "checked" : ""} ${r === "owner" ? "disabled" : roAttr} /> ${r}</label>
+        const isActive = s.status === "active";
+        const currentStatusLabel = (FS_STATUS_OPTIONS.find((o) => o.value === s.status) || FS_STATUS_OPTIONS[0]).label;
+        const statusOptionsHtml = FS_STATUS_OPTIONS.map((o) => `
+          <div class="fs-dropdown-option${o.value === s.status ? " selected" : ""}" data-value="${o.value}"><span>${acctEsc(o.label)}</span><span class="fs-check">✓</span></div>
+        `).join("");
+        const roleOptionsHtml = FS_ROLE_OPTIONS.map((r) => `
+          <div class="fs-dropdown-option${s.bypassRoles.includes(r.value) ? " selected" : ""}" data-value="${r.value}"><span>${acctEsc(r.label)} can still use it</span><span class="fs-check">✓</span></div>
         `).join("");
         return `
           <div class="tgroute-row" data-item="${acctEsc(item.id)}">
@@ -999,8 +1019,14 @@
               <span class="route-tag${s.status !== "active" ? " custom" : ""}">${s.status === "active" ? "active" : s.status === "maintenance" ? "maintenance" : "coming soon"}</span>
             </div>
             <div class="tgroute-fields fs-fields">
-              <select class="fs-status-select" ${roAttr}>${statusOptionsHtml}</select>
-              <div class="fs-role-grid">${roleCheckboxesHtml}</div>
+              <div class="fs-dropdown" data-field="status" data-value="${acctEsc(s.status)}">
+                <button type="button" class="fs-dropdown-trigger" ${roAttr}>${acctEsc(currentStatusLabel)}</button>
+                <div class="fs-dropdown-menu">${statusOptionsHtml}</div>
+              </div>
+              <div class="fs-dropdown${isActive ? " fs-dropdown-na" : ""}" data-field="roles" data-values="${acctEsc(s.bypassRoles.join(","))}">
+                <button type="button" class="fs-dropdown-trigger" ${isActive ? "disabled" : roAttr}>${isActive ? "Not applicable while Active" : acctEsc(fsRoleSummary(s.bypassRoles))}</button>
+                <div class="fs-dropdown-menu">${roleOptionsHtml}</div>
+              </div>
               ${canEdit ? `<div class="tgroute-row-actions">
                 <button type="button" class="tgroute-action-btn fs-save">Save</button>
                 ${s.status !== "active" ? '<button type="button" class="tgroute-action-btn tgroute-action-secondary fs-reset">Reset to Active</button>' : ""}
@@ -1013,8 +1039,22 @@
         <div class="tgroute-modules">${rowsHtml}</div>
         <hr class="tgroute-divider" />
         ${canEdit ? "" : '<p class="edit-modal-note">View only.</p>'}
-        <p class="edit-modal-note tgroute-footnote">Flip any item to Maintenance/Coming soon to gray it out on the Home page and block submissions — takes effect on the very next request, no redeploy needed. "Owner" always keeps bypass access so no combination of unchecked boxes can lock everyone out.</p>`;
+        <p class="edit-modal-note tgroute-footnote">Maintenance/Coming soon blocks everyone whose role isn't checked in the second dropdown — Home page, form page, and the API itself. Owner is always allowed through even if unchecked. Changes apply on the next request once you hit Save — no redeploy needed.</p>`;
 
+      initFsDropdowns(acctBody, {
+        onStatusChange: (dd, newStatus) => {
+          const row = dd.closest(".tgroute-row");
+          const rolesDd = row.querySelector('.fs-dropdown[data-field="roles"]');
+          const rolesTrigger = rolesDd.querySelector(".fs-dropdown-trigger");
+          const isActiveNow = newStatus === "active";
+          rolesDd.classList.toggle("fs-dropdown-na", isActiveNow);
+          rolesTrigger.disabled = isActiveNow ? true : !canEdit;
+          rolesTrigger.textContent = isActiveNow ? "Not applicable while Active" : fsRoleSummary(rolesDd.dataset.values ? rolesDd.dataset.values.split(",").filter(Boolean) : []);
+        },
+        onRoleToggle: (dd, selectedRoles) => {
+          dd.querySelector(".fs-dropdown-trigger").textContent = fsRoleSummary(selectedRoles);
+        },
+      });
       acctBody.querySelectorAll(".fs-save").forEach((btn) => {
         btn.addEventListener("click", () => saveFeatureStatusRow(btn.closest(".tgroute-row")));
       });
@@ -1025,8 +1065,9 @@
 
     async function saveFeatureStatusRow(row) {
       const itemId = row.dataset.item;
-      const status = row.querySelector(".fs-status-select").value;
-      const bypassRoles = Array.from(row.querySelectorAll(".fs-role:checked")).map((cb) => cb.value);
+      const status = row.querySelector('.fs-dropdown[data-field="status"]').dataset.value;
+      const rolesDd = row.querySelector('.fs-dropdown[data-field="roles"]');
+      const bypassRoles = rolesDd.dataset.values ? rolesDd.dataset.values.split(",").filter(Boolean) : [];
       setAcctNote("Saving…");
       const res = await window.AgentAuth.authFetch("/api/admin/feature-status", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -1458,6 +1499,7 @@
     function closeAcctModal() {
       acctBackdrop.classList.remove("is-open");
       acctMode = null;
+      cleanupOrphanedFsDropdownMenus();
     }
     document.getElementById("acctModalClose").addEventListener("click", closeAcctModal);
     acctBackdrop.addEventListener("click", (e) => { if (e.target === acctBackdrop) closeAcctModal(); });

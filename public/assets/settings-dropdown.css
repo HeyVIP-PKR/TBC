@@ -1,0 +1,47 @@
+/**
+ * Custom dropdown used by the Settings admin panel (status picker +
+ * multi-select role picker). Not a plain <select> — browsers render
+ * <select> popups unstyled/white by default, so this is a from-scratch
+ * dark-themed dropdown instead.
+ *
+ * The menu uses position:fixed and gets moved to a direct child of
+ * <body> while open (see settings-dropdown.js) so it can float above
+ * the modal's own scrolling row list without being clipped.
+ *
+ * Reuses the same CSS vars as the rest of the theme:
+ * --field-bg, --border, --ink, --ink-soft, --card-bg, --panel-border,
+ * --sidebar-item-hover.
+ */
+
+.fs-dropdown { position: relative; flex: 1; min-width: 0; }
+.fs-dropdown-trigger {
+  width: 100%; text-align: left; background: var(--field-bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px 28px 7px 9px; font-size: 12px; color: var(--ink);
+  font-family: inherit; cursor: pointer; position: relative;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fs-dropdown-trigger::after {
+  content: "▾"; position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
+  color: var(--ink-soft); font-size: 10px; pointer-events: none;
+}
+.fs-dropdown-trigger:focus, .fs-dropdown.open .fs-dropdown-trigger { outline: none; border-color: var(--accent-gold); }
+.fs-dropdown-trigger:disabled { cursor: not-allowed; opacity: 0.6; }
+/* "Not applicable" state — the bypass-role picker while the parent
+   item's status is "active". */
+.fs-dropdown-na .fs-dropdown-trigger { color: var(--ink-soft); font-style: italic; cursor: default; opacity: 0.6; }
+
+.fs-dropdown-menu {
+  display: none; position: fixed; z-index: 1000;
+  background: var(--card-bg); border: 1px solid var(--panel-border); border-radius: 10px;
+  padding: 4px; box-shadow: 0 10px 24px -8px rgba(0, 0, 0, 0.5);
+  max-height: 260px; overflow-y: auto;
+}
+.fs-dropdown-option {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 9px; border-radius: 7px; font-size: 12px; color: var(--ink);
+  cursor: pointer; white-space: nowrap;
+}
+.fs-dropdown-option:hover { background: var(--sidebar-item-hover); }
+.fs-dropdown-option .fs-check { color: var(--accent-gold); font-weight: 700; visibility: hidden; }
+.fs-dropdown-option.selected { background: rgba(200, 145, 47, 0.14); }
+.fs-dropdown-option.selected .fs-check { visibility: visible; }

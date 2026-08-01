@@ -527,23 +527,12 @@ a { color: inherit; text-decoration: none; }
 .tgroute-footnote { margin-top: 12px; }
 
 /* ---- Settings (Maintenance / Coming soon toggle) — reuses .tgroute-row/
-   .route-tag/.tgroute-action-btn styling above, adds its own field layout
-   since each row needs a status select + a grid of role checkboxes
-   instead of a couple of text inputs. */
+   .route-tag/.tgroute-action-btn styling above; the status + role fields
+   themselves are .fs-dropdown instances (see settings-dropdown.css). */
 .fs-fields { flex-wrap: wrap; align-items: flex-start; }
-.fs-status-select {
-  min-width: 150px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px;
-  padding: 7px 9px; font-size: 12px; color: var(--ink); font-family: inherit;
-}
-.fs-role-grid { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; flex: 1; min-width: 200px; }
-.fs-role-check {
-  display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--ink-soft);
-  text-transform: capitalize; cursor: pointer; user-select: none;
-}
-.fs-role-check input[type="checkbox"] { accent-color: var(--accent-gold); cursor: pointer; }
-.fs-role-check input[type="checkbox"]:disabled { cursor: not-allowed; }
+.fs-fields .fs-dropdown { min-width: 170px; }
 @media (max-width: 720px) {
-  .fs-role-grid { min-width: 100%; }
+  .fs-fields .fs-dropdown { min-width: 100%; }
 }
 
 
@@ -641,19 +630,49 @@ a { color: inherit; text-decoration: none; }
 .sidebar-item.expandable { cursor: pointer; user-select: none; }
 .sidebar-item.expandable .arrow { transition: transform 0.15s ease; }
 .sidebar-item.expandable.open .arrow { transform: rotate(90deg); }
-.sidebar-subitems {
-  display: none; margin: -2px 0 12px 22px; padding-left: 14px;
-  border-left: 2px solid var(--panel-border);
+
+/* Account Management — "one continuous card" style: the toggle header
+   and its sub-items live inside one rounded, bordered group instead of
+   an indented tree line, so it reads as a single self-contained panel. */
+.am-group {
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background: var(--sidebar-item-bg);
+  overflow: hidden;
+  margin-bottom: 16px;
+  transition: border-color 0.15s ease;
 }
-.sidebar-subitems.open { display: block; }
+.am-group:has(.am-toggle:hover),
+.am-group:has(.sidebar-subitems.open) { border-color: var(--panel-border); }
+.am-group .am-toggle {
+  margin-bottom: 0;
+  border: none;
+  border-left: 3px solid transparent;
+  border-radius: 0;
+  background: transparent;
+}
+.am-group .am-toggle:hover { background: var(--sidebar-item-hover); transform: none; }
+.am-group .sidebar-subitems {
+  display: none; margin: 0; padding: 6px; border-left: none;
+  border-top: 1px solid var(--panel-border);
+}
+.am-group .sidebar-subitems.open { display: block; }
 .sidebar-subitem {
+  position: relative;
   display: flex; align-items: center; gap: 9px; padding: 9px 10px;
   border-radius: 10px; font-size: 12.5px; font-weight: 600;
   color: var(--ink-soft); cursor: pointer; margin-bottom: 4px;
   transition: background 0.15s ease, color 0.15s ease;
 }
 .sidebar-subitem:hover { background: var(--sidebar-item-hover); color: var(--ink); }
-.sidebar-subitem .sub-icon { font-size: 13px; }
+/* Hover circle behind each row's icon — color comes from that row's own
+   --sub-accent inline style, so every row can have a different tint. */
+.sidebar-subitem .sub-icon {
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px; transition: background 0.15s ease;
+}
+.sidebar-subitem:hover .sub-icon { background: var(--sub-accent, rgba(255, 255, 255, 0.1)); }
 .brand-checks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .brand-checks label {
   display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px;

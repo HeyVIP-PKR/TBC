@@ -5,9 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>PKR CS Team - TBC</title>
 <link rel="stylesheet" href="/assets/style.css" />
+<link rel="stylesheet" href="/assets/feature-status.css" />
 <script src="/assets/theme.js"></script>
 <script src="/assets/starfield.js" defer></script>
 <script src="/assets/authguard.js"></script>
+<script src="/assets/apply-feature-status.js"></script>
 </head>
 <body>
   <header class="topbar">
@@ -89,6 +91,7 @@
         <div class="sidebar-subitem" id="subWhitelistIp" style="display:none;"><span class="sub-icon">🌐</span> Whitelist IP</div>
         <div class="sidebar-subitem" id="subTgRoutes" style="display:none;"><span class="sub-icon">📡</span> TG Group / Channel</div>
         <div class="sidebar-subitem" id="subDepositSheets" style="display:none;"><span class="sub-icon">📊</span> Deposit Sheet Link</div>
+        <div class="sidebar-subitem" id="subSettings" style="display:none;"><span class="sub-icon">🚧</span> Settings</div>
         <div class="sidebar-subitem" id="subResetPassword"><span class="sub-icon">🔑</span> Reset Password</div>
         <div class="sidebar-subitem" id="subAgentProfile" style="display:none;"><span class="sub-icon">🪪</span> Agent Profile</div>
       </div>
@@ -96,26 +99,26 @@
     <main class="hub-main">
       <div class="inner">
         <div class="tool-cards">
-          <a href="/threads.html" class="tool-card" id="threadsCard" style="--tool-accent:#38bdf8;">
+          <a href="/threads.html" class="tool-card" id="threadsCard" data-feature-item="tg_reply_threads" style="--tool-accent:#38bdf8;">
             <div class="t-icon">💭<span class="t-badge" id="threadsUnreadBadge"></span></div>
             <div class="t-name">TG Reply Threads</div>
             <div class="t-desc">Track Telegram replies to your form submissions in real-time</div>
             <div class="t-sub-stat" id="threadsUnsolvedStat"></div>
             <span class="t-arrow">&rarr;</span>
           </a>
-          <a href="/promo.html" class="tool-card" style="--tool-accent:#f472b6;">
+          <a href="/promo.html" class="tool-card" data-feature-item="promo_code_search" style="--tool-accent:#f472b6;">
             <div class="t-icon">🎟️</div>
             <div class="t-name">Promo Code Search</div>
             <div class="t-desc">Search multiple promo codes at once</div>
             <span class="t-arrow">&rarr;</span>
           </a>
-          <a href="/deposit-issue.html" class="tool-card" style="--tool-accent:#4fa6f5;">
+          <a href="/deposit-issue.html" class="tool-card" data-feature-item="deposit_issue" style="--tool-accent:#4fa6f5;">
             <div class="t-icon">💳</div>
             <div class="t-name">Deposit Issue</div>
             <div class="t-desc">Search PKR Deposit Support records and update CS fields</div>
             <span class="t-arrow">&rarr;</span>
           </a>
-          <a href="/deposit-backup.html" class="tool-card" style="--tool-accent:#8b93b8;">
+          <a href="/deposit-backup.html" class="tool-card" data-feature-item="deposit_backup" style="--tool-accent:#8b93b8;">
             <div class="t-icon">💻</div>
             <div class="t-name">Deposit Backup</div>
             <div class="t-desc">Search across all backup sheets</div>
@@ -307,6 +310,7 @@
       const a = document.createElement("a");
       a.href = `/form.html?module=${m.id}`;
       a.className = "sidebar-item";
+      a.dataset.featureItem = m.id;
       a.style.setProperty("--item-accent", m.accent);
       a.innerHTML = `
         <div class="icon" style="background:${m.accent}33;">${m.icon}</div>
@@ -329,6 +333,11 @@
       });
       list.appendChild(a);
     });
+
+    // Gray-out/badge any Home-card or sidebar-module link currently under
+    // Maintenance/Coming soon — see functions/_shared/featureStatus.js.
+    // UX only; the real block is server-side in submit.js/threads.js/etc.
+    applyFeatureStatuses();
 
     // ---- Account Management (sidebar dropdown + 4 focused modals) ----
     // Rank matches functions/_shared/accounts.js ROLE_RANK exactly — keep
@@ -366,9 +375,10 @@
       { id: "whitelistIp", name: "Whitelist IP", icon: "🌐" },
       { id: "tgRoutes", name: "TG Group / Channel", icon: "📡" },
       { id: "depositSheets", name: "Deposit Sheet Link", icon: "📊" },
+      { id: "settings", name: "Settings", icon: "🚧" },
       { id: "agentProfile", name: "Agent Profile", icon: "🪪" },
     ];
-    const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "agentProfile"];
+    const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile"];
     // Must match defaultSectionsForRank()/defaultEditForRank() in
     // functions/_shared/accounts.js exactly:
     //   agent -> nothing, senior -> createAccount, admin -> +whitelistIp
@@ -410,6 +420,7 @@
     document.getElementById("subWhitelistIp").style.display = canSeeAdminSection("whitelistIp") ? "flex" : "none";
     document.getElementById("subTgRoutes").style.display = canSeeAdminSection("tgRoutes") ? "flex" : "none";
     document.getElementById("subDepositSheets").style.display = canSeeAdminSection("depositSheets") ? "flex" : "none";
+    document.getElementById("subSettings").style.display = canSeeAdminSection("settings") ? "flex" : "none";
     document.getElementById("subAgentProfile").style.display = canSeeAdminSection("agentProfile") ? "flex" : "none";
 
     const acctToggle = document.getElementById("acctMgmtToggle");
@@ -423,6 +434,7 @@
     document.getElementById("subWhitelistIp").addEventListener("click", () => openAcctModal("whitelist"));
     document.getElementById("subTgRoutes").addEventListener("click", () => openAcctModal("tgroutes"));
     document.getElementById("subDepositSheets").addEventListener("click", () => openAcctModal("depositsheets"));
+    document.getElementById("subSettings").addEventListener("click", () => openAcctModal("settings"));
     document.getElementById("subResetPassword").addEventListener("click", () => openAcctModal("reset"));
     document.getElementById("subAgentProfile").addEventListener("click", () => openAcctModal("profile"));
     document.getElementById("acctProfileRoleFilter").addEventListener("change", () => renderAgentProfileTable());
@@ -463,14 +475,12 @@
       acctBody.innerHTML = '<p class="edit-modal-note">Loading…</p>';
       acctBackdrop.classList.add("is-open");
       const modalEl = acctBackdrop.querySelector(".edit-modal");
-      modalEl.classList.toggle("wide", mode === "profile" || mode === "tgroutes" || mode === "depositsheets");
-      // "profile", "tgroutes", and "depositsheets" all use per-row inline
-      // save buttons instead of one global footer Save (too many
-      // independently-editable rows for a single "Save" to mean anything
-      // useful). With Cancel removed (closing is via the X button now),
-      // the whole actions row would otherwise just be dead space when
-      // Save is hidden — hide the row itself, not just the button inside it.
-      const showFooterSave = mode !== "profile" && mode !== "tgroutes" && mode !== "depositsheets";
+      modalEl.classList.toggle("wide", mode === "profile" || mode === "tgroutes" || mode === "depositsheets" || mode === "settings");
+      // "profile", "tgroutes", "depositsheets", and "settings" all use
+      // per-row inline save buttons instead of one global footer Save
+      // (too many independently-editable rows for a single "Save" to
+      // mean anything useful).
+      const showFooterSave = mode !== "profile" && mode !== "tgroutes" && mode !== "depositsheets" && mode !== "settings";
       document.getElementById("acctModalSave").style.display = showFooterSave ? "" : "none";
       document.getElementById("acctModalActions").style.display = showFooterSave ? "" : "none";
       const roleFilterEl = document.getElementById("acctProfileRoleFilter");
@@ -576,6 +586,11 @@
       if (mode === "depositsheets") {
         acctTitle.textContent = "Deposit Sheet Link";
         await loadDepositSheets();
+      }
+
+      if (mode === "settings") {
+        acctTitle.textContent = "Settings";
+        await loadFeatureStatus();
       }
     }
 
@@ -939,6 +954,103 @@
       acctDepositSheetsData.backup[brandId] = data.backup;
       setAcctNote("Rolled over — paste the new month's link and Save.", "ok");
       renderDepositSheets();
+    }
+
+    // ---- Settings (Maintenance / Coming soon toggle) ----
+    // One row per controllable item — Active / Maintenance / Coming soon,
+    // plus which roles can bypass it while it's off. Backed by
+    // /api/admin/feature-status, same override-over-code-default layering
+    // as TG Group/Channel and Deposit Sheet Link above. Live — no redeploy
+    // needed; the "active" pages/APIs re-check this on every request.
+    let acctFeatureStatusData = null; // { items, statuses }
+    const FS_STATUS_OPTIONS = [
+      { value: "active", label: "✅ Active" },
+      { value: "maintenance", label: "🚧 Maintenance" },
+      { value: "coming_soon", label: "🔜 Coming soon" },
+    ];
+    const FS_ROLE_OPTIONS = ["agent", "senior", "admin", "superadmin", "owner"];
+
+    async function loadFeatureStatus() {
+      const res = await window.AgentAuth.authFetch("/api/admin/feature-status");
+      const data = await res.json();
+      if (!data.ok) {
+        acctBody.innerHTML = `<p class="edit-modal-note err">${acctEsc(data.error || "Failed to load.")}</p>`;
+        return;
+      }
+      acctFeatureStatusData = data;
+      renderFeatureStatus();
+    }
+
+    function renderFeatureStatus() {
+      if (!acctFeatureStatusData) return;
+      const { items, statuses } = acctFeatureStatusData;
+      const canEdit = canEditAdminSection("settings");
+      const roAttr = canEdit ? "" : "disabled";
+
+      const rowsHtml = items.map((item) => {
+        const s = statuses[item.id] || { status: "active", bypassRoles: ["superadmin", "owner"] };
+        const statusOptionsHtml = FS_STATUS_OPTIONS.map((o) => `<option value="${o.value}"${o.value === s.status ? " selected" : ""}>${o.label}</option>`).join("");
+        const roleCheckboxesHtml = FS_ROLE_OPTIONS.map((r) => `
+          <label class="fs-role-check"><input type="checkbox" class="fs-role" value="${r}" ${s.bypassRoles.includes(r) ? "checked" : ""} ${r === "owner" ? "disabled" : roAttr} /> ${r}</label>
+        `).join("");
+        return `
+          <div class="tgroute-row" data-item="${acctEsc(item.id)}">
+            <div class="tgroute-mod-name">${item.emoji} ${acctEsc(item.name)}
+              <span class="route-tag${s.status !== "active" ? " custom" : ""}">${s.status === "active" ? "active" : s.status === "maintenance" ? "maintenance" : "coming soon"}</span>
+            </div>
+            <div class="tgroute-fields fs-fields">
+              <select class="fs-status-select" ${roAttr}>${statusOptionsHtml}</select>
+              <div class="fs-role-grid">${roleCheckboxesHtml}</div>
+              ${canEdit ? `<div class="tgroute-row-actions">
+                <button type="button" class="tgroute-action-btn fs-save">Save</button>
+                ${s.status !== "active" ? '<button type="button" class="tgroute-action-btn tgroute-action-secondary fs-reset">Reset to Active</button>' : ""}
+              </div>` : ""}
+            </div>
+          </div>`;
+      }).join("");
+
+      acctBody.innerHTML = `
+        <div class="tgroute-modules">${rowsHtml}</div>
+        <hr class="tgroute-divider" />
+        ${canEdit ? "" : '<p class="edit-modal-note">View only.</p>'}
+        <p class="edit-modal-note tgroute-footnote">Flip any item to Maintenance/Coming soon to gray it out on the Home page and block submissions — takes effect on the very next request, no redeploy needed. "Owner" always keeps bypass access so no combination of unchecked boxes can lock everyone out.</p>`;
+
+      acctBody.querySelectorAll(".fs-save").forEach((btn) => {
+        btn.addEventListener("click", () => saveFeatureStatusRow(btn.closest(".tgroute-row")));
+      });
+      acctBody.querySelectorAll(".fs-reset").forEach((btn) => {
+        btn.addEventListener("click", () => resetFeatureStatusRow(btn.closest(".tgroute-row")));
+      });
+    }
+
+    async function saveFeatureStatusRow(row) {
+      const itemId = row.dataset.item;
+      const status = row.querySelector(".fs-status-select").value;
+      const bypassRoles = Array.from(row.querySelectorAll(".fs-role:checked")).map((cb) => cb.value);
+      setAcctNote("Saving…");
+      const res = await window.AgentAuth.authFetch("/api/admin/feature-status", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "save", itemId, status, bypassRoles }),
+      });
+      const data = await res.json();
+      if (!data.ok) return setAcctNote(data.error || "Save failed.", "err");
+      acctFeatureStatusData.statuses[itemId] = data.status;
+      setAcctNote("Saved — takes effect on the next request.", "ok");
+      renderFeatureStatus();
+    }
+
+    async function resetFeatureStatusRow(row) {
+      const itemId = row.dataset.item;
+      setAcctNote("Resetting…");
+      const res = await window.AgentAuth.authFetch("/api/admin/feature-status", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset", itemId }),
+      });
+      const data = await res.json();
+      if (!data.ok) return setAcctNote(data.error || "Reset failed.", "err");
+      acctFeatureStatusData.statuses[itemId] = data.status;
+      setAcctNote("Reset to Active.", "ok");
+      renderFeatureStatus();
     }
 
     let acctOfficesById = {};

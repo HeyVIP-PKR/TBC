@@ -1,6 +1,7 @@
 import { getAccessToken } from "../../_shared/googleOAuth.js";
 import { verifyRequest, canSeeBrand } from "../../_shared/accounts.js";
 import { PKR_BRANDS, getDepositSheetOverride } from "../../_shared/depositSheets.js";
+import { getFeatureStatus, accountCanBypass } from "../../_shared/featureStatus.js";
 
 // Stable identifier for this module's slot in the "Deposit Sheet Link"
 // admin page — must match MODULE_SLOT in functions/api/admin/deposit-sheets.js.
@@ -121,6 +122,11 @@ async function handleSearch({ request, env }) {
   // attaches this header automatically.
   const account = await verifyRequest(request, env);
   if (!account) return json({ ok: false, error: "Login required." }, 401);
+
+  const featureStatus = await getFeatureStatus(env, "deposit_issue");
+  if (featureStatus.status !== "active" && !accountCanBypass(account, featureStatus.bypassRoles)) {
+    return json({ ok: false, error: featureStatus.status === "coming_soon" ? "Deposit Issue isn't available yet." : "Deposit Issue is currently under maintenance." }, 403);
+  }
 
   let body;
   try {

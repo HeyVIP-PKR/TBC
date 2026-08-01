@@ -29,6 +29,7 @@
 import { getAccessToken } from "../../_shared/googleOAuth.js";
 import { verifyRequest, canSeeBrand } from "../../_shared/accounts.js";
 import { PKR_BRANDS, getDepositBackup } from "../../_shared/depositSheets.js";
+import { getFeatureStatus, accountCanBypass } from "../../_shared/featureStatus.js";
 
 // Same column layout as Deposit Issue's search.js — keep these two in
 // sync if a department's sheet is ever reordered (confirmed identical
@@ -126,6 +127,11 @@ export async function onRequestPost(context) {
 async function handleSearch({ request, env }) {
   const account = await verifyRequest(request, env);
   if (!account) return json({ ok: false, error: "Login required." }, 401);
+
+  const featureStatus = await getFeatureStatus(env, "deposit_backup");
+  if (featureStatus.status !== "active" && !accountCanBypass(account, featureStatus.bypassRoles)) {
+    return json({ ok: false, error: featureStatus.status === "coming_soon" ? "Deposit Backup isn't available yet." : "Deposit Backup is currently under maintenance." }, 403);
+  }
 
   let body;
   try {

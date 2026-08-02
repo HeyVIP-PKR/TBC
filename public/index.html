@@ -10,6 +10,7 @@
 <script src="/assets/theme.js"></script>
 <script src="/assets/starfield.js" defer></script>
 <script src="/assets/authguard.js"></script>
+<script src="/assets/announcement-banner.js" defer></script>
 <script src="/assets/apply-feature-status.js"></script>
 <script src="/assets/settings-dropdown.js"></script>
 </head>
@@ -27,6 +28,7 @@
   </header>
 
   <nav class="brand-row" id="brandRow"><div class="brand-row-track" id="brandRowTrack"></div></nav>
+  <div id="announcementBanner"></div>
 
   <div class="edit-modal-backdrop" id="editModalBackdrop">
     <div class="edit-modal">
@@ -103,6 +105,13 @@
     <main class="hub-main">
       <div class="inner">
         <div class="tool-cards">
+          <a href="/announcements.html" class="tool-card" id="announceCard" style="--tool-accent:#f3c463; display:none;">
+            <div class="t-icon" id="announceIcon">📢</div>
+            <div class="t-name">Announcement</div>
+            <div class="t-desc">Set the site-wide reminder banner</div>
+            <div class="t-sub-stat" id="announceStat"></div>
+            <span class="t-arrow">&rarr;</span>
+          </a>
           <a href="/threads.html" class="tool-card" id="threadsCard" data-feature-item="tg_reply_threads" style="--tool-accent:#38bdf8;">
             <div class="t-icon">💭<span class="t-badge" id="threadsUnreadBadge"></span></div>
             <div class="t-name">TG Reply Threads</div>
@@ -361,6 +370,26 @@
     const isSenior = myRank >= ROLE_RANK.senior;   // gains an account-picker on Reset Password
     const isAdmin = myRank >= ROLE_RANK.admin;
     const isSuperAdmin = myRank >= ROLE_RANK.superadmin;
+
+    // ---- Announcement card: admin+ only, breathes while at least one
+    // announcement is currently active ----
+    const announceCard = document.getElementById("announceCard");
+    if (announceCard) announceCard.style.display = isAdmin ? "" : "none";
+    async function loadAnnounceCardStat() {
+      if (!isAdmin) return;
+      try {
+        const res = await window.AgentAuth.authFetch("/api/announcements", { cache: "no-store" });
+        const data = await res.json();
+        const count = data.ok ? (data.announcements || []).length : 0;
+        document.getElementById("announceIcon")?.classList.toggle("breathing", count > 0);
+        const stat = document.getElementById("announceStat");
+        if (stat) stat.textContent = count > 0 ? `${count} active` : "None active";
+      } catch {
+        // Non-fatal — card just shows without the live count.
+      }
+    }
+    loadAnnounceCardStat();
+    setInterval(loadAnnounceCardStat, 30000);
 
     // ---- Account Management Access (2026-07) — client-side mirror of
     // functions/_shared/accounts.js canSeeAdminSection()/

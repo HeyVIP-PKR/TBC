@@ -20,3 +20,11 @@ id = "c8ca68f7781a4f1b88d0997af023aec7"
 # Non-secret local defaults for `wrangler pages dev`. Real deployments set
 # TELEGRAM_BOT_TOKEN as an encrypted secret in the Cloudflare dashboard —
 # do NOT put the real token here or commit it.
+
+# Optional — "who set this announcement" audit trail (see
+# functions/_shared/announcements.js). Leave unset and the Sheet log
+# simply no-ops; the Announcement feature itself works fine without it,
+# this only affects the record-keeping side. ANNOUNCEMENT_LOG_TAB
+# defaults to "Log" if omitted.
+# ANNOUNCEMENT_LOG_SHEET_ID = "<the Sheet's ID from its URL>"
+# ANNOUNCEMENT_LOG_TAB = "Log"

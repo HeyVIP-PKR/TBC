@@ -835,6 +835,7 @@ a { color: inherit; text-decoration: none; }
   animation: breathe 1.8s ease-in-out infinite;
 }
 @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.tool-card .t-icon.breathing { animation: breathe 1.8s ease-in-out infinite; }
 @media (max-width: 560px) {
   .tool-cards { grid-template-columns: 1fr; }
 }
@@ -1000,6 +1001,23 @@ a { color: inherit; text-decoration: none; }
 .mention-from { color: var(--ink-soft); font-size: 11.5px; }
 
 .threads-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+
+/* ---- Announcement reminder banner (public/assets/announcement-banner.js) ---- */
+#announcementBanner:empty { display: none; }
+.announcement-banner {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 24px; background: rgba(200, 145, 47, 0.14);
+  border-top: 1px solid var(--accent-gold); border-bottom: 1px solid var(--accent-gold);
+}
+.announcement-banner-icon { font-size: 16px; flex-shrink: 0; line-height: 1.4; }
+.announcement-banner-body { flex: 1; min-width: 0; }
+.announcement-banner-label { font-size: 10.5px; font-weight: 800; letter-spacing: 0.05em; color: var(--accent-gold); }
+.announcement-banner-text { font-size: 12.5px; color: var(--ink); line-height: 1.5; margin-top: 2px; }
+.announcement-banner-dots { display: flex; gap: 4px; margin-top: 6px; }
+.announcement-banner-dots span { width: 5px; height: 5px; border-radius: 50%; background: rgba(200, 145, 47, 0.35); }
+.announcement-banner-dots span.on { background: var(--accent-gold); }
+.announcement-banner-close { background: none; border: none; color: var(--accent-gold); font-size: 13px; cursor: pointer; flex-shrink: 0; padding: 2px; }
+.announcement-banner-close:hover { opacity: 0.7; }
 .threads-placeholder { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--ink-soft); font-size: 14px; text-align: center; }
 .thread-top-fixed { flex-shrink: 0; padding: 30px 40px 0; }
 .thread-scroll-area { flex: 1; overflow-y: auto; padding: 20px 40px; min-height: 0; }

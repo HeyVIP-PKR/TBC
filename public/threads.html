@@ -494,12 +494,26 @@
       bar.style.display = "flex";
       document.getElementById("bulkCount").textContent = selectedIds.size;
       const inSelection = [...activeThreads, ...solvedThreads].filter((t) => selectedIds.has(t.id));
-      const anyUnread = inSelection.some((t) => Math.max(0, (t.replyCount || 0) - getSeenCount(t.id)) > 0);
       const readBtn = document.getElementById("bulkReadBtn");
+      const solveBtn = document.getElementById("bulkSolveBtn");
+      const nothingSelected = inSelection.length === 0;
+      readBtn.disabled = nothingSelected;
+      solveBtn.disabled = nothingSelected;
+      if (nothingSelected) {
+        // Nothing to compute a real state from — show a neutral label
+        // rather than a stale/misleading "Mark as unread" / "Not solved"
+        // left over from whatever was last selected.
+        readBtn.textContent = "Mark as read/unread";
+        readBtn.dataset.mode = "";
+        solveBtn.textContent = "Solved/Not solved";
+        solveBtn.classList.remove("solve-accent");
+        solveBtn.dataset.mode = "";
+        return;
+      }
+      const anyUnread = inSelection.some((t) => Math.max(0, (t.replyCount || 0) - getSeenCount(t.id)) > 0);
       readBtn.textContent = anyUnread ? "✓ Mark as read" : "○ Mark as unread";
       readBtn.dataset.mode = anyUnread ? "read" : "unread";
       const anyUnsolved = inSelection.some((t) => !t.solved);
-      const solveBtn = document.getElementById("bulkSolveBtn");
       solveBtn.textContent = anyUnsolved ? "✅ Solved" : "✕ Not solved";
       solveBtn.classList.toggle("solve-accent", anyUnsolved);
       solveBtn.dataset.mode = anyUnsolved ? "solve" : "unsolve";
@@ -511,6 +525,8 @@
     function syncSectionSelectAll() {
       const activeAll = document.getElementById("activeSelectAll");
       const solvedAll = document.getElementById("solvedSelectAll");
+      activeAll.classList.toggle("visible", selectMode);
+      solvedAll.classList.toggle("visible", selectMode);
       activeAll.checked = activeThreads.length > 0 && activeThreads.every((t) => selectedIds.has(t.id));
       solvedAll.checked = solvedThreads.length > 0 && solvedThreads.every((t) => selectedIds.has(t.id));
     }

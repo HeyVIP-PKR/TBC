@@ -52,7 +52,7 @@
       <div class="announcement-banner">
         <span class="announcement-banner-icon breathing">📢</span>
         <div class="announcement-banner-body">
-          <div class="announcement-banner-label breathing">REMINDER<span id="annCounter"></span></div>
+          <div class="announcement-banner-label breathing"><span id="annLabel">REMINDER</span></div>
           <div class="announcement-banner-textwrap">
             <div class="announcement-banner-text" id="annTextA"></div>
             <div class="announcement-banner-text" id="annTextB"></div>
@@ -69,8 +69,8 @@
   }
 
   function renderDotsAndCounter(i) {
-    const counterEl = document.getElementById("annCounter");
-    if (counterEl) counterEl.textContent = visible.length > 1 ? ` (${i + 1}/${visible.length})` : "";
+    const labelEl = document.getElementById("annLabel");
+    if (labelEl) labelEl.textContent = (visible[i].topic || "Reminder").toUpperCase();
     const dotsEl = document.getElementById("annDots");
     if (dotsEl) {
       dotsEl.innerHTML = visible.length > 1

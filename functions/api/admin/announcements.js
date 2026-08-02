@@ -10,7 +10,7 @@
  *   POST { action: "delete", id } -> { ok: true }
  */
 import { authenticateStaff, ROLE_RANK, canSeeAdminSection, canEditAdminSection } from "../../_shared/accounts.js";
-import { listAllAnnouncements, saveAnnouncement, deleteAnnouncement } from "../../_shared/announcements.js";
+import { listAllAnnouncements, saveAnnouncement, deleteAnnouncement, ANNOUNCEMENT_TOPICS } from "../../_shared/announcements.js";
 
 export async function onRequestGet(context) {
   try {
@@ -29,7 +29,7 @@ async function handleGet({ request, env }) {
   }
 
   const announcements = await listAllAnnouncements(env);
-  return json({ ok: true, announcements });
+  return json({ ok: true, announcements, topics: ANNOUNCEMENT_TOPICS });
 }
 
 export async function onRequestPost(context) {
@@ -64,6 +64,7 @@ async function handlePost({ request, env }) {
     const announcement = await saveAnnouncement(env, {
       id: body.id || null,
       text,
+      topic: body.topic,
       enabled: !!body.enabled,
       startAt: body.startAt || null,
       endAt: body.endAt || null,

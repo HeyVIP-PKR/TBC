@@ -68,6 +68,7 @@ async function logToSheet(env, action, announcement, actorUsername) {
       timestamp: new Date().toISOString(),
       action,
       by: actorUsername,
+      topic: announcement.topic || "",
       text: announcement.text,
       enabled: announcement.enabled,
       startAt: announcement.startAt || "",
@@ -101,16 +102,20 @@ export async function getActiveAnnouncements(env) {
   return list.filter((a) => isEffectivelyActive(a, now)).sort((a, b) => new Date(a.updatedAt) - new Date(b.updatedAt));
 }
 
-export async function saveAnnouncement(env, { id, text, enabled, startAt, endAt }, actorUsername) {
+export const ANNOUNCEMENT_TOPICS = ["Friendly reminder", "Game maintenance", "System maintenance", "Deposit / Withdraw Issues"];
+const DEFAULT_TOPIC = ANNOUNCEMENT_TOPICS[0];
+
+export async function saveAnnouncement(env, { id, text, topic, enabled, startAt, endAt }, actorUsername) {
   const list = await readAll(env);
   const now = new Date().toISOString();
+  const safeTopic = ANNOUNCEMENT_TOPICS.includes(topic) ? topic : DEFAULT_TOPIC;
   let saved;
   const idx = id ? list.findIndex((a) => a.id === id) : -1;
   if (idx >= 0) {
-    saved = { ...list[idx], text, enabled: !!enabled, startAt: startAt || null, endAt: endAt || null, updatedBy: actorUsername, updatedAt: now };
+    saved = { ...list[idx], text, topic: safeTopic, enabled: !!enabled, startAt: startAt || null, endAt: endAt || null, updatedBy: actorUsername, updatedAt: now };
     list[idx] = saved;
   } else {
-    saved = { id: newId(), text, enabled: !!enabled, startAt: startAt || null, endAt: endAt || null, createdBy: actorUsername, createdAt: now, updatedBy: actorUsername, updatedAt: now };
+    saved = { id: newId(), text, topic: safeTopic, enabled: !!enabled, startAt: startAt || null, endAt: endAt || null, createdBy: actorUsername, createdAt: now, updatedBy: actorUsername, updatedAt: now };
     list.unshift(saved);
   }
   await writeAll(env, list);

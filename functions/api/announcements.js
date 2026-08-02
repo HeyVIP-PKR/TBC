@@ -26,7 +26,7 @@ export async function onRequestGet({ request, env }) {
     const [active, settings] = await Promise.all([getActiveAnnouncements(env), getAnnouncementSettings(env)]);
     return json({
       ok: true,
-      announcements: active.map((a) => ({ id: a.id, text: a.text, startAt: a.startAt, endAt: a.endAt })),
+      announcements: active.map((a) => ({ id: a.id, text: a.text, topic: a.topic, startAt: a.startAt, endAt: a.endAt })),
       rotateIntervalMs: settings.rotateIntervalMs,
     });
   } catch (e) {

@@ -79,6 +79,7 @@
 
     const authFetch = window.AgentAuth.authFetch;
     let announcements = [];
+    let topics = ["Friendly reminder", "Game maintenance", "System maintenance", "Deposit / Withdraw Issues"]; // overwritten by the server's list once loaded — kept here just so the dropdown isn't empty for a split second
     let selectedId = null; // null + mode "new" = creating; otherwise editing this id
     let mode = canEditAnnouncements ? "new" : "list"; // "list" | "new" | "edit"
 
@@ -120,6 +121,7 @@
         return;
       }
       announcements = data.announcements;
+      if (data.topics && data.topics.length) topics = data.topics;
       if (!canEditAnnouncements && mode === "list" && announcements.length) { selectedId = announcements[0].id; mode = "edit"; }
       render();
     }
@@ -162,7 +164,7 @@
         el.innerHTML = `
           <div class="meta">
             <div class="t-title">${esc(a.text)}</div>
-            <div class="t-sub">${esc(a.updatedBy || a.createdBy || "")} · ${fmtLocal(a.updatedAt)}</div>
+            <div class="t-sub">${a.topic ? esc(a.topic) + " · " : ""}${esc(a.updatedBy || a.createdBy || "")} · ${fmtLocal(a.updatedAt)}</div>
           </div>
           <span style="font-size:10.5px; font-weight:700; color:${status.color}; flex-shrink:0;">${status.label}</span>
         `;
@@ -182,6 +184,12 @@
       area.innerHTML = `
         <div style="flex:1; overflow-y:auto; min-height:0;">
           <p class="edit-modal-title" style="margin-bottom:18px;">${mode === "new" ? "New announcement" : "Edit announcement"}</p>
+          <div class="field">
+            <label>Issue topic<span class="required">*</span></label>
+            <select id="fTopic" ${ro}>
+              ${topics.map((t) => `<option value="${esc(t)}" ${a && a.topic === t ? "selected" : ""}>${esc(t)}</option>`).join("")}
+            </select>
+          </div>
           <div class="field">
             <label>Message<span class="required">*</span></label>
             <textarea id="fText" rows="8" placeholder="Shown in the reminder banner on every page" ${ro}>${esc(a ? a.text : "")}</textarea>
@@ -219,6 +227,7 @@
 
     async function save() {
       const text = document.getElementById("fText").value.trim();
+      const topic = document.getElementById("fTopic").value;
       const errEl = document.getElementById("formErr");
       errEl.textContent = "";
       if (!text) { errEl.textContent = "Message can't be empty."; return; }
@@ -232,7 +241,7 @@
       const id = mode === "edit" ? selectedId : null;
       const res = await authFetch("/api/admin/announcements", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "save", id, text, enabled, startAt, endAt }),
+        body: JSON.stringify({ action: "save", id, text, topic, enabled, startAt, endAt }),
       });
       const data = await res.json();
       if (!data.ok) { errEl.textContent = data.error || "Save failed."; return; }

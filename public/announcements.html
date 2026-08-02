@@ -38,7 +38,7 @@
 
     <main class="threads-main">
       <div class="thread-scroll-area" style="padding:30px 40px; display:flex; justify-content:center;">
-        <div id="formArea" style="max-width:520px; width:100%;"></div>
+        <div id="formArea" style="max-width:520px; width:100%; align-self:flex-start;"></div>
       </div>
     </main>
   </div>
@@ -124,6 +124,24 @@
       render();
     }
 
+    // Used by the 30s background poll — refreshes the sidebar list only.
+    // Never touches formArea: if the agent is mid-typing a new or edited
+    // announcement, a poll landing mid-keystroke would otherwise wipe out
+    // whatever they haven't saved yet (renderForm() rebuilds the textarea
+    // from server data). Save/Delete still call the full loadAnnouncements()
+    // above afterward, since at that point there's nothing unsaved to lose.
+    async function pollAnnouncements() {
+      try {
+        const res = await authFetch("/api/admin/announcements");
+        const data = await res.json();
+        if (!data.ok) return;
+        announcements = data.announcements;
+        renderList();
+      } catch {
+        // Non-fatal — list just stays as-is until the next poll.
+      }
+    }
+
     function render() {
       renderList();
       renderForm();
@@ -155,6 +173,7 @@
 
     function renderForm() {
       const area = document.getElementById("formArea");
+      area.classList.toggle("form-card", mode !== "list");
       if (mode === "list") { area.innerHTML = ""; return; }
       const a = mode === "edit" ? announcements.find((x) => x.id === selectedId) : null;
       const ro = canEditAnnouncements ? "" : "disabled";
@@ -240,7 +259,7 @@
     });
 
     loadAnnouncements();
-    setInterval(loadAnnouncements, 30000);
+    setInterval(pollAnnouncements, 30000);
   </script>
 </body>
 </html>

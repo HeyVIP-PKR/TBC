@@ -1012,7 +1012,8 @@ a { color: inherit; text-decoration: none; }
 .announcement-banner-icon { font-size: 16px; flex-shrink: 0; line-height: 1.4; }
 .announcement-banner-body { flex: 1; min-width: 0; }
 .announcement-banner-label { font-size: 10.5px; font-weight: 800; letter-spacing: 0.05em; color: var(--accent-gold); }
-.announcement-banner-text { font-size: 12.5px; color: var(--ink); line-height: 1.5; margin-top: 2px; }
+.announcement-banner-textwrap { display: grid; margin-top: 2px; }
+.announcement-banner-text { grid-column: 1; grid-row: 1; font-size: 12.5px; color: var(--ink); line-height: 1.5; }
 .announcement-banner-dots { display: flex; gap: 4px; margin-top: 6px; }
 .announcement-banner-dots span { width: 5px; height: 5px; border-radius: 50%; background: rgba(200, 145, 47, 0.35); }
 .announcement-banner-dots span.on { background: var(--accent-gold); }

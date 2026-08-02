@@ -11,8 +11,14 @@
  * and renders it as a dismissible reminder bar:
  *   - 0 active  -> renders nothing
  *   - 1 active  -> shown, static
- *   - 2+ active -> auto-rotates one at a time (see ROTATE_MS), with a
- *     "(2/3)" counter and small dots so it's clear more than one exists
+ *   - 2+ active -> auto-rotates one at a time (interval from the
+ *     Settings tab's rotation-speed control, default 5s), with a
+ *     "(2/3)" counter and small dots so it's clear more than one exists.
+ *     Rotating between two announcements fades the outgoing text out in
+ *     place while the incoming one slides in as full text from the
+ *     right (TRANSITION_MS) — no per-character typing, no page-load
+ *     jump: the text wrap uses a CSS grid overlap (see style.css) so
+ *     both messages share one auto-sized box instead of a fixed height.
  *
  * Dismiss (✕) is per-announcement and per-browser (localStorage), same
  * scope as threads.html's own "have I seen this" unread tracking — it
@@ -23,8 +29,9 @@
  */
 (function () {
   const POLL_MS = 60000;
+  const TRANSITION_MS = 2200;
   const DISMISSED_KEY = "dismissedAnnouncements";
-  let rotateMs = 5000; // overwritten by the server's configured value once loaded — see Settings tab
+  let rotateMs = 6000; // overwritten by the server's configured value once loaded — see Settings tab
 
   function getDismissed() {
     try { return new Set(JSON.parse(localStorage.getItem(DISMISSED_KEY) || "[]")); } catch { return new Set(); }
@@ -39,48 +46,100 @@
     localStorage.setItem(DISMISSED_KEY, JSON.stringify(arr.slice(-50)));
   }
 
-  function escapeHtml(str) {
-    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  }
-
   let items = [];
+  let visible = [];
   let rotateIndex = 0;
   let rotateTimer = null;
+
+  // Builds the banner's DOM shell fresh — called whenever the visible
+  // set changes (new data from a poll, or a dismiss). Rotation itself
+  // (see showItem below) never rebuilds this, it only touches the two
+  // text nodes inside it, which is what makes the slide transition
+  // possible in the first place (a full innerHTML replace every tick
+  // would just snap instantly, no transition to animate).
+  function buildSkeleton(slot) {
+    slot.innerHTML = `
+      <div class="announcement-banner">
+        <span class="announcement-banner-icon breathing">📢</span>
+        <div class="announcement-banner-body">
+          <div class="announcement-banner-label breathing">REMINDER<span id="annCounter"></span></div>
+          <div class="announcement-banner-textwrap">
+            <div class="announcement-banner-text" id="annTextA"></div>
+            <div class="announcement-banner-text" id="annTextB"></div>
+          </div>
+          <div class="announcement-banner-dots" id="annDots"></div>
+        </div>
+        <button type="button" class="announcement-banner-close" title="Dismiss">✕</button>
+      </div>
+    `;
+    slot.querySelector(".announcement-banner-close").addEventListener("click", () => {
+      dismiss(visible[rotateIndex].id);
+      paint();
+    });
+  }
+
+  function renderDotsAndCounter(i) {
+    const counterEl = document.getElementById("annCounter");
+    if (counterEl) counterEl.textContent = visible.length > 1 ? ` (${i + 1}/${visible.length})` : "";
+    const dotsEl = document.getElementById("annDots");
+    if (dotsEl) {
+      dotsEl.innerHTML = visible.length > 1
+        ? visible.map((_, di) => `<span class="${di === i ? "on" : ""}"></span>`).join("")
+        : "";
+    }
+  }
+
+  // animate=false is used for the very first paint of a given skeleton
+  // (nothing to transition FROM yet); animate=true is the actual
+  // rotation tick — outgoing text fades out in place, incoming text
+  // slides in as a complete block from the right.
+  function showItem(i, animate) {
+    rotateIndex = i;
+    const a = visible[i];
+    renderDotsAndCounter(i);
+    const front = document.getElementById("annTextA");
+    const back = document.getElementById("annTextB");
+    if (!front || !back) return;
+    if (!animate) {
+      front.textContent = a.text;
+      front.style.transition = "none"; front.style.opacity = "1"; front.style.transform = "none";
+      back.style.opacity = "0"; back.style.transform = "translateX(50px)";
+      return;
+    }
+    back.textContent = a.text;
+    back.style.transition = "none";
+    back.style.transform = "translateX(50px)";
+    back.style.opacity = "0";
+    requestAnimationFrame(() => {
+      front.style.transition = `opacity ${TRANSITION_MS}ms ease`;
+      front.style.opacity = "0";
+      back.style.transition = `transform ${TRANSITION_MS}ms ease, opacity ${TRANSITION_MS}ms ease`;
+      back.style.transform = "translateX(0)";
+      back.style.opacity = "1";
+    });
+    setTimeout(() => {
+      // Settle: A becomes the resting "front" copy again so the next
+      // rotation always fades FROM a clean, non-transitioning element.
+      front.textContent = a.text;
+      front.style.transition = "none"; front.style.opacity = "1"; front.style.transform = "none";
+      back.style.opacity = "0"; back.style.transform = "translateX(50px)";
+    }, TRANSITION_MS + 20);
+  }
 
   function paint() {
     const slot = document.getElementById("announcementBanner");
     if (!slot) return;
     clearInterval(rotateTimer);
     const dismissed = getDismissed();
-    const visible = items.filter((a) => !dismissed.has(a.id));
+    visible = items.filter((a) => !dismissed.has(a.id));
     if (!visible.length) { slot.innerHTML = ""; return; }
     if (rotateIndex >= visible.length) rotateIndex = 0;
-
-    const render = () => {
-      const a = visible[rotateIndex];
-      const counter = visible.length > 1 ? ` (${rotateIndex + 1}/${visible.length})` : "";
-      const dots = visible.length > 1
-        ? `<div class="announcement-banner-dots">${visible.map((_, i) => `<span class="${i === rotateIndex ? "on" : ""}"></span>`).join("")}</div>`
-        : "";
-      slot.innerHTML = `
-        <div class="announcement-banner">
-          <span class="announcement-banner-icon breathing">📢</span>
-          <div class="announcement-banner-body">
-            <div class="announcement-banner-label breathing">REMINDER${counter}</div>
-            <div class="announcement-banner-text">${escapeHtml(a.text)}</div>
-            ${dots}
-          </div>
-          <button type="button" class="announcement-banner-close" title="Dismiss">✕</button>
-        </div>
-      `;
-      slot.querySelector(".announcement-banner-close").addEventListener("click", () => {
-        dismiss(a.id);
-        paint();
-      });
-    };
-    render();
+    buildSkeleton(slot);
+    showItem(rotateIndex, false);
     if (visible.length > 1) {
-      rotateTimer = setInterval(() => { rotateIndex = (rotateIndex + 1) % visible.length; render(); }, rotateMs);
+      rotateTimer = setInterval(() => {
+        showItem((rotateIndex + 1) % visible.length, true);
+      }, rotateMs);
     }
   }
 

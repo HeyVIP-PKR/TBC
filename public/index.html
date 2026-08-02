@@ -105,7 +105,7 @@
     <main class="hub-main">
       <div class="inner">
         <div class="tool-cards">
-          <a href="/announcements.html" class="tool-card" id="announceCard" style="--tool-accent:#f3c463; display:none;">
+          <a href="/announcements.html" class="tool-card" id="announceCard" data-feature-item="announcements" style="--tool-accent:#f3c463; display:none;">
             <div class="t-icon" id="announceIcon">📢</div>
             <div class="t-name">Announcement</div>
             <div class="t-desc">Set the site-wide reminder banner</div>
@@ -371,12 +371,15 @@
     const isAdmin = myRank >= ROLE_RANK.admin;
     const isSuperAdmin = myRank >= ROLE_RANK.superadmin;
 
-    // ---- Announcement card: admin+ only, breathes while at least one
+    // ---- Announcement card: gated by the "announcements" admin section
+    // (defaults to admin+, but an Owner can grant/revoke it per account
+    // via Agent Profile — see accounts.js) — breathes while at least one
     // announcement is currently active ----
+    const canSeeAnnouncements = canSeeAdminSection("announcements");
     const announceCard = document.getElementById("announceCard");
-    if (announceCard) announceCard.style.display = isAdmin ? "" : "none";
+    if (announceCard) announceCard.style.display = canSeeAnnouncements ? "" : "none";
     async function loadAnnounceCardStat() {
-      if (!isAdmin) return;
+      if (!canSeeAnnouncements) return;
       try {
         const res = await window.AgentAuth.authFetch("/api/announcements", { cache: "no-store" });
         const data = await res.json();
@@ -410,20 +413,24 @@
       { id: "depositSheets", name: "Deposit Sheet Link", icon: "📊" },
       { id: "settings", name: "Settings", icon: "🚧" },
       { id: "agentProfile", name: "Agent Profile", icon: "🪪" },
+      { id: "announcements", name: "Announcement", icon: "📢" },
     ];
-    const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile"];
+    const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements"];
     // Must match defaultSectionsForRank()/defaultEditForRank() in
     // functions/_shared/accounts.js exactly:
-    //   agent -> nothing, senior -> createAccount, admin -> +whitelistIp
-    //   (view only), superadmin -> everything, fully editable.
+    //   agent -> nothing, senior -> createAccount,
+    //   admin -> +whitelistIp (view only) +announcements (view AND edit),
+    //   superadmin -> everything, fully editable.
     function defaultSectionsForRank(rank) {
       if (rank >= ROLE_RANK.superadmin) return "all";
-      if (rank >= ROLE_RANK.admin) return ["createAccount", "whitelistIp"];
+      if (rank >= ROLE_RANK.admin) return ["createAccount", "whitelistIp", "announcements"];
       if (rank >= ROLE_RANK.senior) return ["createAccount"];
       return [];
     }
     function defaultEditForRank(rank) {
-      return rank >= ROLE_RANK.superadmin ? "all" : [];
+      if (rank >= ROLE_RANK.superadmin) return "all";
+      if (rank >= ROLE_RANK.admin) return ["announcements"];
+      return [];
     }
     // Generic form — takes an arbitrary account object, used both for
     // "me" (authInfo) and for rendering someone ELSE's checkboxes in the
@@ -1080,9 +1087,29 @@
             <button type="button" class="tgroute-action-btn" id="mentionBackfillBtn" ${canEdit ? "" : "disabled"}>Run backfill</button>
             <p class="edit-modal-note" id="mentionBackfillStatus"></p>
           </div>
+        </div>
+
+        <hr class="tgroute-divider" />
+        <div class="mention-backfill-row">
+          <div class="mention-backfill-copy">
+            <div class="mention-backfill-title">Announcement rotation speed</div>
+            <p class="edit-modal-note">How long each announcement stays on screen before the reminder banner cycles to the next one — only matters when 2 or more are active at once.</p>
+          </div>
+          <div class="mention-backfill-action" style="text-align:left;">
+            <div style="display:flex; gap:8px; align-items:center;">
+              <input type="number" id="rotateAmount" min="1" style="width:70px; background:var(--field-bg); border:1.5px solid var(--border); border-radius:8px; padding:7px 9px; color:var(--ink); font-family:inherit; font-size:13px;" ${canEdit ? "" : "disabled"} />
+              <select id="rotateUnit" style="background:var(--field-bg); border:1.5px solid var(--border); border-radius:8px; padding:7px 9px; color:var(--ink); font-family:inherit; font-size:13px;" ${canEdit ? "" : "disabled"}>
+                <option value="seconds">Seconds</option>
+                <option value="minutes">Minutes</option>
+              </select>
+              ${canEdit ? '<button type="button" class="tgroute-action-btn" id="rotateSaveBtn">Save</button>' : ""}
+            </div>
+            <p class="edit-modal-note" id="rotateStatus"></p>
+          </div>
         </div>`;
 
       wireMentionBackfill();
+      loadAnnounceRotateSetting();
       initFsDropdowns(acctBody, {
         onStatusChange: (dd, newStatus) => {
           const row = dd.closest(".tgroute-row");
@@ -1151,6 +1178,55 @@
       } finally {
         btn.disabled = false;
       }
+    }
+
+    async function loadAnnounceRotateSetting() {
+      const amountEl = document.getElementById("rotateAmount");
+      const unitEl = document.getElementById("rotateUnit");
+      const statusEl = document.getElementById("rotateStatus");
+      if (!amountEl) return;
+      try {
+        const res = await window.AgentAuth.authFetch("/api/admin/announcement-settings");
+        const data = await res.json();
+        if (!data.ok) { statusEl.textContent = data.error || "Failed to load."; statusEl.className = "edit-modal-note err"; return; }
+        const ms = data.rotateIntervalMs;
+        // Show as whole minutes if it divides evenly and is at least a
+        // minute, otherwise seconds — just picks the tidier of the two
+        // for display; the stored value is always milliseconds either way.
+        if (ms >= 60000 && ms % 60000 === 0) {
+          amountEl.value = ms / 60000;
+          unitEl.value = "minutes";
+        } else {
+          amountEl.value = Math.round(ms / 1000);
+          unitEl.value = "seconds";
+        }
+      } catch {
+        // Non-fatal — inputs just stay at whatever they last showed.
+      }
+      document.getElementById("rotateSaveBtn")?.addEventListener("click", saveAnnounceRotateSetting);
+    }
+
+    async function saveAnnounceRotateSetting() {
+      const amount = Number(document.getElementById("rotateAmount").value);
+      const unit = document.getElementById("rotateUnit").value;
+      const statusEl = document.getElementById("rotateStatus");
+      if (!Number.isFinite(amount) || amount <= 0) {
+        statusEl.textContent = "Enter a number greater than 0.";
+        statusEl.className = "edit-modal-note err";
+        return;
+      }
+      const rotateIntervalMs = Math.round(amount * (unit === "minutes" ? 60000 : 1000));
+      statusEl.textContent = "Saving…";
+      statusEl.className = "edit-modal-note";
+      const res = await window.AgentAuth.authFetch("/api/admin/announcement-settings", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rotateIntervalMs }),
+      });
+      const data = await res.json();
+      if (!data.ok) { statusEl.textContent = data.error || "Save failed."; statusEl.className = "edit-modal-note err"; return; }
+      statusEl.textContent = "Saved — takes effect on the banner's next refresh (up to 60s, or instantly for this device).";
+      statusEl.className = "edit-modal-note ok";
+      window.refreshAnnouncementBanner?.();
     }
 
     async function saveFeatureStatusRow(row) {

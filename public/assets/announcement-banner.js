@@ -23,8 +23,8 @@
  */
 (function () {
   const POLL_MS = 60000;
-  const ROTATE_MS = 5000;
   const DISMISSED_KEY = "dismissedAnnouncements";
+  let rotateMs = 5000; // overwritten by the server's configured value once loaded — see Settings tab
 
   function getDismissed() {
     try { return new Set(JSON.parse(localStorage.getItem(DISMISSED_KEY) || "[]")); } catch { return new Set(); }
@@ -64,9 +64,9 @@
         : "";
       slot.innerHTML = `
         <div class="announcement-banner">
-          <span class="announcement-banner-icon">📢</span>
+          <span class="announcement-banner-icon breathing">📢</span>
           <div class="announcement-banner-body">
-            <div class="announcement-banner-label">REMINDER${counter}</div>
+            <div class="announcement-banner-label breathing">REMINDER${counter}</div>
             <div class="announcement-banner-text">${escapeHtml(a.text)}</div>
             ${dots}
           </div>
@@ -80,7 +80,7 @@
     };
     render();
     if (visible.length > 1) {
-      rotateTimer = setInterval(() => { rotateIndex = (rotateIndex + 1) % visible.length; render(); }, ROTATE_MS);
+      rotateTimer = setInterval(() => { rotateIndex = (rotateIndex + 1) % visible.length; render(); }, rotateMs);
     }
   }
 
@@ -89,6 +89,7 @@
       const res = await window.AgentAuth.authFetch("/api/announcements", { cache: "no-store" });
       const data = await res.json();
       items = data.ok ? (data.announcements || []) : [];
+      if (data.ok && Number.isFinite(data.rotateIntervalMs) && data.rotateIntervalMs > 0) rotateMs = data.rotateIntervalMs;
     } catch {
       // Network hiccup — leave whatever was already showing, try again next poll.
       return;
@@ -98,4 +99,9 @@
 
   load();
   setInterval(load, POLL_MS);
+  // Lets a page that just changed something (Save/Delete on
+  // announcements.html, or the rotation-speed setting in the Settings
+  // tab) refresh THIS device's banner immediately instead of waiting up
+  // to POLL_MS — other agents still catch up on their own next poll.
+  window.refreshAnnouncementBanner = load;
 })();

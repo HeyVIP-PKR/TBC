@@ -103,17 +103,19 @@ export function rankOf(role) { return ROLE_RANK[role] ?? ROLE_RANK.agent; }
 // sidebar-visibility + Agent Profile checkbox UI this controls (which
 // mirrors this same rank-tiered default logic client-side for rendering
 // only — the server here is what's actually enforced).
-export const ADMIN_SECTIONS = ["createAccount", "whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile"];
-export const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile"];
+export const ADMIN_SECTIONS = ["createAccount", "whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements"];
+export const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements"];
 
 function defaultSectionsForRank(rank) {
   if (rank >= ROLE_RANK.superadmin) return "all";
-  if (rank >= ROLE_RANK.admin) return ["createAccount", "whitelistIp"];
+  if (rank >= ROLE_RANK.admin) return ["createAccount", "whitelistIp", "announcements"];
   if (rank >= ROLE_RANK.senior) return ["createAccount"];
   return []; // agent
 }
 function defaultEditForRank(rank) {
-  return rank >= ROLE_RANK.superadmin ? "all" : [];
+  if (rank >= ROLE_RANK.superadmin) return "all";
+  if (rank >= ROLE_RANK.admin) return ["announcements"];
+  return [];
 }
 
 /** Can `account` even SEE this admin section? Rank-tiered default, see note above. */

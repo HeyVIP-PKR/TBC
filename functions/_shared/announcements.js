@@ -38,6 +38,9 @@
 import { appendRowToSheet } from "./googleSheets.js";
 
 const KV_KEY = "announcements";
+const SETTINGS_KEY = "announcement-settings";
+const DEFAULT_ROTATE_MS = 5000;
+const MIN_ROTATE_MS = 1000;
 
 function newId() {
   return `ann_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -122,4 +125,29 @@ export async function deleteAnnouncement(env, id, actorUsername) {
   await writeAll(env, list.filter((a) => a.id !== id));
   await logToSheet(env, "deleted", found, actorUsername);
   return true;
+}
+
+// How fast the banner cycles through 2+ simultaneously active
+// announcements — a global setting, not per-announcement (a mixed pace
+// would just look glitchy). Lives in the Settings tab (gated by the
+// "settings" admin section) rather than the Announcement management page
+// (gated by "announcements") since it's closer in spirit to Maintenance/
+// Coming soon than to the announcements themselves.
+export async function getAnnouncementSettings(env) {
+  try {
+    const raw = await env.THREADS_KV.get(SETTINGS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    const ms = parsed && Number.isFinite(parsed.rotateIntervalMs) && parsed.rotateIntervalMs >= MIN_ROTATE_MS
+      ? parsed.rotateIntervalMs
+      : DEFAULT_ROTATE_MS;
+    return { rotateIntervalMs: ms };
+  } catch {
+    return { rotateIntervalMs: DEFAULT_ROTATE_MS };
+  }
+}
+
+export async function saveAnnouncementSettings(env, { rotateIntervalMs }) {
+  const ms = Math.max(MIN_ROTATE_MS, Math.round(Number(rotateIntervalMs) || DEFAULT_ROTATE_MS));
+  await env.THREADS_KV.put(SETTINGS_KEY, JSON.stringify({ rotateIntervalMs: ms }));
+  return { rotateIntervalMs: ms };
 }

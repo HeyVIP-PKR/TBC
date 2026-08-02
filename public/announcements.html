@@ -37,8 +37,8 @@
     </aside>
 
     <main class="threads-main">
-      <div class="thread-scroll-area" style="padding:30px 40px;">
-        <div id="formArea" style="max-width:520px;"></div>
+      <div class="thread-scroll-area" style="padding:30px 40px; display:flex; justify-content:center;">
+        <div id="formArea" style="max-width:520px; width:100%;"></div>
       </div>
     </main>
   </div>
@@ -49,9 +49,33 @@
 
     const ROLE_RANK = { agent: 0, senior: 1, admin: 2, superadmin: 3, owner: 4 };
     const auth = window.AgentAuth.getAuth();
-    if ((ROLE_RANK[auth?.role] ?? 0) < ROLE_RANK.admin) {
-      location.replace("/");
+    // Mirrors _shared/accounts.js's canSeeAdminSection/canEditAdminSection
+    // default-tier logic for the "announcements" section specifically
+    // (admin+ by default, overridable per account via Agent Profile) —
+    // this is UI convenience only, the server independently re-checks
+    // on every request.
+    function defaultSeesAnnouncements(rank) { return rank >= ROLE_RANK.admin; }
+    function defaultEditsAnnouncements(rank) { return rank >= ROLE_RANK.admin; }
+    function canSee() {
+      if (!auth) return false;
+      if (auth.role === "owner") return true;
+      if (auth.allowedAdminSections !== undefined) {
+        return auth.allowedAdminSections === "all" || (Array.isArray(auth.allowedAdminSections) && auth.allowedAdminSections.includes("announcements"));
+      }
+      return defaultSeesAnnouncements(ROLE_RANK[auth.role] ?? 0);
     }
+    function canEdit() {
+      if (!auth) return false;
+      if (auth.role === "owner") return true;
+      if (!canSee()) return false;
+      if (auth.adminSectionEditAccess !== undefined) {
+        return auth.adminSectionEditAccess === "all" || (Array.isArray(auth.adminSectionEditAccess) && auth.adminSectionEditAccess.includes("announcements"));
+      }
+      return defaultEditsAnnouncements(ROLE_RANK[auth.role] ?? 0);
+    }
+    if (!canSee()) location.replace("/");
+    const canEditAnnouncements = canEdit();
+    document.getElementById("newBtn").style.display = canEditAnnouncements ? "" : "none";
 
     const authFetch = window.AgentAuth.authFetch;
     let announcements = [];
@@ -133,36 +157,41 @@
       const area = document.getElementById("formArea");
       if (mode === "list") { area.innerHTML = ""; return; }
       const a = mode === "edit" ? announcements.find((x) => x.id === selectedId) : null;
+      const ro = canEditAnnouncements ? "" : "disabled";
       area.innerHTML = `
         <p class="edit-modal-title" style="margin-bottom:18px;">${mode === "new" ? "New announcement" : "Edit announcement"}</p>
         <div class="field">
           <label>Message<span class="required">*</span></label>
-          <textarea id="fText" rows="3" placeholder="Shown in the reminder banner on every page">${esc(a ? a.text : "")}</textarea>
+          <textarea id="fText" rows="3" placeholder="Shown in the reminder banner on every page" ${ro}>${esc(a ? a.text : "")}</textarea>
         </div>
         <div style="display:flex; gap:16px;">
           <div class="field" style="flex:1;">
             <label>Starts (optional)</label>
-            <input type="datetime-local" id="fStart" value="${a ? isoToLocalInput(a.startAt) : ""}" />
+            <input type="datetime-local" id="fStart" value="${a ? isoToLocalInput(a.startAt) : ""}" ${ro} />
           </div>
           <div class="field" style="flex:1;">
             <label>Ends (optional)</label>
-            <input type="datetime-local" id="fEnd" value="${a ? isoToLocalInput(a.endAt) : ""}" />
+            <input type="datetime-local" id="fEnd" value="${a ? isoToLocalInput(a.endAt) : ""}" ${ro} />
           </div>
         </div>
         <p class="edit-modal-note">Leave both blank to control it purely with the Active switch below. Set both to make it turn on and off on its own — no need to come back and flip the switch.</p>
         <div class="field" style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-          <input type="checkbox" id="fEnabled" ${!a || a.enabled ? "checked" : ""} style="width:16px; height:16px;" />
+          <input type="checkbox" id="fEnabled" ${!a || a.enabled ? "checked" : ""} ${ro} style="width:16px; height:16px;" />
           <label style="margin:0;">Active</label>
         </div>
         ${a ? `<p class="edit-modal-note">Created by ${esc(a.createdBy)} · last updated by ${esc(a.updatedBy)} ${fmtLocal(a.updatedAt)} · also logged to the Announcement Log sheet</p>` : ""}
+        ${canEditAnnouncements ? "" : '<p class="edit-modal-note">View only.</p>'}
         <p class="edit-modal-note err" id="formErr"></p>
+        ${canEditAnnouncements ? `
         <div style="display:flex; justify-content:${a ? "space-between" : "flex-end"}; margin-top:10px;">
           ${a ? '<button type="button" class="icon-btn labeled" id="deleteBtn">🗑 Delete</button>' : "<span></span>"}
           <button type="button" class="tgroute-action-btn" id="saveBtn">Save</button>
-        </div>
+        </div>` : ""}
       `;
-      document.getElementById("saveBtn").addEventListener("click", save);
-      if (a) document.getElementById("deleteBtn").addEventListener("click", () => remove(a.id));
+      if (canEditAnnouncements) {
+        document.getElementById("saveBtn").addEventListener("click", save);
+        if (a) document.getElementById("deleteBtn").addEventListener("click", () => remove(a.id));
+      }
     }
 
     async function save() {
@@ -187,6 +216,7 @@
       selectedId = data.announcement.id;
       mode = "edit";
       await loadAnnouncements();
+      window.refreshAnnouncementBanner?.();
     }
 
     async function remove(id) {
@@ -200,6 +230,7 @@
       selectedId = null;
       mode = "list";
       await loadAnnouncements();
+      window.refreshAnnouncementBanner?.();
     }
 
     document.getElementById("newBtn").addEventListener("click", () => {

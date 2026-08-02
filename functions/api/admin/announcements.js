@@ -9,7 +9,7 @@
  *   POST { action: "save", id?, text, enabled, startAt, endAt } -> { ok: true, announcement }
  *   POST { action: "delete", id } -> { ok: true }
  */
-import { authenticateStaff, ROLE_RANK } from "../../_shared/accounts.js";
+import { authenticateStaff, ROLE_RANK, canSeeAdminSection, canEditAdminSection } from "../../_shared/accounts.js";
 import { listAllAnnouncements, saveAnnouncement, deleteAnnouncement } from "../../_shared/announcements.js";
 
 export async function onRequestGet(context) {
@@ -22,8 +22,11 @@ export async function onRequestGet(context) {
 
 async function handleGet({ request, env }) {
   if (!env.THREADS_KV) return json({ ok: false, error: "THREADS_KV is not bound yet." }, 500);
-  const auth = await authenticateStaff(request, env, ROLE_RANK.admin);
+  const auth = await authenticateStaff(request, env, ROLE_RANK.senior);
   if (!auth.ok) return json({ ok: false, error: "Not authorized." }, 401);
+  if (!canSeeAdminSection(auth.account, "announcements")) {
+    return json({ ok: false, error: "You don't have access to Announcements." }, 403);
+  }
 
   const announcements = await listAllAnnouncements(env);
   return json({ ok: true, announcements });
@@ -39,8 +42,11 @@ export async function onRequestPost(context) {
 
 async function handlePost({ request, env }) {
   if (!env.THREADS_KV) return json({ ok: false, error: "THREADS_KV is not bound yet." }, 500);
-  const auth = await authenticateStaff(request, env, ROLE_RANK.admin);
+  const auth = await authenticateStaff(request, env, ROLE_RANK.senior);
   if (!auth.ok) return json({ ok: false, error: "Not authorized." }, 401);
+  if (!canEditAdminSection(auth.account, "announcements")) {
+    return json({ ok: false, error: "You don't have Can-Edit access to Announcements." }, 403);
+  }
 
   let body;
   try {

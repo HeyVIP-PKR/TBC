@@ -38,7 +38,7 @@
 
     <main class="threads-main">
       <div class="thread-scroll-area" style="padding:30px 40px; display:flex; justify-content:center;">
-        <div id="formArea" style="width:720px; height:640px; overflow-y:auto; flex:none;"></div>
+        <div id="formArea" style="width:720px; height:640px; flex:none;"></div>
       </div>
     </main>
   </div>
@@ -177,33 +177,37 @@
       if (mode === "list") { area.innerHTML = ""; return; }
       const a = mode === "edit" ? announcements.find((x) => x.id === selectedId) : null;
       const ro = canEditAnnouncements ? "" : "disabled";
+      area.style.display = "flex";
+      area.style.flexDirection = "column";
       area.innerHTML = `
-        <p class="edit-modal-title" style="margin-bottom:18px;">${mode === "new" ? "New announcement" : "Edit announcement"}</p>
-        <div class="field">
-          <label>Message<span class="required">*</span></label>
-          <textarea id="fText" rows="8" placeholder="Shown in the reminder banner on every page" ${ro}>${esc(a ? a.text : "")}</textarea>
-        </div>
-        <div style="display:flex; gap:16px;">
-          <div class="field" style="flex:1;">
-            <label>Starts (optional)</label>
-            <input type="datetime-local" id="fStart" value="${a ? isoToLocalInput(a.startAt) : ""}" ${ro} />
+        <div style="flex:1; overflow-y:auto; min-height:0;">
+          <p class="edit-modal-title" style="margin-bottom:18px;">${mode === "new" ? "New announcement" : "Edit announcement"}</p>
+          <div class="field">
+            <label>Message<span class="required">*</span></label>
+            <textarea id="fText" rows="8" placeholder="Shown in the reminder banner on every page" ${ro}>${esc(a ? a.text : "")}</textarea>
           </div>
-          <div class="field" style="flex:1;">
-            <label>Ends (optional)</label>
-            <input type="datetime-local" id="fEnd" value="${a ? isoToLocalInput(a.endAt) : ""}" ${ro} />
+          <div style="display:flex; gap:16px;">
+            <div class="field" style="flex:1;">
+              <label>Starts (optional)</label>
+              <input type="datetime-local" id="fStart" value="${a ? isoToLocalInput(a.startAt) : ""}" ${ro} />
+            </div>
+            <div class="field" style="flex:1;">
+              <label>Ends (optional)</label>
+              <input type="datetime-local" id="fEnd" value="${a ? isoToLocalInput(a.endAt) : ""}" ${ro} />
+            </div>
           </div>
+          <p class="edit-modal-note">Leave both blank to control it purely with the Active switch below. Set both to make it turn on and off on its own — no need to come back and flip the switch.</p>
+          <div class="field" style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+            <input type="checkbox" id="fEnabled" ${!a || a.enabled ? "checked" : ""} ${ro} style="width:16px; height:16px;" />
+            <label style="margin:0;">Active</label>
+          </div>
+          ${a ? `<p class="edit-modal-note">Created by ${esc(a.createdBy)} · last updated by ${esc(a.updatedBy)} ${fmtLocal(a.updatedAt)} · also logged to the Announcement Log sheet</p>` : ""}
+          ${canEditAnnouncements ? "" : '<p class="edit-modal-note">View only.</p>'}
+          <p class="edit-modal-note err" id="formErr"></p>
         </div>
-        <p class="edit-modal-note">Leave both blank to control it purely with the Active switch below. Set both to make it turn on and off on its own — no need to come back and flip the switch.</p>
-        <div class="field" style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-          <input type="checkbox" id="fEnabled" ${!a || a.enabled ? "checked" : ""} ${ro} style="width:16px; height:16px;" />
-          <label style="margin:0;">Active</label>
-        </div>
-        ${a ? `<p class="edit-modal-note">Created by ${esc(a.createdBy)} · last updated by ${esc(a.updatedBy)} ${fmtLocal(a.updatedAt)} · also logged to the Announcement Log sheet</p>` : ""}
-        ${canEditAnnouncements ? "" : '<p class="edit-modal-note">View only.</p>'}
-        <p class="edit-modal-note err" id="formErr"></p>
         ${canEditAnnouncements ? `
-        <div style="display:flex; justify-content:${a ? "space-between" : "flex-end"}; margin-top:10px;">
-          ${a ? '<button type="button" class="icon-btn labeled" id="deleteBtn">🗑 Delete</button>' : "<span></span>"}
+        <div style="display:flex; justify-content:flex-end; gap:10px; flex:none; margin-top:14px; padding-top:14px; border-top:1px solid var(--panel-border);">
+          ${a ? '<button type="button" class="icon-btn labeled" id="deleteBtn">🗑 Delete</button>' : ""}
           <button type="button" class="tgroute-action-btn" id="saveBtn">Save</button>
         </div>` : ""}
       `;

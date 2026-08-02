@@ -80,7 +80,7 @@
     const authFetch = window.AgentAuth.authFetch;
     let announcements = [];
     let selectedId = null; // null + mode "new" = creating; otherwise editing this id
-    let mode = "list"; // "list" | "new" | "edit"
+    let mode = canEditAnnouncements ? "new" : "list"; // "list" | "new" | "edit"
 
     function esc(str) {
       return String(str == null ? "" : str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -120,7 +120,7 @@
         return;
       }
       announcements = data.announcements;
-      if (mode === "list" && announcements.length) { selectedId = announcements[0].id; mode = "edit"; }
+      if (!canEditAnnouncements && mode === "list" && announcements.length) { selectedId = announcements[0].id; mode = "edit"; }
       render();
     }
 
@@ -251,7 +251,7 @@
       const data = await res.json();
       if (!data.ok) { alert(data.error || "Delete failed."); return; }
       selectedId = null;
-      mode = "list";
+      mode = "new";
       await loadAnnouncements();
       window.refreshAnnouncementBanner?.();
     }

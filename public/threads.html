@@ -499,23 +499,16 @@
       const nothingSelected = inSelection.length === 0;
       readBtn.disabled = nothingSelected;
       solveBtn.disabled = nothingSelected;
-      if (nothingSelected) {
-        // Nothing to compute a real state from — show a neutral label
-        // rather than a stale/misleading "Mark as unread" / "Not solved"
-        // left over from whatever was last selected.
-        readBtn.textContent = "Mark as read/unread";
-        readBtn.dataset.mode = "";
-        solveBtn.textContent = "Solved/Not solved";
-        solveBtn.classList.remove("solve-accent");
-        solveBtn.dataset.mode = "";
-        return;
-      }
+      if (nothingSelected) return; // leave whatever label was already showing — just greyed out, not clickable
       const anyUnread = inSelection.some((t) => Math.max(0, (t.replyCount || 0) - getSeenCount(t.id)) > 0);
       readBtn.textContent = anyUnread ? "✓ Mark as read" : "○ Mark as unread";
+      readBtn.classList.toggle("tone-positive", anyUnread);
+      readBtn.classList.toggle("tone-negative", !anyUnread);
       readBtn.dataset.mode = anyUnread ? "read" : "unread";
       const anyUnsolved = inSelection.some((t) => !t.solved);
       solveBtn.textContent = anyUnsolved ? "✅ Solved" : "✕ Not solved";
-      solveBtn.classList.toggle("solve-accent", anyUnsolved);
+      solveBtn.classList.toggle("tone-positive", anyUnsolved);
+      solveBtn.classList.toggle("tone-negative", !anyUnsolved);
       solveBtn.dataset.mode = anyUnsolved ? "solve" : "unsolve";
     }
 

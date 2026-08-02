@@ -1039,8 +1039,21 @@
         <div class="tgroute-modules fs-scroll">${rowsHtml}</div>
         <hr class="tgroute-divider" />
         ${canEdit ? "" : '<p class="edit-modal-note">View only.</p>'}
-        <p class="edit-modal-note tgroute-footnote">Maintenance/Coming soon blocks everyone whose role isn't checked in the second dropdown — Home page, form page, and the API itself. Owner is always allowed through even if unchecked. Changes apply on the next request once you hit Save — no redeploy needed.</p>`;
+        <p class="edit-modal-note tgroute-footnote">Maintenance/Coming soon blocks everyone whose role isn't checked in the second dropdown — Home page, form page, and the API itself. Owner is always allowed through even if unchecked. Changes apply immediately, no redeploy needed.</p>
 
+        <hr class="tgroute-divider" />
+        <div class="mention-backfill-row">
+          <div class="mention-backfill-copy">
+            <div class="mention-backfill-title">@ Tag Username — historical backfill</div>
+            <p class="edit-modal-note">One-time scan of every existing ticket so agents who replied before this feature shipped are also suggested when typing @ in TG Reply Threads. Safe to run more than once. Don't close this window or refresh while it's running.</p>
+          </div>
+          <div class="mention-backfill-action">
+            <button type="button" class="tgroute-action-btn" id="mentionBackfillBtn" ${canEdit ? "" : "disabled"}>Run backfill</button>
+            <p class="edit-modal-note" id="mentionBackfillStatus"></p>
+          </div>
+        </div>`;
+
+      wireMentionBackfill();
       initFsDropdowns(acctBody, {
         onStatusChange: (dd, newStatus) => {
           const row = dd.closest(".tgroute-row");
@@ -1061,6 +1074,54 @@
       acctBody.querySelectorAll(".fs-reset").forEach((btn) => {
         btn.addEventListener("click", () => resetFeatureStatusRow(btn.closest(".tgroute-row")));
       });
+    }
+
+    // @ Tag Username — historical backfill (see functions/api/admin/
+    // mention-backfill.js). Paginates itself: each call scans up to 100
+    // tickets and returns whether there's more, so this loop just keeps
+    // calling until `done`, updating the running total on screen as it
+    // goes. Re-wired every renderFeatureStatus() call (fresh button
+    // element each time), but that only happens on load/save/reset —
+    // never while a backfill is actually in flight — so there's no risk
+    // of losing progress mid-scan.
+    function wireMentionBackfill() {
+      const btn = document.getElementById("mentionBackfillBtn");
+      if (!btn) return;
+      btn.addEventListener("click", () => runMentionBackfill(btn));
+    }
+
+    async function runMentionBackfill(btn) {
+      const statusEl = document.getElementById("mentionBackfillStatus");
+      btn.disabled = true;
+      let cursor = null;
+      let total = 0;
+      statusEl.textContent = "Scanning… 0 threads so far";
+      statusEl.className = "edit-modal-note";
+      try {
+        for (;;) {
+          const res = await window.AgentAuth.authFetch("/api/admin/mention-backfill", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cursor }),
+          });
+          const data = await res.json();
+          if (!data.ok) {
+            statusEl.textContent = data.error || "Backfill failed.";
+            statusEl.className = "edit-modal-note err";
+            return;
+          }
+          total += data.scanned;
+          statusEl.textContent = `Scanning… ${total} threads so far`;
+          if (data.done) break;
+          cursor = data.cursor;
+        }
+        statusEl.textContent = `Done — scanned ${total} threads.`;
+        statusEl.className = "edit-modal-note ok";
+      } catch {
+        statusEl.textContent = `Network error after ${total} threads — click Run backfill again to resume (already-scanned threads are safe to rescan).`;
+        statusEl.className = "edit-modal-note err";
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     async function saveFeatureStatusRow(row) {

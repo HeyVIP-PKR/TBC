@@ -41,13 +41,24 @@
         <input type="text" id="threadSearch" placeholder="Search username, TID, UID..." autocomplete="off" />
       </div>
 
+      <div class="bulk-action-bar" id="bulkActionBar" style="display:none;">
+        <div class="bulk-action-row1">
+          <span class="bulk-count" id="bulkCount">0</span>
+          <button type="button" class="bulk-cancel" id="bulkCancelBtn">Cancel</button>
+        </div>
+        <div class="bulk-action-row2">
+          <button type="button" class="bulk-action-btn" id="bulkReadBtn"></button>
+          <button type="button" class="bulk-action-btn" id="bulkSolveBtn"></button>
+        </div>
+      </div>
+
       <div class="threads-section" id="activeSection">
-        <div class="threads-section-title" data-target="activeList"><span><span class="chev">▾</span> Active Threads</span><span class="count" id="activeCount">0</span></div>
+        <div class="threads-section-title" data-target="activeList"><span><span class="chev">▾</span> Active Threads</span><span class="title-right"><input type="checkbox" class="section-select-all" id="activeSelectAll" title="Select all" /><span class="count" id="activeCount">0</span></span></div>
         <div class="thread-list" id="activeList"></div>
       </div>
 
       <div class="threads-section collapsed" id="solvedSection">
-        <div class="threads-section-title collapsed" data-target="solvedList"><span><span class="chev">▾</span> Solved Chat History</span><span class="count" id="solvedCount">0</span></div>
+        <div class="threads-section-title collapsed" data-target="solvedList"><span><span class="chev">▾</span> Solved Chat History</span><span class="title-right"><input type="checkbox" class="section-select-all" id="solvedSelectAll" title="Select all" /><span class="count" id="solvedCount">0</span></span></div>
         <div class="thread-list" id="solvedList"></div>
       </div>
 
@@ -126,6 +137,19 @@
     let listPollTimer = null;
     let searchTimer = null;
 
+    // ---- ⋮ menu + Select batch mode -----------------------------------
+    let openItemMenuId = null;   // which thread's ⋮ dropdown is currently open (sidebar only, not select mode)
+    let selectMode = false;      // sidebar is showing checkboxes instead of ⋮
+    let selectedIds = new Set(); // checked thread ids, can span both Active and Solved
+
+    // ---- @ Tag Username --------------------------------------------------
+    // Candidates fetched from /api/mention-candidates, cached in memory
+    // per brand+module (see loadMentionCandidatesForThread) so re-opening
+    // the same thread, or @-ing more than once in it, doesn't re-fetch.
+    const mentionCandidatesCache = {}; // "brandId::module" -> [{handle, from}, ...]
+    let currentMentionCandidates = []; // merged list for whichever thread is open
+    let mentionActiveIndex = -1;
+
     // ---- Local "optimistic" sidebar patches --------------------------
     // The sidebar list comes from THREADS_KV.list() (see threads.js),
     // which Cloudflare documents as *eventually* consistent across their
@@ -186,10 +210,38 @@
     const main = document.getElementById("threadsMain");
 
     document.querySelectorAll(".threads-section-title").forEach((el) => {
-      el.addEventListener("click", () => {
+      el.addEventListener("click", (e) => {
+        if (e.target.closest(".section-select-all")) return;
         el.classList.toggle("collapsed");
         document.getElementById(el.dataset.target).closest(".threads-section").classList.toggle("collapsed");
       });
+    });
+
+    document.getElementById("bulkCancelBtn").addEventListener("click", () => {
+      selectMode = false;
+      selectedIds.clear();
+      renderLists();
+    });
+    document.getElementById("bulkReadBtn").addEventListener("click", runBulkReadToggle);
+    document.getElementById("bulkSolveBtn").addEventListener("click", runBulkSolveToggle);
+    document.getElementById("activeSelectAll").addEventListener("click", (e) => e.stopPropagation());
+    document.getElementById("activeSelectAll").addEventListener("change", (e) => {
+      selectMode = true;
+      activeThreads.forEach((t) => (e.target.checked ? selectedIds.add(t.id) : selectedIds.delete(t.id)));
+      renderLists();
+    });
+    document.getElementById("solvedSelectAll").addEventListener("click", (e) => e.stopPropagation());
+    document.getElementById("solvedSelectAll").addEventListener("change", (e) => {
+      selectMode = true;
+      solvedThreads.forEach((t) => (e.target.checked ? selectedIds.add(t.id) : selectedIds.delete(t.id)));
+      renderLists();
+    });
+    // Click anywhere outside an open ⋮ dropdown closes it — the menu and
+    // its own trigger button both stop propagation on their own clicks
+    // (see buildItemMenu/renderItem), so anything that reaches here is
+    // genuinely "elsewhere".
+    document.addEventListener("click", () => {
+      if (openItemMenuId !== null) { openItemMenuId = null; renderLists(); }
     });
 
     const RECALL_TYPE_META = {
@@ -329,23 +381,164 @@
 
     function renderItem(t) {
       const el = document.createElement("div");
-      el.className = "thread-item" + (t.id === selectedId ? " selected" : "");
-      el.style.setProperty("--thread-accent", t.accent || "#7c6cf0");
       const unread = Math.max(0, (t.replyCount || 0) - getSeenCount(t.id));
+      const checked = selectedIds.has(t.id);
+      el.className = "thread-item" + (t.id === selectedId ? " selected" : "") + (selectMode ? " select-mode" : "");
+      el.style.setProperty("--thread-accent", t.accent || "#7c6cf0");
       el.innerHTML = `
-        <div class="icon" style="background:${(t.accent || "#7c6cf0")}33;">${t.icon || "🔔"}</div>
+        ${selectMode
+          ? `<input type="checkbox" class="thread-item-check" ${checked ? "checked" : ""} />`
+          : `<div class="icon" style="background:${(t.accent || "#7c6cf0")}33;">${t.icon || "🔔"}</div>`}
         <div class="meta">
           <div class="t-title">${escapeHtml(t.title)}</div>
           <div class="t-sub">${escapeHtml(t.submitter)} · ${timeAgo(t.lastActivity)}${t.replyCount ? " · " + t.replyCount + " reply" : ""}</div>
         </div>
         ${unread > 0 ? `<span class="unread-badge">${unread > 99 ? "99+" : unread}</span>` : ""}
         ${t.solved ? '<span class="t-done">✓</span>' : ""}
+        ${selectMode ? "" : '<button type="button" class="item-menu-btn" title="More">⋮</button>'}
       `;
-      el.addEventListener("click", () => {
-        if (t.id !== selectedId) { pendingAttachments = []; replyTarget = null; }
-        openThread(t.id);
-      });
+      if (selectMode) {
+        el.addEventListener("click", (e) => {
+          if (e.target.closest(".thread-item-check")) return; // its own change handler covers this
+          toggleThreadSelected(t.id);
+        });
+        el.querySelector(".thread-item-check").addEventListener("change", () => toggleThreadSelected(t.id));
+      } else {
+        el.addEventListener("click", (e) => {
+          if (e.target.closest(".item-menu-btn")) return;
+          if (t.id !== selectedId) { pendingAttachments = []; replyTarget = null; }
+          openThread(t.id);
+        });
+        el.querySelector(".item-menu-btn").addEventListener("click", (e) => {
+          e.stopPropagation();
+          openItemMenuId = openItemMenuId === t.id ? null : t.id;
+          renderLists();
+        });
+        if (openItemMenuId === t.id) el.appendChild(buildItemMenu(t, unread));
+      }
       return el;
+    }
+
+    // The ⋮ dropdown for a single thread row — the last two rows are
+    // dynamic (which one shows depends on the ticket's current state),
+    // see the feature doc's ⋮ menu table.
+    function buildItemMenu(t, unread) {
+      const menu = document.createElement("div");
+      menu.className = "item-menu";
+      menu.innerHTML = `
+        <div class="item-menu-option" data-action="select"><span class="item-menu-icon">☐</span>Select</div>
+        ${unread > 0
+          ? '<div class="item-menu-option" data-action="markread"><span class="item-menu-icon ok">✓</span>Mark as read</div>'
+          : '<div class="item-menu-option" data-action="markunread"><span class="item-menu-icon">○</span>Mark as unread</div>'}
+        ${t.solved
+          ? '<div class="item-menu-option" data-action="unsolve"><span class="item-menu-icon danger">✕</span>Not solved</div>'
+          : '<div class="item-menu-option" data-action="solve"><span class="item-menu-icon ok">✅</span>Solved</div>'}
+      `;
+      menu.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const opt = e.target.closest("[data-action]");
+        if (!opt) return;
+        handleItemMenuAction(t, opt.dataset.action);
+      });
+      return menu;
+    }
+
+    function toggleThreadSelected(id) {
+      if (selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+      renderLists();
+    }
+
+    function handleItemMenuAction(t, action) {
+      openItemMenuId = null;
+      if (action === "select") {
+        selectMode = true;
+        selectedIds.add(t.id);
+      } else if (action === "markread") {
+        markSeen(t.id, t.replyCount || 0);
+      } else if (action === "markunread") {
+        markSeen(t.id, 0);
+      } else if (action === "solve" || action === "unsolve") {
+        setThreadSolvedById(t.id, action === "solve");
+      }
+      renderLists();
+    }
+
+    // Toggles solved/unsolved for an arbitrary thread id — used by the ⋮
+    // menu and by bulk actions below, neither of which necessarily has
+    // that thread open as selectedThread (toggleSolved() further down
+    // stays as the top-of-ticket status-chip's own version of this, which
+    // always operates on selectedThread).
+    async function setThreadSolvedById(id, solved) {
+      try {
+        const res = await authFetch(`/api/threads/${id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: solved ? "solve" : "unsolve" }),
+        });
+        const data = await res.json();
+        if (!data.ok) return;
+        patchLocalThread(data.thread);
+        if (selectedId === id) {
+          selectedThread = data.thread;
+          updateThreadContent(selectedThread, true);
+        }
+      } catch {
+        // Network hiccup — leave state as-is, agent can retry from the menu.
+      }
+    }
+
+    // ---- Select batch mode bulk actions ---------------------------------
+    function renderBulkBar() {
+      const bar = document.getElementById("bulkActionBar");
+      if (!selectMode) { bar.style.display = "none"; return; }
+      bar.style.display = "flex";
+      document.getElementById("bulkCount").textContent = selectedIds.size;
+      const inSelection = [...activeThreads, ...solvedThreads].filter((t) => selectedIds.has(t.id));
+      const anyUnread = inSelection.some((t) => Math.max(0, (t.replyCount || 0) - getSeenCount(t.id)) > 0);
+      const readBtn = document.getElementById("bulkReadBtn");
+      readBtn.textContent = anyUnread ? "✓ Mark as read" : "○ Mark as unread";
+      readBtn.dataset.mode = anyUnread ? "read" : "unread";
+      const anyUnsolved = inSelection.some((t) => !t.solved);
+      const solveBtn = document.getElementById("bulkSolveBtn");
+      solveBtn.textContent = anyUnsolved ? "✅ Solved" : "✕ Not solved";
+      solveBtn.classList.toggle("solve-accent", anyUnsolved);
+      solveBtn.dataset.mode = anyUnsolved ? "solve" : "unsolve";
+    }
+
+    // Each section's own header checkbox reflects whether every thread
+    // currently in THAT section (only) is selected — Active and Solved
+    // are independent, matches the feature doc.
+    function syncSectionSelectAll() {
+      const activeAll = document.getElementById("activeSelectAll");
+      const solvedAll = document.getElementById("solvedSelectAll");
+      activeAll.checked = activeThreads.length > 0 && activeThreads.every((t) => selectedIds.has(t.id));
+      solvedAll.checked = solvedThreads.length > 0 && solvedThreads.every((t) => selectedIds.has(t.id));
+    }
+
+    function runBulkReadToggle() {
+      const makeRead = document.getElementById("bulkReadBtn").dataset.mode === "read";
+      [...activeThreads, ...solvedThreads].forEach((t) => {
+        if (selectedIds.has(t.id)) markSeen(t.id, makeRead ? (t.replyCount || 0) : 0);
+      });
+      selectMode = false;
+      selectedIds.clear();
+      renderLists();
+    }
+
+    async function runBulkSolveToggle() {
+      const readBtn = document.getElementById("bulkReadBtn");
+      const solveBtn = document.getElementById("bulkSolveBtn");
+      const solving = solveBtn.dataset.mode === "solve";
+      const ids = Array.from(selectedIds);
+      readBtn.disabled = true;
+      solveBtn.disabled = true;
+      await Promise.all(ids.map((id) => setThreadSolvedById(id, solving)));
+      readBtn.disabled = false;
+      solveBtn.disabled = false;
+      selectMode = false;
+      selectedIds.clear();
+      renderLists();
+      loadList(document.getElementById("threadSearch").value);
     }
 
     function polishEmoji() {
@@ -364,6 +557,8 @@
       solvedList.innerHTML = "";
       solvedThreads.forEach((t) => solvedList.appendChild(renderItem(t)));
       polishEmoji();
+      renderBulkBar();
+      syncSectionSelectAll();
     }
 
     async function loadList(q) {
@@ -412,6 +607,7 @@
         updateThreadContent(selectedThread);
         markSeen(selectedId, selectedThread.messages.length);
         renderLists();
+        loadMentionCandidatesForThread(selectedThread);
       } catch {
         // Network hiccup — leave the panel as-is, try again next poll.
       }
@@ -599,6 +795,7 @@
               <button class="attach-btn" id="attachBtn" title="Attach images, videos, or PDFs (multiple allowed, or paste an image directly into the box)">🔗</button>
               <input type="file" id="replyFileInput" accept="image/*,video/*,application/pdf" multiple hidden />
               <input type="text" id="replyInput" placeholder="Reply into the Telegram thread..." autocomplete="off" />
+              <div class="mention-dropdown" id="mentionDropdown" style="display:none;"></div>
             </div>
             <button id="replySend">Send</button>
           </div>
@@ -607,7 +804,9 @@
       wireTopButtons();
       wireConversationButtons();
       document.getElementById("replySend").addEventListener("click", sendReply);
+      document.getElementById("replyInput").addEventListener("input", handleMentionInput);
       document.getElementById("replyInput").addEventListener("keydown", (e) => {
+        if (handleMentionKeydown(e)) return; // dropdown consumed this key (nav/select/close)
         if (e.key === "Enter") sendReply();
       });
       document.getElementById("attachBtn").addEventListener("click", () => document.getElementById("replyFileInput").click());
@@ -621,6 +820,128 @@
       scrollConversation(true);
       polishEmoji();
       loadInlineAttachments();
+      loadMentionCandidatesForThread(t);
+    }
+
+    // ---- @ Tag Username --------------------------------------------------
+    // Pulls the "people who've replied here before" list for this ticket's
+    // brand+module (see functions/api/mention-candidates.js), cached in
+    // memory per brand+module so re-opening the same thread or @-ing more
+    // than once doesn't re-fetch. Also merges in THIS thread's own
+    // conversation participants on top — covers the gap between someone
+    // just replying in Telegram and the KV registry write becoming visible
+    // (KV list/get is eventually consistent), see tg-reply-threads-
+    // features doc, Step 4.
+    async function loadMentionCandidatesForThread(t) {
+      currentMentionCandidates = [];
+      if (!t.brandId || !t.module) return;
+      const cacheKey = `${t.brandId}::${t.module}`;
+      let fromServer = mentionCandidatesCache[cacheKey];
+      if (!fromServer) {
+        try {
+          const res = await authFetch(`/api/mention-candidates?brandId=${encodeURIComponent(t.brandId)}&module=${encodeURIComponent(t.module)}`, { cache: "no-store" });
+          const data = await res.json();
+          fromServer = data.ok ? (data.candidates || []) : [];
+        } catch {
+          fromServer = [];
+        }
+        mentionCandidatesCache[cacheKey] = fromServer;
+      }
+      const merged = new Map();
+      fromServer.forEach((c) => merged.set(c.handle, { handle: c.handle, from: c.from }));
+      (t.messages || []).forEach((m) => {
+        if (!m.self && m.handle) merged.set(m.handle, { handle: m.handle, from: m.from });
+      });
+      // Only apply if we're still looking at the same thread — a slow
+      // fetch shouldn't clobber a newer thread's candidates if the agent
+      // already switched away by the time this resolves.
+      if (selectedThread && selectedThread.id === t.id) {
+        currentMentionCandidates = Array.from(merged.values());
+      }
+    }
+
+    function closeMentionDropdown() {
+      const dd = document.getElementById("mentionDropdown");
+      if (dd) { dd.style.display = "none"; dd.innerHTML = ""; }
+      mentionActiveIndex = -1;
+    }
+
+    // Fires on every keystroke in the reply box — looks for an @fragment
+    // right before the cursor (only when it's at the end of the text, or
+    // more precisely at the end of what's typed so far — same simple
+    // "trailing @word" match the feature doc specifies) and filters
+    // currentMentionCandidates by that fragment as a prefix, case-insensitive.
+    function handleMentionInput(e) {
+      const input = e.target;
+      const match = input.value.match(/(?:^|\s)@(\w*)$/);
+      if (!match || !currentMentionCandidates.length) { closeMentionDropdown(); return; }
+      const frag = match[1].toLowerCase();
+      const matches = currentMentionCandidates.filter((c) => c.handle.slice(1).toLowerCase().startsWith(frag));
+      if (!matches.length) { closeMentionDropdown(); return; }
+      renderMentionDropdown(matches);
+    }
+
+    function renderMentionDropdown(matches) {
+      const dd = document.getElementById("mentionDropdown");
+      if (!dd) return;
+      mentionActiveIndex = 0;
+      dd.innerHTML = matches.map((c, i) => `
+        <div class="mention-option${i === 0 ? " active" : ""}" data-handle="${escapeAttr(c.handle)}" data-idx="${i}">
+          <span class="mention-handle">${escapeHtml(c.handle)}</span>
+          <span class="mention-from">${escapeHtml(c.from || "")}</span>
+        </div>
+      `).join("");
+      dd.style.display = "block";
+      dd.querySelectorAll(".mention-option").forEach((opt) => {
+        opt.addEventListener("mousedown", (e) => {
+          e.preventDefault(); // keep focus in the input instead of the dropdown
+          selectMentionCandidate(opt.dataset.handle);
+        });
+      });
+    }
+
+    // Replaces the trailing @fragment the agent just typed with the full
+    // "@username " (trailing space so they can keep typing the message).
+    function selectMentionCandidate(handle) {
+      const input = document.getElementById("replyInput");
+      if (!input) return;
+      input.value = input.value.replace(/(?:^|\s)@(\w*)$/, (m) => (m[0] === " " ? " " : "") + handle + " ");
+      closeMentionDropdown();
+      input.focus();
+    }
+
+    // Returns true if it handled the keypress (dropdown was open and the
+    // key was one of its own — nav/select/close), so the caller's own
+    // Enter-to-send handling gets skipped for that keystroke.
+    function handleMentionKeydown(e) {
+      const dd = document.getElementById("mentionDropdown");
+      if (!dd || dd.style.display === "none") return false;
+      const options = Array.from(dd.querySelectorAll(".mention-option"));
+      if (!options.length) return false;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        mentionActiveIndex = (mentionActiveIndex + 1) % options.length;
+        options.forEach((o, i) => o.classList.toggle("active", i === mentionActiveIndex));
+        return true;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        mentionActiveIndex = (mentionActiveIndex - 1 + options.length) % options.length;
+        options.forEach((o, i) => o.classList.toggle("active", i === mentionActiveIndex));
+        return true;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        const chosen = options[mentionActiveIndex] || options[0];
+        selectMentionCandidate(chosen.dataset.handle);
+        return true;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeMentionDropdown();
+        return true;
+      }
+      return false;
     }
 
     // Light refresh — used by polling and after in-place actions (solve,
@@ -759,6 +1080,7 @@
         pendingAttachments = [];
         replyTarget = null;
         renderReplyTargetBanner();
+        renderAttachPreview();
         document.getElementById("replyFileInput").value = "";
         updateThreadContent(selectedThread, true);
         patchLocalThread(selectedThread);

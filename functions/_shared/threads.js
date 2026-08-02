@@ -557,6 +557,89 @@ export async function listThreads(env, { q } = {}) {
   });
 }
 
+// ---- @ Tag Username mention-candidate registry ----
+//
+// Per brand+module list of Telegram usernames who've been seen replying
+// in that specific TG group/topic, so the reply box's @ autocomplete can
+// suggest real people instead of an agent needing to go dig through
+// Telegram itself to remember a handle. Telegram's Bot API has no "list
+// group members" call, so this can only ever be "people who've said
+// something here before, that we happened to see" — never a full
+// member directory. Keyed by brandId+moduleId (not by thread) so a
+// suggestion is (almost always) actually reachable in that specific
+// ticket's TG group/topic — matches routing.js's one-group-per-
+// brand+module layout.
+//
+// KV shape: mention-registry:<brandId>:<moduleId> -> JSON
+//   { "@handle": { from, lastSeen }, ... }
+function mentionRegistryKey(brandId, moduleId) {
+  return `mention-registry:${brandId}:${moduleId}`;
+}
+
+export async function getMentionCandidates(env, brandId, moduleId) {
+  if (!brandId || !moduleId) return [];
+  const raw = await env.THREADS_KV.get(mentionRegistryKey(brandId, moduleId));
+  if (!raw) return [];
+  let registry;
+  try {
+    registry = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  return Object.entries(registry).map(([handle, v]) => ({ handle, from: v.from, lastSeen: v.lastSeen }));
+}
+
+// Called from appendMessage() below for every non-self incoming reply
+// that carries a handle, plus from the one-time backfill scan. Skips
+// the write entirely when this exact {handle, from} pair is already on
+// file (only `lastSeen` would change) — the same handful of people
+// reply over and over, and every skipped write is one fewer draw
+// against KV's 1,000 writes/day budget (see the big comment at the top
+// of this file). Best-effort only: a missed mention-candidate write
+// should never break the actual message/reply it rode in on.
+export async function rememberMentionCandidate(env, brandId, moduleId, handle, from) {
+  if (!brandId || !moduleId || !handle) return;
+  try {
+    const key = mentionRegistryKey(brandId, moduleId);
+    const raw = await env.THREADS_KV.get(key);
+    const registry = raw ? JSON.parse(raw) : {};
+    const existing = registry[handle];
+    if (existing && existing.from === from) return; // nothing new to record
+    registry[handle] = { from: from || (existing && existing.from) || handle, lastSeen: new Date().toISOString() };
+    await env.THREADS_KV.put(key, JSON.stringify(registry));
+  } catch {
+    // ignored — best-effort
+  }
+}
+
+// One-time (safe to re-run) historical backfill — see
+// functions/api/admin/mention-backfill.js, which drives this one page
+// (100 threads) at a time so a large ticket history never risks hitting
+// Cloudflare Pages Functions' execution time limit in a single request.
+// Reads full thread records directly (not the summary cache) since only
+// the full record has each message's handle/from.
+export async function backfillMentionCandidatesPage(env, cursor) {
+  const page = await env.THREADS_KV.list({ prefix: "thread:", cursor, limit: 100 });
+  const raws = await Promise.all(page.keys.map((k) => env.THREADS_KV.get(k.name)));
+  let scanned = 0;
+  for (const raw of raws) {
+    if (!raw) continue;
+    let t;
+    try {
+      t = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    scanned += 1;
+    if (!t.brandId || !t.module) continue;
+    for (const m of t.messages || []) {
+      if (m.self || !m.handle) continue;
+      await rememberMentionCandidate(env, t.brandId, t.module, m.handle, m.from);
+    }
+  }
+  return { scanned, nextCursor: page.list_complete ? null : page.cursor };
+}
+
 export async function appendMessage(env, threadId, message) {
   const thread = await getThread(env, threadId);
   if (!thread) return null;
@@ -588,6 +671,13 @@ export async function appendMessage(env, threadId, message) {
   const writes = [saveThread(env, thread)];
   for (const mid of allIds) {
     writes.push(env.THREADS_KV.put(`msgid:${thread.chatId}:${mid}`, thread.id));
+  }
+  // @ Tag Username — remember "this person has replied in this brand +
+  // module before" so the reply box's @ autocomplete can suggest them
+  // later. Only for genuine incoming replies (never our own outgoing
+  // ones) that actually carry a Telegram @handle.
+  if (!message.self && message.handle) {
+    writes.push(rememberMentionCandidate(env, thread.brandId, thread.module, message.handle, message.from));
   }
   await Promise.all(writes);
   await patchListCache(env, thread); // instant sidebar update — reply count / reopened status

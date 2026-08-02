@@ -20,31 +20,21 @@
  *     jump: the text wrap uses a CSS grid overlap (see style.css) so
  *     both messages share one auto-sized box instead of a fixed height.
  *
- * Dismiss (✕) is per-announcement and per-browser (localStorage), same
- * scope as threads.html's own "have I seen this" unread tracking — it
- * hides THAT announcement on THIS device only; other agents, and this
- * same agent on another device, still see it until it's turned off or
- * expires server-side. Re-checks every POLL_MS so a newly-published
- * announcement shows up without a page refresh.
+ * Dismiss (✕) only hides that ONE announcement for the rest of THIS page
+ * load — it's an in-memory set, not persisted anywhere, so refreshing
+ * the page or logging back in shows it again. (An earlier version of
+ * this used localStorage to remember dismissals permanently per
+ * browser — deliberately reverted per feedback: agents expect a
+ * refresh to bring reminders back, not hide them forever.)
  */
 (function () {
   const POLL_MS = 60000;
   const TRANSITION_MS = 2200;
-  const DISMISSED_KEY = "dismissedAnnouncements";
   let rotateMs = 6000; // overwritten by the server's configured value once loaded — see Settings tab
 
-  function getDismissed() {
-    try { return new Set(JSON.parse(localStorage.getItem(DISMISSED_KEY) || "[]")); } catch { return new Set(); }
-  }
-  function dismiss(id) {
-    const set = getDismissed();
-    set.add(id);
-    // Keep this list from growing forever — expired/deleted announcements
-    // don't need to stay remembered, so cap it generously and drop the
-    // oldest entries first.
-    const arr = Array.from(set);
-    localStorage.setItem(DISMISSED_KEY, JSON.stringify(arr.slice(-50)));
-  }
+  const dismissedIds = new Set();
+  function getDismissed() { return dismissedIds; }
+  function dismiss(id) { dismissedIds.add(id); }
 
   let items = [];
   let visible = [];

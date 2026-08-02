@@ -38,7 +38,7 @@
 
     <main class="threads-main">
       <div class="thread-scroll-area" style="padding:30px 40px; display:flex; justify-content:center;">
-        <div id="formArea" style="max-width:520px; width:100%; align-self:flex-start;"></div>
+        <div id="formArea" style="width:720px; height:640px; overflow-y:auto; flex:none;"></div>
       </div>
     </main>
   </div>
@@ -181,7 +181,7 @@
         <p class="edit-modal-title" style="margin-bottom:18px;">${mode === "new" ? "New announcement" : "Edit announcement"}</p>
         <div class="field">
           <label>Message<span class="required">*</span></label>
-          <textarea id="fText" rows="3" placeholder="Shown in the reminder banner on every page" ${ro}>${esc(a ? a.text : "")}</textarea>
+          <textarea id="fText" rows="8" placeholder="Shown in the reminder banner on every page" ${ro}>${esc(a ? a.text : "")}</textarea>
         </div>
         <div style="display:flex; gap:16px;">
           <div class="field" style="flex:1;">

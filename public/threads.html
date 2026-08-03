@@ -4,8 +4,38 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>TG Reply Threads</title>
-<link rel="stylesheet" href="/assets/style.css" />
 <script src="/assets/theme.js"></script>
+<style>
+/* Inline placeholder canvas background — first thing the browser parses
+   in <head>, so it paints before any network request (external CSS, the
+   photo itself) resolves. Values are hard-coded here (can't use var()
+   yet — style.css may not have loaded) but are kept in exact sync with
+   the "real" html{}/html[data-theme=light]{} rule in style.css, so the
+   moment that stylesheet finishes loading there is zero visible change.
+   Must stay inline and first — an external <link> here would leave a
+   blank gap for a network round trip before anything paints. Only sets
+   background on <html>, never <body>: <body> has its own
+   theme-toggle transition, and animating from this photo to some other
+   background would try to interpolate image -> gradient, which browsers
+   can't do and would just look like a broken flash. */
+html {
+  background-color: #090c1c;
+  background-image:
+    linear-gradient(180deg, rgba(3,4,13,0.35) 0%, rgba(3,4,13,0.55) 55%, rgba(3,4,13,0.75) 100%),
+    url('/assets/img/bg-space.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+html[data-theme="light"] {
+  background-color: #dbe7fb;
+  background-image:
+    radial-gradient(900px 500px at 90% 0%, #eaf1ff 0%, transparent 55%),
+    linear-gradient(160deg, #dbe7fb 0%, #d9cef4 45%, #cdbdf2 75%, #c4b2ee 100%);
+}
+</style>
+<link rel="stylesheet" href="/assets/style.css" />
 <script src="/assets/starfield.js" defer></script>
 <script src="/assets/authguard.js"></script>
 <script src="/assets/announcement-banner.js" defer></script>

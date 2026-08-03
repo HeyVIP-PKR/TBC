@@ -24,8 +24,8 @@
   --sf-filter: brightness(1.4) saturate(0.85) contrast(0.95);
   --sf-shade: linear-gradient(180deg, rgba(234,241,255,0.55) 0%, rgba(217,206,244,0.62) 45%, rgba(196,178,238,0.72) 100%);
   --sidebar-bg: rgba(255, 255, 255, 0.28);
-  --sidebar-item-bg: rgba(255, 255, 255, 0.55);
-  --sidebar-item-hover: rgba(255, 255, 255, 0.82);
+  --sidebar-item-bg: rgba(255, 255, 255, 0.65);
+  --sidebar-item-hover: rgba(255, 255, 255, 0.85);
   --pill-bg: rgba(255, 255, 255, 0.6);
   --pill-border: rgba(255, 255, 255, 0.75);
   --brand-row-bg: rgba(255, 255, 255, 0.3);
@@ -67,8 +67,8 @@
   --sf-filter: none;
   --sf-shade: linear-gradient(180deg, rgba(3,4,13,0.35) 0%, rgba(3,4,13,0.55) 55%, rgba(3,4,13,0.75) 100%);
   --sidebar-bg: rgba(15, 19, 40, 0.75);
-  --sidebar-item-bg: rgba(255, 255, 255, 0.03);
-  --sidebar-item-hover: rgba(255, 255, 255, 0.07);
+  --sidebar-item-bg: rgba(20, 26, 51, 0.6);
+  --sidebar-item-hover: rgba(35, 43, 82, 0.88);
   --pill-bg: rgba(255, 255, 255, 0.04);
   --pill-border: rgba(255, 255, 255, 0.1);
   --brand-row-bg: rgba(255, 255, 255, 0.03);
@@ -93,13 +93,39 @@
 ::-webkit-scrollbar-thumb:hover { background: rgba(124, 108, 240, 0.75); background-clip: padding-box; }
 ::-webkit-scrollbar-corner { background: transparent; }
 
+/* The canvas background now lives on <html> (see the rule below), not on
+   <body> — this is what lets the inline placeholder <style> in each
+   page's <head> (first paint, before this file has even downloaded)
+   hand off to this "real" rule with zero visible change: same photo,
+   same shade gradient, same values, just now driven by a CSS variable
+   instead of hard-coded numbers. If <body> also carried an opaque
+   background here, it would paint *above* the negative-z-index
+   #starfieldRoot layer once <html> owns its own background (the
+   propagation trick that lets a bare <body> background become the page
+   canvas background only applies while <html> itself specifies none) —
+   so <body> is deliberately left transparent and the starfield/photo
+   show straight through it. */
+html {
+  background-color: #090c1c;
+  background-image: var(--sf-shade), url('/assets/img/bg-space.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+html[data-theme="light"] {
+  /* Light theme skips the photo for this base layer entirely — the
+     shade over it is already 55%~72% opaque, so a plain gradient in
+     the exact same tones reads as visually identical while being one
+     fewer thing to keep in sync with the placeholder <style>. */
+  background-color: #dbe7fb;
+  background-image: var(--page-bg);
+}
 body {
   margin: 0;
   min-height: 100vh;
   color: var(--ink);
-  background: var(--page-bg);
-  background-attachment: fixed;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition: color 0.2s ease;
 }
 
 /* ---- Animated space-photo background (both themes) ----
@@ -591,6 +617,8 @@ a { color: inherit; text-decoration: none; }
 .sidebar-header .dot { width: 6px; height: 6px; border-radius: 50%; background: #7c6cf0; }
 
 .sidebar-item {
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -601,6 +629,39 @@ a { color: inherit; text-decoration: none; }
   border-left: 3px solid transparent;
   margin-bottom: 8px;
   transition: background 0.15s ease, transform 0.12s ease, border-color 0.15s ease;
+  animation: card-glow 2.6s ease-in-out infinite;
+}
+/* Corner twinkle + light-sweep — three different-length cycles (2.2s /
+   2.6s / 3.4s, roughly coprime) so they never fall into visible sync and
+   read as one mechanical "blink" instead of ambient sparkle. */
+.sidebar-item::after {
+  content: "";
+  position: absolute; top: 9px; right: 11px;
+  width: 5px; height: 5px; border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 4px 1px rgba(255, 255, 255, 0.8);
+  animation: card-twinkle 2.2s ease-in-out infinite;
+  pointer-events: none;
+}
+.sidebar-item::before {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(115deg, transparent 40%, rgba(255, 255, 255, 0.09) 50%, transparent 60%);
+  background-size: 250% 100%;
+  animation: card-sweep 3.4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes card-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(124, 108, 240, 0); }
+  50%      { box-shadow: 0 0 14px 1px rgba(124, 108, 240, 0.45); }
+}
+@keyframes card-twinkle {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50%      { opacity: 1;   transform: scale(1.3); }
+}
+@keyframes card-sweep {
+  0%        { background-position: 200% 0; }
+  60%, 100% { background-position: -50% 0; }
 }
 .sidebar-item:hover {
   background: var(--sidebar-item-hover);
@@ -946,6 +1007,7 @@ a { color: inherit; text-decoration: none; }
 .thread-item {
   display: flex; align-items: center; gap: 10px;
   padding: 9px 10px; border-radius: 12px;
+  background: var(--sidebar-item-bg);
   border-left: 3px solid transparent;
   cursor: pointer;
   transition: background 0.15s ease;

@@ -29,9 +29,14 @@
 
   <div class="threads-shell">
     <aside class="threads-sidebar" style="width:280px;">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
-        <span style="font-size:11px; font-weight:800; letter-spacing:0.07em; text-transform:uppercase; color:var(--ink-soft);">Announcements</span>
-        <button type="button" class="tgroute-action-btn" id="newBtn" style="padding:5px 10px; font-size:11.5px;">+ New</button>
+      <button type="button" class="announce-new-btn" id="newBtn">+ New announcement</button>
+      <div class="threads-search">
+        <span>🔍</span>
+        <input type="text" id="announceSearch" placeholder="Search topic or message..." autocomplete="off" />
+      </div>
+      <div class="threads-section-title" style="cursor:default;">
+        <span>Announcements</span>
+        <span class="count" id="announceCount">0</span>
       </div>
       <div class="thread-list" id="announceList" style="margin-bottom:0;"></div>
     </aside>
@@ -82,6 +87,7 @@
     let topics = ["Friendly reminder", "Game maintenance", "System maintenance", "Deposit / Withdraw Issues"]; // overwritten by the server's list once loaded — kept here just so the dropdown isn't empty for a split second
     let selectedId = null; // null + mode "new" = creating; otherwise editing this id
     let mode = canEditAnnouncements ? "new" : "list"; // "list" | "new" | "edit"
+    let searchQuery = "";
 
     function esc(str) {
       return String(str == null ? "" : str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -90,6 +96,11 @@
       if (!iso) return "—";
       const d = new Date(iso);
       return d.toLocaleString(undefined, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    }
+    // Full date + time (e.g. "8/2/2026, 9:54:23 PM") for the sidebar list items.
+    function fmtFullLocal(iso) {
+      if (!iso) return "—";
+      return new Date(iso).toLocaleString();
     }
     // <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm" in LOCAL time,
     // not the ISO/UTC string the server stores.
@@ -151,22 +162,35 @@
 
     function renderList() {
       const list = document.getElementById("announceList");
+      document.getElementById("announceCount").textContent = announcements.length;
+      const q = searchQuery.trim().toLowerCase();
+      const filtered = !q ? announcements : announcements.filter((a) =>
+        (a.topic || "").toLowerCase().includes(q) || (a.text || "").toLowerCase().includes(q)
+      );
       if (!announcements.length) {
         list.innerHTML = '<div class="threads-empty">No announcements yet.<br/>Click + New to create one.</div>';
         return;
       }
+      if (!filtered.length) {
+        list.innerHTML = '<div class="threads-empty">No matches.</div>';
+        return;
+      }
       list.innerHTML = "";
-      announcements.forEach((a) => {
+      filtered.forEach((a) => {
         const status = effectiveStatus(a);
+        const breathing = status.label === "Active" ? " breathing" : "";
         const el = document.createElement("div");
-        el.className = "thread-item" + (mode === "edit" && selectedId === a.id ? " selected" : "");
+        el.className = "thread-item announce-item" + (mode === "edit" && selectedId === a.id ? " selected" : "");
         el.style.setProperty("--thread-accent", status.color);
         el.innerHTML = `
           <div class="meta">
-            <div class="t-title">${esc(a.text)}</div>
-            <div class="t-sub">${a.topic ? esc(a.topic) + " · " : ""}${esc(a.updatedBy || a.createdBy || "")} · ${fmtLocal(a.updatedAt)}</div>
+            <div class="t-title">${esc(a.topic || "(no topic)")}</div>
+            <div class="t-sub">${esc(a.updatedBy || a.createdBy || "")} · ${fmtFullLocal(a.updatedAt)}</div>
           </div>
-          <span style="font-size:10.5px; font-weight:700; color:${status.color}; flex-shrink:0;">${status.label}</span>
+          <span class="status-indicator">
+            <span class="status-dot${breathing}" style="background:${status.color};"></span>
+            <span class="status-text" style="color:${status.color};">${status.label}</span>
+          </span>
         `;
         el.addEventListener("click", () => { selectedId = a.id; mode = "edit"; render(); });
         list.appendChild(el);
@@ -204,28 +228,27 @@
               <input type="datetime-local" id="fEnd" value="${a ? isoToLocalInput(a.endAt) : ""}" ${ro} />
             </div>
           </div>
-          <p class="edit-modal-note">Leave both blank to control it purely with the Active switch below. Set both to make it turn on and off on its own — no need to come back and flip the switch.</p>
-          <div class="field" style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-            <input type="checkbox" id="fEnabled" ${!a || a.enabled ? "checked" : ""} ${ro} style="width:16px; height:16px;" />
-            <label style="margin:0;">Active</label>
-          </div>
-          ${a ? `<p class="edit-modal-note">Created by ${esc(a.createdBy)} · last updated by ${esc(a.updatedBy)} ${fmtLocal(a.updatedAt)} · also logged to the Announcement Log sheet</p>` : ""}
           ${canEditAnnouncements ? "" : '<p class="edit-modal-note">View only.</p>'}
           <p class="edit-modal-note err" id="formErr"></p>
         </div>
         ${canEditAnnouncements ? `
         <div style="display:flex; justify-content:flex-end; gap:10px; flex:none; margin-top:14px; padding-top:14px; border-top:1px solid var(--panel-border);">
           ${a ? '<button type="button" class="icon-btn labeled" id="deleteBtn">🗑 Delete</button>' : ""}
-          <button type="button" class="tgroute-action-btn" id="saveBtn">Save</button>
+          <button type="button" class="tgroute-action-btn" id="saveBtn">${a ? (a.enabled ? "Inactive" : "Active") : "Save"}</button>
         </div>` : ""}
       `;
       if (canEditAnnouncements) {
-        document.getElementById("saveBtn").addEventListener("click", save);
+        // Editing an existing announcement: the button both saves the form
+        // AND flips enabled — it always shows the state you'd switch TO.
+        // Creating a new one: nothing to toggle yet, so it's a plain Save
+        // (new announcements are enabled by default, same as before).
+        const nextEnabled = a ? !a.enabled : true;
+        document.getElementById("saveBtn").addEventListener("click", () => save(nextEnabled));
         if (a) document.getElementById("deleteBtn").addEventListener("click", () => remove(a.id));
       }
     }
 
-    async function save() {
+    async function save(enabled) {
       const text = document.getElementById("fText").value.trim();
       const topic = document.getElementById("fTopic").value;
       const errEl = document.getElementById("formErr");
@@ -237,7 +260,6 @@
         errEl.textContent = "End time must be after start time.";
         return;
       }
-      const enabled = document.getElementById("fEnabled").checked;
       const id = mode === "edit" ? selectedId : null;
       const res = await authFetch("/api/admin/announcements", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -264,6 +286,11 @@
       await loadAnnouncements();
       window.refreshAnnouncementBanner?.();
     }
+
+    document.getElementById("announceSearch").addEventListener("input", (e) => {
+      searchQuery = e.target.value;
+      renderList();
+    });
 
     document.getElementById("newBtn").addEventListener("click", () => {
       selectedId = null;

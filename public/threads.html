@@ -169,6 +169,15 @@ html[data-theme="light"] {
     let listPollTimer = null;
     let searchTimer = null;
 
+    // ---- Sidebar diffed rendering ---------------------------------------
+    // id -> { el, key } for every thread-item currently in the DOM (active
+    // OR solved — one shared map, since a thread can move between the two
+    // sections, e.g. a TG follow-up auto-reopening an already-solved
+    // ticket server-side, see threads.js). renderLists() below reuses
+    // these nodes (and just relocates/patches them) instead of wiping and
+    // recreating the whole sidebar on every 6s poll — see renderLists().
+    const renderedItemEls = new Map();
+
     // ---- ⋮ menu + Select batch mode -----------------------------------
     let openItemMenuId = null;   // which thread's ⋮ dropdown is currently open (sidebar only, not select mode)
     let selectMode = false;      // sidebar is showing checkboxes instead of ⋮
@@ -411,6 +420,19 @@ html[data-theme="light"] {
       localStorage.setItem(`lastseen:${id}`, String(count));
     }
 
+    // Everything renderItem()'s markup/handlers depend on — if none of
+    // this changed since the node was last built, the existing DOM node
+    // can be reused as-is (see renderLists()) instead of torn down and
+    // recreated.
+    function itemRenderKey(t) {
+      return [
+        t.title, t.submitter, t.lastActivity, t.replyCount, t.solved,
+        t.accent, t.icon, getSeenCount(t.id),
+        t.id === selectedId, selectMode, selectedIds.has(t.id),
+        openItemMenuId === t.id,
+      ].join("|");
+    }
+
     function renderItem(t) {
       const el = document.createElement("div");
       const unread = Math.max(0, (t.replyCount || 0) - getSeenCount(t.id));
@@ -582,22 +604,63 @@ html[data-theme="light"] {
       loadList(document.getElementById("threadSearch").value);
     }
 
-    function polishEmoji() {
-      if (window.twemoji) window.twemoji.parse(document.body, { folder: "svg", ext: ".svg" });
+    function polishEmoji(root) {
+      if (window.twemoji) window.twemoji.parse(root || document.body, { folder: "svg", ext: ".svg" });
+    }
+
+    // Reconciles the sidebar to match activeThreads/solvedThreads without
+    // rebuilding it from scratch — reuses each thread's existing DOM node
+    // (same identity, same listeners) whenever its itemRenderKey() hasn't
+    // changed, only relocating it if it moved between/within a section and
+    // only rebuilding its innerHTML when something it displays actually
+    // changed. This is what keeps a 6-second poll cheap even with a large
+    // Solved history: on a typical poll nothing in that history changed,
+    // so nothing there gets touched at all.
+    function reconcileSection(container, threads, touchedEls) {
+      let prevEl = null;
+      threads.forEach((t) => {
+        const key = itemRenderKey(t);
+        let entry = renderedItemEls.get(t.id);
+        if (!entry || entry.key !== key) {
+          entry = { el: renderItem(t), key };
+          renderedItemEls.set(t.id, entry);
+          touchedEls.push(entry.el);
+        }
+        const wantPos = prevEl ? prevEl.nextSibling : container.firstChild;
+        if (entry.el.parentNode !== container || entry.el !== wantPos) {
+          container.insertBefore(entry.el, wantPos);
+        }
+        prevEl = entry.el;
+      });
     }
 
     function renderLists() {
       activeCount.textContent = activeThreads.length;
       solvedCount.textContent = solvedThreads.length;
-      activeList.innerHTML = "";
+
+      const touchedEls = []; // nodes newly created or rebuilt this pass — only these need twemoji re-parsing
+
+      let activeEmpty = activeList.querySelector(".threads-empty");
       if (!activeThreads.length) {
-        activeList.innerHTML = '<div class="threads-empty">No active threads.<br/>Submit a form to start one.</div>';
+        if (!activeEmpty) activeList.innerHTML = '<div class="threads-empty">No active threads.<br/>Submit a form to start one.</div>';
       } else {
-        activeThreads.forEach((t) => activeList.appendChild(renderItem(t)));
+        if (activeEmpty) activeEmpty.remove();
+        reconcileSection(activeList, activeThreads, touchedEls);
       }
-      solvedList.innerHTML = "";
-      solvedThreads.forEach((t) => solvedList.appendChild(renderItem(t)));
-      polishEmoji();
+      reconcileSection(solvedList, solvedThreads, touchedEls);
+
+      // Drop tracked nodes for threads that no longer exist in either list
+      // (deleted, or just filtered out by the current search) — everything
+      // still present was already repositioned/rebuilt above.
+      const currentIds = new Set([...activeThreads, ...solvedThreads].map((t) => t.id));
+      for (const [id, entry] of renderedItemEls) {
+        if (!currentIds.has(id)) {
+          entry.el.remove();
+          renderedItemEls.delete(id);
+        }
+      }
+
+      touchedEls.forEach((el) => polishEmoji(el));
       renderBulkBar();
       syncSectionSelectAll();
     }
@@ -999,7 +1062,8 @@ html[data-theme="light"] {
       scrollArea.innerHTML = buildSummaryHTML(t) + buildConversationHTML(t);
       wireConversationButtons();
       if (forceScroll || wasNearBottom) scrollConversation(true);
-      polishEmoji();
+      polishEmoji(topFixed);
+      polishEmoji(scrollArea);
       loadInlineAttachments();
     }
 

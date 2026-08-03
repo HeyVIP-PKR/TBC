@@ -67,8 +67,8 @@
   --sf-filter: none;
   --sf-shade: linear-gradient(180deg, rgba(3,4,13,0.35) 0%, rgba(3,4,13,0.55) 55%, rgba(3,4,13,0.75) 100%);
   --sidebar-bg: rgba(15, 19, 40, 0.75);
-  --sidebar-item-bg: rgba(20, 26, 51, 0.6);
-  --sidebar-item-hover: rgba(35, 43, 82, 0.88);
+  --sidebar-item-bg: rgba(15, 19, 40, 0.88);
+  --sidebar-item-hover: rgba(28, 34, 66, 0.96);
   --pill-bg: rgba(255, 255, 255, 0.04);
   --pill-border: rgba(255, 255, 255, 0.1);
   --brand-row-bg: rgba(255, 255, 255, 0.03);
@@ -1005,12 +1005,32 @@ a { color: inherit; text-decoration: none; }
 .recall-item .t-content { font-size: 10.5px; color: var(--ink-soft); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .thread-item {
+  position: relative;
+  overflow: hidden;
   display: flex; align-items: center; gap: 10px;
   padding: 9px 10px; border-radius: 12px;
   background: var(--sidebar-item-bg);
   border-left: 3px solid transparent;
   cursor: pointer;
   transition: background 0.15s ease;
+  animation: card-glow 2.6s ease-in-out infinite;
+}
+.thread-item::after {
+  content: "";
+  position: absolute; top: 7px; right: 9px;
+  width: 5px; height: 5px; border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 4px 1px rgba(255, 255, 255, 0.8);
+  animation: card-twinkle 2.2s ease-in-out infinite;
+  pointer-events: none;
+}
+.thread-item::before {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(115deg, transparent 40%, rgba(255, 255, 255, 0.09) 50%, transparent 60%);
+  background-size: 250% 100%;
+  animation: card-sweep 3.4s ease-in-out infinite;
+  pointer-events: none;
 }
 .thread-item:hover { background: var(--sidebar-item-hover); }
 .thread-item.selected { background: var(--sidebar-item-hover); border-left-color: var(--thread-accent, var(--accent-gold)); }
@@ -1068,7 +1088,6 @@ a { color: inherit; text-decoration: none; }
 .bulk-action-btn.tone-negative { background: rgba(239, 74, 114, 0.16); border-color: transparent; color: #ef4a72; }
 
 /* ---- Per-item ⋮ menu + Select-mode checkbox ---- */
-.thread-item { position: relative; }
 .thread-item.select-mode { cursor: pointer; }
 .thread-item-check { width: 16px; height: 16px; flex-shrink: 0; cursor: pointer; }
 .item-menu-btn {

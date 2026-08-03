@@ -722,7 +722,7 @@ a { color: inherit; text-decoration: none; }
   position: relative;
   padding: 36px 40px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   text-align: center;
 }
@@ -869,6 +869,24 @@ a { color: inherit; text-decoration: none; }
   0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(26, 156, 110, 0.45); }
   50% { opacity: 0.4; box-shadow: 0 0 6px 2px rgba(26, 156, 110, 0.4); }
 }
+/* Edit-modal action buttons: Save always shows/colors the state it will
+   switch TO (green = Active, gray = Inactive); Delete stays a distinct
+   red outline so it doesn't compete with Save for attention. */
+.announce-save-btn {
+  font-size: 11.5px; font-weight: 700; padding: 7px 14px; border-radius: 8px;
+  cursor: pointer; border: 1.5px solid transparent; transition: all 0.15s ease; white-space: nowrap;
+}
+.announce-save-btn:hover { transform: translateY(-1px); }
+.announce-save-btn.state-active { background: rgba(26, 156, 110, 0.16); color: #1a9c6e; }
+.announce-save-btn.state-active:hover { box-shadow: 0 4px 12px -4px rgba(26, 156, 110, 0.5); }
+.announce-save-btn.state-inactive { background: rgba(136, 144, 192, 0.18); color: #8890c0; }
+.announce-save-btn.state-inactive:hover { box-shadow: 0 4px 12px -4px rgba(136, 144, 192, 0.5); }
+.announce-delete-btn {
+  font-size: 12px; font-weight: 700; padding: 7px 12px; border-radius: 8px;
+  cursor: pointer; border: 1.5px solid rgba(239, 74, 114, 0.5); background: none; color: #ef4a72;
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: all 0.15s ease;
+}
+.announce-delete-btn:hover { background: rgba(239, 74, 114, 0.1); border-color: #ef4a72; }
 
 /* ---- TG Reply Threads ---- */
 .threads-shell { display: flex; height: calc(100vh - 61px); }

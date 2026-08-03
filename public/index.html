@@ -110,13 +110,6 @@
     <main class="hub-main">
       <div class="inner">
         <div class="tool-cards">
-          <a href="/announcements.html" class="tool-card" id="announceCard" data-feature-item="announcements" style="--tool-accent:#f3c463; display:none;">
-            <div class="t-icon" id="announceIcon">📢</div>
-            <div class="t-name">Announcement</div>
-            <div class="t-desc">Set the site-wide reminder banner</div>
-            <div class="t-sub-stat" id="announceStat"></div>
-            <span class="t-arrow">&rarr;</span>
-          </a>
           <a href="/threads.html" class="tool-card" id="threadsCard" data-feature-item="tg_reply_threads" style="--tool-accent:#38bdf8;">
             <div class="t-icon">💭<span class="t-badge" id="threadsUnreadBadge"></span></div>
             <div class="t-name">TG Reply Threads</div>
@@ -140,6 +133,13 @@
             <div class="t-icon">💻</div>
             <div class="t-name">Deposit Backup</div>
             <div class="t-desc">Search across all backup sheets</div>
+            <span class="t-arrow">&rarr;</span>
+          </a>
+          <a href="/announcements.html" class="tool-card" id="announceCard" data-feature-item="announcements" style="--tool-accent:#f3c463; display:none;">
+            <div class="t-icon" id="announceIcon">📢</div>
+            <div class="t-name">Announcement</div>
+            <div class="t-desc">Set the site-wide reminder banner</div>
+            <div class="t-sub-stat" id="announceStat"></div>
             <span class="t-arrow">&rarr;</span>
           </a>
         </div>
@@ -1097,7 +1097,6 @@
               </div>
               ${canEdit ? `<div class="tgroute-row-actions">
                 <button type="button" class="tgroute-action-btn fs-save">Save</button>
-                ${s.status !== "active" ? '<button type="button" class="tgroute-action-btn tgroute-action-secondary fs-reset">Reset to Active</button>' : ""}
               </div>` : ""}
             </div>
           </div>`;
@@ -1158,9 +1157,6 @@
       });
       acctBody.querySelectorAll(".fs-save").forEach((btn) => {
         btn.addEventListener("click", () => saveFeatureStatusRow(btn.closest(".tgroute-row")));
-      });
-      acctBody.querySelectorAll(".fs-reset").forEach((btn) => {
-        btn.addEventListener("click", () => resetFeatureStatusRow(btn.closest(".tgroute-row")));
       });
     }
 
@@ -1261,9 +1257,14 @@
       const status = row.querySelector('.fs-dropdown[data-field="status"]').dataset.value;
       const rolesDd = row.querySelector('.fs-dropdown[data-field="roles"]');
       const bypassRoles = rolesDd.dataset.values ? rolesDd.dataset.values.split(",").filter(Boolean) : [];
+      // "Active" isn't a storable override — it's just the absence of one —
+      // so saving "Active" means deleting the override (what the old,
+      // separate "Reset to Active" button used to do), not POSTing
+      // status:"active" (the server rejects that value on purpose).
+      const isActive = status === "active";
       const res = await window.AgentAuth.authFetch("/api/admin/feature-status", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "save", itemId, status, bypassRoles }),
+        body: JSON.stringify(isActive ? { action: "reset", itemId } : { action: "save", itemId, status, bypassRoles }),
       });
       const data = await res.json();
       if (!data.ok) return showToast(data.error || "Save failed.", "err");
@@ -1278,20 +1279,6 @@
         status: data.status.status,
         blocked: data.status.status !== "active" && !data.status.bypassRoles.includes(authInfo?.role),
       });
-    }
-
-    async function resetFeatureStatusRow(row) {
-      const itemId = row.dataset.item;
-      const res = await window.AgentAuth.authFetch("/api/admin/feature-status", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reset", itemId }),
-      });
-      const data = await res.json();
-      if (!data.ok) return showToast(data.error || "Reset failed.", "err");
-      acctFeatureStatusData.statuses[itemId] = data.status;
-      showToast("Reset to Active.", "ok");
-      renderFeatureStatus();
-      applyFeatureStatusItem(itemId, { status: "active", blocked: false });
     }
 
     let acctOfficesById = {};

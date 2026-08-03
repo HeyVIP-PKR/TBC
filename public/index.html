@@ -332,12 +332,14 @@ html[data-theme="light"] {
         if (!res.ok || !data.ok) throw new Error(data.error || "Save failed.");
         brandConfig = data.config;
         renderBrandRow();
-        modalNote.textContent = "Saved.";
-        modalNote.className = "edit-modal-note ok";
+        modalNote.textContent = "";
+        modalNote.className = "edit-modal-note";
+        if (window.showToast) window.showToast("Save success.", "ok");
         setTimeout(closeEditModal, 600);
       } catch (err) {
         modalNote.textContent = err.message || "Save failed.";
         modalNote.className = "edit-modal-note err";
+        if (window.showToast) window.showToast(err.message || "Save failed.", "err");
       }
     });
 
@@ -525,8 +527,27 @@ html[data-theme="light"] {
       return String(str == null ? "" : str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
     function setAcctNote(msg, cls) {
+      if (cls === "ok") {
+        // Success: toast only. This function is shared by every per-row
+        // save in the Account Management modal (TG Group/Channel, Deposit
+        // Sheet Link, Settings, Create Account, Reset Password, etc.) —
+        // previously it only ever wrote a plain "Saved." at the bottom of
+        // the modal and never touched the toast, so success on all of
+        // those was silently missing the same popup other pages already
+        // had. Centralizing it here (instead of editing every call site)
+        // is the fix, not a per-call patch.
+        acctNote.textContent = "";
+        acctNote.className = "edit-modal-note";
+        if (msg && window.showToast) window.showToast(msg, "ok");
+        return;
+      }
+      // Failure keeps the persistent inline note (worth reading again,
+      // not gone in 3s) and, if there's an actual message, also toasts it.
+      // Transient in-progress text ("Saving…", no cls) just falls through
+      // to the plain inline write below — not a final result, no toast.
       acctNote.textContent = msg || "";
       acctNote.className = "edit-modal-note" + (cls ? " " + cls : "");
+      if (cls === "err" && msg && window.showToast) window.showToast(msg, "err");
     }
 
     // Popup-style status feedback — used by the Settings tab's own status
@@ -1284,7 +1305,12 @@ html[data-theme="light"] {
       const data = await res.json();
       if (!data.ok) return showToast(data.error || "Save failed.", "err");
       acctFeatureStatusData.statuses[itemId] = data.status;
-      showToast("Saved — takes effect on the next request.", "ok");
+      // Build the toast text off the actual selected status, not a fixed
+      // string — same fix as the Active/Inactive announcement toggle:
+      // "Save Active success." / "Save Maintenance success." / "Save
+      // Coming soon success." must each say what was actually saved.
+      const statusLabel = { active: "Active", maintenance: "Maintenance", coming_soon: "Coming soon" }[status] || status;
+      showToast(`Save ${statusLabel} success.`, "ok");
       renderFeatureStatus();
       // Update the Home card/sidebar link behind the modal from the data
       // this Save call just returned — NOT a fresh /api/feature-status

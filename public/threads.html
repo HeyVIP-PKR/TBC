@@ -622,6 +622,7 @@ html[data-theme="light"] {
         const key = itemRenderKey(t);
         let entry = renderedItemEls.get(t.id);
         if (!entry || entry.key !== key) {
+          if (entry) entry.el.remove(); // detach stale node before replacing the Map pointer, or it leaks as an orphan
           entry = { el: renderItem(t), key };
           renderedItemEls.set(t.id, entry);
           touchedEls.push(entry.el);

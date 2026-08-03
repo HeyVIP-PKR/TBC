@@ -36,6 +36,8 @@ html[data-theme="light"] {
 }
 </style>
 <link rel="stylesheet" href="/assets/style.css" />
+<link rel="stylesheet" href="/assets/toast.css" />
+<script src="/assets/toast.js"></script>
 <script src="/assets/starfield.js" defer></script>
 <script src="/assets/schemas.js"></script>
 <style>
@@ -539,18 +541,34 @@ html[data-theme="light"] {
         }),
       });
       const data = await res.json();
-      if (!data.ok) { msg.innerHTML = `<div class="admin-msg err">${escapeHtml(data.error || "Save failed.")}</div>`; return; }
-      msg.innerHTML = '<div class="admin-msg ok">Saved.</div>';
+      if (!data.ok) {
+        // Failure: keep the persistent inline message (worth reading
+        // again, isn't gone in 3s) AND pop the toast for an immediate cue.
+        const errText = data.error || "Save failed.";
+        msg.innerHTML = `<div class="admin-msg err">${escapeHtml(errText)}</div>`;
+        showToast(errText, "err");
+        return;
+      }
+      // Success: toast only. The old inline "Saved." div used to fire at
+      // the same time as a toast would, saying the same thing twice —
+      // clear it instead of writing it, so there's exactly one confirmation.
+      msg.innerHTML = "";
+      showToast("Save success.", "ok");
       resetAccountForm();
       loadAccounts();
     });
 
     async function deleteAccount(username) {
       if (!confirm(`Delete account "${username}"?`)) return;
-      await adminFetch("/api/admin/accounts", {
+      const res = await adminFetch("/api/admin/accounts", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "delete", username }),
       });
+      const data = await res.json();
+      // This used to reload the list either way with no feedback at all —
+      // a failed delete looked identical to a successful one.
+      if (!data.ok) { showToast(data.error || "Delete failed.", "err"); return; }
+      showToast("Delete success.", "ok");
       loadAccounts();
     }
 
@@ -562,7 +580,8 @@ html[data-theme="light"] {
         body: JSON.stringify({ action: locked ? "lock" : "unlock", username }),
       });
       const data = await res.json();
-      if (!data.ok) { alert(data.error || `${verb} failed.`); return; }
+      if (!data.ok) { showToast(data.error || `${verb} failed.`, "err"); return; }
+      showToast(`${verb} success.`, "ok"); // verb already reflects lock vs unlock — never hard-coded
       loadAccounts();
     }
   </script>

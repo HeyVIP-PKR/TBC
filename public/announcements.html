@@ -36,6 +36,8 @@ html[data-theme="light"] {
 }
 </style>
 <link rel="stylesheet" href="/assets/style.css" />
+<link rel="stylesheet" href="/assets/toast.css" />
+<script src="/assets/toast.js"></script>
 <script src="/assets/starfield.js" defer></script>
 <script src="/assets/authguard.js"></script>
 <script src="/assets/announcement-banner.js" defer></script>
@@ -295,7 +297,18 @@ html[data-theme="light"] {
         body: JSON.stringify({ action: "save", id, text, topic, enabled, startAt, endAt }),
       });
       const data = await res.json();
-      if (!data.ok) { errEl.textContent = data.error || "Save failed."; return; }
+      if (!data.ok) {
+        const errText = data.error || "Save failed.";
+        errEl.textContent = errText;
+        showToast(errText, "err");
+        return;
+      }
+      errEl.textContent = "";
+      // The save button doubles as an Active/Inactive toggle (same button,
+      // text flips with state) — the toast text has to be derived from
+      // `enabled`, the value actually being saved, not hard-coded, or a
+      // toggle to Inactive would still show a confusing "Active success."
+      showToast(enabled ? "Active success." : "Inactive success.", "ok");
       selectedId = data.announcement.id;
       mode = "edit";
       await loadAnnouncements();
@@ -309,7 +322,8 @@ html[data-theme="light"] {
         body: JSON.stringify({ action: "delete", id }),
       });
       const data = await res.json();
-      if (!data.ok) { alert(data.error || "Delete failed."); return; }
+      if (!data.ok) { showToast(data.error || "Delete failed.", "err"); return; }
+      showToast("Delete success.", "ok");
       selectedId = null;
       mode = "new";
       await loadAnnouncements();

@@ -36,6 +36,8 @@ html[data-theme="light"] {
 }
 </style>
 <link rel="stylesheet" href="/assets/style.css" />
+<link rel="stylesheet" href="/assets/toast.css" />
+<script src="/assets/toast.js"></script>
 <script src="/assets/starfield.js" defer></script>
 <script src="/assets/authguard.js"></script>
 <script src="/assets/announcement-banner.js" defer></script>
@@ -106,6 +108,23 @@ html[data-theme="light"] {
   </div>
 
   <script>
+    // ---- Note on feedback (alert vs. the site-wide toast) --------------
+    // This page deliberately keeps native alert() for send/edit/recall/
+    // delete failures instead of the /assets/toast.js "click anywhere to
+    // dismiss" error toast used elsewhere in the app. Two reasons, both
+    // from feedback-toast-system-design.md's list of intentional
+    // exceptions, not an oversight:
+    //   1. Replying to a thread is the highest-frequency action in the
+    //      whole app (this is where agents spend most of their shift). A
+    //      toast that has to be clicked away every single time it fails
+    //      would be a constant tap-tax on exactly the busiest screen.
+    //   2. A few of these messages (the "Telegram updated but the Sheet
+    //      row couldn't be updated" ones) carry a real error string the
+    //      agent needs to read and act on, not just glance at — alert()
+    //      blocking until dismissed suits that better than a popup that
+    //      might get missed mid-scroll.
+    // Successful sends/edits/deletes aren't toasted either, since the
+    // change is already visible in the thread/list right away.
     window.initThemeToggle();
 
     window.initClock();

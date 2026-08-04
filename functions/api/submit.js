@@ -6,6 +6,7 @@ import { verifyRequest, canSeeBrand, canSeeModule } from "../_shared/accounts.js
 import { getRouteOverride } from "../_shared/routes.js";
 import { getFeatureStatus, accountCanBypass } from "../_shared/featureStatus.js";
 import { resolveColumnValues, resolveSheetLayout, formatDateDDMMYYYY, buildTicketMessage, buildTitleAndSummary } from "../_shared/messageBuilders.js";
+import { compressImageForTelegram } from "../_shared/telegramImageCompress.js";
 
 const VALID_MODULES = Object.keys(MODULE_META);
 
@@ -156,6 +157,11 @@ async function handleSubmit({ request, env }) {
   } catch (e) {
     // Fall back to a plain text message so the ticket isn't lost even if
     // the attachment send fails (e.g. caption too long, bad file, etc).
+    // Logged (not just swallowed into attachmentErrors) so a Cloudflare
+    // Pages log tail actually shows WHY a ticket fell back to text-only —
+    // this was a real gap during the "整组消失" investigation (no server
+    // logs meant reconstructing everything from R2 file sizes instead).
+    console.error(`[submit.js] Attachment send failed, falling back to text-only message: ${String(e.message || e)}`);
     attachmentErrors.push(String(e.message || e));
     const fallback = await sendTelegramMessage({ botToken, route, text });
     if (!fallback.ok) {
@@ -365,11 +371,23 @@ async function sendTelegramWithAttachments({ botToken, route, text, attachments 
 }
 
 async function sendSingleWithCaption({ botToken, route, text, attachment }) {
-  const { name, type, dataUrl } = attachment;
-  const bytes = base64ToBytes(dataUrlToBase64(dataUrl));
-  const blob = new Blob([bytes], { type: type || "application/octet-stream" });
+  let { name, type, dataUrl } = attachment;
+  let bytes = base64ToBytes(dataUrlToBase64(dataUrl));
 
   const isImage = looksLikeImage(type, name);
+  // Compress BEFORE handing bytes to Telegram, not after Telegram already
+  // rejected them — see _shared/telegramImageCompress.js. No-op if the
+  // image is already under the target size or not an image at all (this
+  // path's sendDocument branch goes up to 50MB, so documents are left
+  // alone).
+  if (isImage) {
+    const compressed = await compressImageForTelegram(bytes, { type, name });
+    bytes = compressed.bytes;
+    type = compressed.type;
+    name = compressed.name;
+  }
+  const blob = new Blob([bytes], { type: type || "application/octet-stream" });
+
   const method = isImage ? "sendPhoto" : "sendDocument";
   const field = isImage ? "photo" : "document";
 
@@ -406,15 +424,25 @@ async function sendMediaGroup({ botToken, route, text, attachments }) {
   });
   form.append("media", JSON.stringify(media));
 
-  attachments.forEach((att, i) => {
-    const bytes = base64ToBytes(dataUrlToBase64(att.dataUrl));
-    const blob = new Blob([bytes], { type: att.type || "image/jpeg" });
-    form.append(`file${i}`, blob, att.name || `photo${i}`);
-  });
+  // Compress every photo BEFORE building the multipart body. This is the
+  // path the "整组消失" bug came from: sendMediaGroup is all-or-nothing —
+  // ONE oversized photo makes Telegram reject the whole album (ok:false),
+  // silently dropping every image in it, not just the big one. See
+  // telegram-photo-limit-fix.md for the incident this fixes.
+  for (let i = 0; i < attachments.length; i++) {
+    const att = attachments[i];
+    const rawBytes = base64ToBytes(dataUrlToBase64(att.dataUrl));
+    const { bytes, type, name } = await compressImageForTelegram(rawBytes, { type: att.type, name: att.name });
+    const blob = new Blob([bytes], { type: type || "image/jpeg" });
+    form.append(`file${i}`, blob, name || `photo${i}`);
+  }
 
   const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMediaGroup`, { method: "POST", body: form });
   const data = await res.json();
-  if (!data.ok) throw new Error(data.description || "unknown Telegram error");
+  if (!data.ok) {
+    console.error(`[submit.js] sendMediaGroup rejected by Telegram (${attachments.length} attachment(s)): ${data.description || "unknown error"}`);
+    throw new Error(data.description || "unknown Telegram error");
+  }
   return data.result.map((m) => ({
     messageId: m.message_id,
     fileId: m.photo?.[m.photo.length - 1]?.file_id || null,

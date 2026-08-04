@@ -1,6 +1,15 @@
 name = "pkr-issue-hub"
 pages_build_output_dir = "public"
 
+# NOTE: as of the Telegram photo-compression feature, this project has a
+# package.json dependency (@cf-wasm/photon) that needs `npm install` to
+# run before Functions get bundled. Cloudflare Pages' Wrangler config
+# has no [build] key to declare that here (that's Workers-only) — the
+# Build command has to be set in the dashboard instead:
+# Workers & Pages -> this project -> Settings -> Builds & deployments ->
+# Build command = "npm install", Build output directory = "public".
+# See README.md for the full explanation.
+
 # PKR market — brand new bucket, must NOT reuse the INR build's
 # "inr-issuescreenshot" bucket (would mix PKR and INR ticket screenshots
 # together). Created under the HeyVIP-PKR Cloudflare account.

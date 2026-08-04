@@ -52,6 +52,7 @@ import { getThread, createThread, addForwardedToLink } from "../_shared/threads.
 import { verifyRequest, canSeeBrand, canSeeModule } from "../_shared/accounts.js";
 import { buildTicketMessage, buildTitleAndSummary, resolveColumnValues, resolveSheetLayout, formatDateDDMMYYYY } from "../_shared/messageBuilders.js";
 import { getRouteOverride } from "../_shared/routes.js";
+import { compressImageForTelegram } from "../_shared/telegramImageCompress.js";
 
 export async function onRequestPost(context) {
   try {
@@ -163,6 +164,7 @@ async function handlePost({ request, env }) {
   try {
     tgResult = await sendCombinedAttachments({ botToken: env.TELEGRAM_BOT_TOKEN, route, text, fileIds, newAttachments: newAttachments || [] });
   } catch (e) {
+    console.error(`[forward.js] Telegram send failed: ${String((e && e.message) || e)}`);
     return json({ ok: false, error: `Telegram send failed: ${String((e && e.message) || e)}` }, 502);
   }
   // Fallback link resolveColumnValues() reaches for when THIS module
@@ -326,15 +328,26 @@ async function sendCombinedAttachments({ botToken, route, text, fileIds, newAtta
   media[0].parse_mode = "HTML";
   form.append("media", JSON.stringify(media));
 
-  newAttachments.forEach((att, i) => {
-    const bytes = base64ToBytes(dataUrlToBase64(att.dataUrl));
-    const blob = new Blob([bytes], { type: att.type || "application/octet-stream" });
-    form.append(`newfile${i}`, blob, att.name || `attachment${i}`);
-  });
+  // Only the FRESH uploads have bytes to compress — carried-over
+  // fileIds are already sitting on Telegram's servers under their
+  // original size and can't be (and don't need to be) touched. Same
+  // "compress before Telegram can reject it" fix as submit.js's
+  // sendMediaGroup — see telegram-photo-limit-fix.md.
+  for (let i = 0; i < newAttachments.length; i++) {
+    const att = newAttachments[i];
+    const isImage = looksLikeImage(att.type, att.name);
+    const rawBytes = base64ToBytes(dataUrlToBase64(att.dataUrl));
+    const { bytes, type, name } = isImage
+      ? await compressImageForTelegram(rawBytes, { type: att.type, name: att.name })
+      : { bytes: rawBytes, type: att.type, name: att.name };
+    const blob = new Blob([bytes], { type: type || "application/octet-stream" });
+    form.append(`newfile${i}`, blob, name || `attachment${i}`);
+  }
 
   const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMediaGroup`, { method: "POST", body: form });
   const data = await res.json();
   if (!data.ok) {
+    console.error(`[forward.js] sendMediaGroup rejected by Telegram (${fileIds.length} carried-over + ${newAttachments.length} new): ${data.description || "unknown error"}`);
     // Most likely cause: one of the carried-over file_ids isn't
     // actually a photo (a media group requires every "photo"-typed
     // entry to genuinely resolve as one) — fall back to sending
@@ -371,10 +384,16 @@ function looksLikeImage(type, name) {
 }
 
 async function sendOneFreshUpload({ botToken, route, text, attachment }) {
-  const { name, type, dataUrl } = attachment;
-  const bytes = base64ToBytes(dataUrlToBase64(dataUrl));
-  const blob = new Blob([bytes], { type: type || "application/octet-stream" });
+  let { name, type, dataUrl } = attachment;
+  let bytes = base64ToBytes(dataUrlToBase64(dataUrl));
   const isImage = looksLikeImage(type, name);
+  if (isImage) {
+    const compressed = await compressImageForTelegram(bytes, { type, name });
+    bytes = compressed.bytes;
+    type = compressed.type;
+    name = compressed.name;
+  }
+  const blob = new Blob([bytes], { type: type || "application/octet-stream" });
   const method = isImage ? "sendPhoto" : "sendDocument";
   const field = isImage ? "photo" : "document";
 

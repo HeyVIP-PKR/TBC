@@ -58,6 +58,7 @@ import { BRANDS, MODULE_META, MESSAGE_TEMPLATE, PROMOTION_MESSAGE_TEMPLATE } fro
 import { updateRowByColumns } from "../../_shared/googleSheets.js";
 import { buildTicketMessage, buildTitleAndSummary, resolveColumnValues } from "../../_shared/messageBuilders.js";
 import { getFeatureStatus, accountCanBypass } from "../../_shared/featureStatus.js";
+import { compressImageForTelegram } from "../../_shared/telegramImageCompress.js";
 
 async function checkThreadsFeatureGate(env, account) {
   const featureStatus = await getFeatureStatus(env, "tg_reply_threads");
@@ -170,6 +171,7 @@ async function handleThreadAction({ request, env, params }) {
         messageIds = [messageId];
       }
     } catch (e) {
+      console.error(`[threads/[id].js] Reply send failed for thread ${thread.id}: ${String(e.message || e)}`);
       return json({ ok: false, error: String(e.message || e) }, 502);
     }
 
@@ -485,10 +487,22 @@ async function sendTelegramReplyAttachments(env, thread, text, attachments, repl
 }
 
 async function sendReplySingleWithCaption(env, thread, text, attachment, replyId) {
-  const { name, type, dataUrl } = attachment;
-  const blob = new Blob([dataUrlToBytes(dataUrl)], { type: type || "application/octet-stream" });
+  let { name, type, dataUrl } = attachment;
+  let bytes = dataUrlToBytes(dataUrl);
 
   const kind = attachmentKind(type, name);
+  // Same "compress before Telegram can reject it" fix as submit.js — see
+  // telegram-photo-limit-fix.md. Only photos hit Telegram's 10MB
+  // sendPhoto limit; sendVideo/sendDocument have their own separate
+  // (much higher) limits and are left untouched.
+  if (kind === "photo") {
+    const compressed = await compressImageForTelegram(bytes, { type, name });
+    bytes = compressed.bytes;
+    type = compressed.type;
+    name = compressed.name;
+  }
+  const blob = new Blob([bytes], { type: type || "application/octet-stream" });
+
   const method = kind === "photo" ? "sendPhoto" : kind === "video" ? "sendVideo" : "sendDocument";
   const field = kind; // "photo" | "video" | "document" — same names as the FormData field Telegram expects
 
@@ -501,7 +515,10 @@ async function sendReplySingleWithCaption(env, thread, text, attachment, replyId
 
   const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, { method: "POST", body: form });
   const data = await res.json();
-  if (!data.ok) throw new Error(data.description || "Telegram send failed.");
+  if (!data.ok) {
+    console.error(`[threads/[id].js] Reply attachment send failed (${method}): ${data.description || "unknown error"}`);
+    throw new Error(data.description || "Telegram send failed.");
+  }
 
   // sendPhoto returns an ARRAY of sizes (Telegram auto-generates several
   // resolutions) — the last one is the largest/original-quality version,
@@ -536,14 +553,29 @@ async function sendReplyMediaGroup(env, thread, text, attachments, replyId) {
   });
   form.append("media", JSON.stringify(media));
 
-  attachments.forEach((att, i) => {
-    const blob = new Blob([dataUrlToBytes(att.dataUrl)], { type: att.type || "application/octet-stream" });
-    form.append(`file${i}`, blob, att.name || `file${i}`);
-  });
+  // Compress every photo before building the multipart body — a reply
+  // album is just as all-or-nothing as a ticket album (see
+  // telegram-photo-limit-fix.md), one oversized photo would silently
+  // drop the whole reply. Videos pass through untouched (photon only
+  // handles still images; sendVideo/sendMediaGroup's video limit is
+  // separate and much higher anyway).
+  for (let i = 0; i < attachments.length; i++) {
+    const att = attachments[i];
+    const isPhoto = attachmentKind(att.type, att.name) === "photo";
+    const rawBytes = dataUrlToBytes(att.dataUrl);
+    const { bytes, type, name } = isPhoto
+      ? await compressImageForTelegram(rawBytes, { type: att.type, name: att.name })
+      : { bytes: rawBytes, type: att.type, name: att.name };
+    const blob = new Blob([bytes], { type: type || "application/octet-stream" });
+    form.append(`file${i}`, blob, name || `file${i}`);
+  }
 
   const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMediaGroup`, { method: "POST", body: form });
   const data = await res.json();
-  if (!data.ok) throw new Error(data.description || "Telegram send failed.");
+  if (!data.ok) {
+    console.error(`[threads/[id].js] Reply sendMediaGroup rejected by Telegram (${attachments.length} attachment(s)): ${data.description || "unknown error"}`);
+    throw new Error(data.description || "Telegram send failed.");
+  }
   // attachments[i] lines up positionally with data.result[i] —
   // sendMediaGroup returns results in the same order the media items
   // were submitted in (same assumption submit.js's own sendMediaGroup

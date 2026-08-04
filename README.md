@@ -6,7 +6,7 @@ a formatted message to the right Telegram group/topic for the brand.
 Selected modules also get logged to that brand's Google Sheet.
 
 ```
-public/                  ← static site (deployed as-is, no build step)
+public/                  ← static site (deployed as-is)
   index.html              hub page (the card grid)
   form.html                generic form, driven by ?module=<id>
   assets/schemas.js        brands + field definitions (PUBLIC, no secrets)
@@ -15,17 +15,50 @@ public/                  ← static site (deployed as-is, no build step)
 functions/
   api/submit.js            the API route: Telegram + optional Sheet log
   _shared/routing.js        SERVER-ONLY: chat IDs, topic IDs, sheet URLs
+  _shared/telegramImageCompress.js  compresses oversized photos before
+                            sending to Telegram (needs @cf-wasm/photon —
+                            see the build-command note below)
 google-apps-script/
   sheet-logger.gs           paste into Apps Script for sheet logging
+package.json                declares @cf-wasm/photon — Cloudflare Pages
+                             needs a Build command set (see below) or it
+                             won't get installed and Functions bundling
+                             will fail with "Could not resolve
+                             @cf-wasm/photon"
 wrangler.toml
 ```
 
+> **⚠️ Build command is now REQUIRED (this was NOT true before the
+> photo-compression feature was added).**
+> This project used to be pure static + Functions with zero npm
+> dependencies, so leaving Cloudflare Pages' **Build command** field
+> blank was fine — Pages would skip the whole build step (including
+> `npm install`) and that was harmless because there was nothing to
+> install. That's no longer true now that `functions/_shared/telegramImageCompress.js`
+> imports `@cf-wasm/photon` (declared in `package.json`).
+>
+> **This is a dashboard setting, not something in `wrangler.toml`** —
+> Cloudflare Pages' Wrangler config file has no `[build]` key (that's a
+> plain-Workers-only concept); a Pages project's build command can only
+> be set via the Cloudflare dashboard or the Pages REST API.
+>
+> Go to **Cloudflare dashboard → Workers & Pages → this project →
+> Settings → Builds & deployments** and set:
+> - **Build command**: `npm install`
+> - **Build output directory**: `public` (unchanged)
+>
+> Then retry the deployment (or push a new commit). Without this, the
+> build log will show `No build command specified. Skipping build step.`
+> and the Functions bundler will fail to resolve `@cf-wasm/photon`.
+
 ## 1. Drop this into your existing repo
 
-Copy `public/`, `functions/`, `google-apps-script/`, and `wrangler.toml`
-into your repo (merge folders if you already have a `functions/` dir).
-Commit and push — if the repo is already connected to Cloudflare Pages,
-this alone triggers a deploy.
+Copy `public/`, `functions/`, `google-apps-script/`, `package.json`,
+and `wrangler.toml` into your repo (merge folders if you already have
+a `functions/` dir). Commit and push — if the repo is already
+connected to Cloudflare Pages, this alone triggers a deploy (but see
+the Build command warning above — it needs to be set once, manually,
+in the dashboard; it isn't something a commit can set for you).
 
 ## 2. Set the bot token as a secret
 

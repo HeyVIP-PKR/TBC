@@ -142,9 +142,42 @@ async function handleUpdate(env, update) {
 // webhook, so there's no double-handling risk between the two.
 async function handleEditedMessage(env, msg) {
   if (!msg || msg.from?.is_bot) return;
-  const hasContent = msg.text || msg.caption;
-  if (!hasContent) return; // e.g. only the attached media changed, no caption either way — nothing to show
+
+  // Same attachment extraction as a brand-new incoming message (see
+  // handleUpdate above) — an edit can add, swap, or (via Telegram's
+  // editMessageMedia) remove the attached photo/document/video/voice/
+  // sticker independently of whether the caption changed at all. This
+  // used to only be captured on first send, never on edit, so someone
+  // attaching a photo to an already-sent message (or replacing one)
+  // never showed up here — the edit was either dropped entirely (no
+  // caption change) or landed as a text-only update with the image
+  // missing.
+  let attachmentFileId = null;
+  let attachmentName = null;
+  if (msg.photo && msg.photo.length) {
+    attachmentFileId = msg.photo[msg.photo.length - 1].file_id;
+    attachmentName = "photo.jpg";
+  } else if (msg.document) {
+    attachmentFileId = msg.document.file_id;
+    attachmentName = msg.document.file_name || "document";
+  } else if (msg.video) {
+    attachmentFileId = msg.video.file_id;
+    attachmentName = msg.video.file_name || "video.mp4";
+  } else if (msg.voice) {
+    attachmentFileId = msg.voice.file_id;
+    attachmentName = "voice message";
+  } else if (msg.sticker) {
+    attachmentFileId = msg.sticker.file_id;
+    attachmentName = "sticker";
+  }
+
+  const hasContent = msg.text || msg.caption || attachmentFileId;
+  if (!hasContent) return; // nothing left to show at all — ignore
+
   const threadId = await findThreadIdByMessage(env, msg.chat.id, msg.message_id);
   if (!threadId) return; // editing something we're not tracking — ignore, don't guess
-  await editIncomingMessageInThread(env, threadId, msg.message_id, msg.text || msg.caption);
+
+  const text = msg.text || msg.caption || (attachmentFileId ? `📎 ${attachmentName}` : "");
+  const attachment = attachmentFileId ? { fileId: attachmentFileId, name: attachmentName } : null;
+  await editIncomingMessageInThread(env, threadId, msg.message_id, text, attachment);
 }

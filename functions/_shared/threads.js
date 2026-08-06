@@ -806,13 +806,28 @@ export async function editMessageInThread(env, threadId, messageId, text) {
 // reply does (see appendMessage above) — a deliberate edit is the same
 // "still needs attention" signal, and it shouldn't sit unnoticed just
 // because it happened to be an edit instead of a new message.
-export async function editIncomingMessageInThread(env, threadId, messageId, text) {
+//
+// `attachment` (optional) carries { fileId, name } when the edited
+// Telegram message currently has photo/document/video/voice/sticker
+// attached — e.g. someone attached a photo to a message that didn't have
+// one before, or swapped it for a different one. Previously this
+// function only ever touched `text`, so an edit that added/changed an
+// attachment silently updated nothing visible in the dashboard even when
+// the edit WAS being recorded — the photo itself never made it in.
+// Passing null clears any attachment that used to be there (matches
+// Telegram: editMessageMedia can remove media just as it can add it).
+export async function editIncomingMessageInThread(env, threadId, messageId, text, attachment = undefined) {
   const thread = await getThread(env, threadId);
   if (!thread) return null;
   const msg = thread.messages.find((m) => !m.self && m.messageId === messageId);
   if (!msg) return null; // not a message we're tracking for this thread — ignore
   msg.text = text;
   msg.editedAt = new Date().toISOString();
+  if (attachment !== undefined) {
+    msg.hasAttachment = !!attachment;
+    msg.attachmentFileId = attachment ? attachment.fileId : null;
+    msg.attachmentName = attachment ? attachment.name : null;
+  }
   thread.lastActivity = msg.editedAt;
   if (thread.solved) {
     thread.solved = false;

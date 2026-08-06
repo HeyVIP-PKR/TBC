@@ -479,12 +479,35 @@
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "Submission failed");
 
-      status.textContent = !data.sheetAttempted
-        ? "Submitted — posted to Telegram."
-        : data.sheetLogged
-        ? "Submitted — posted to Telegram and logged to sheet."
-        : `Submitted to Telegram, but sheet logging failed: ${data.sheetError || "unknown error"}`;
-      status.className = data.sheetAttempted && !data.sheetLogged ? "status-msg err" : "status-msg ok";
+      // Attachment send to Telegram can silently degrade to a text-only
+      // message server-side (see submit.js's sendTelegramWithAttachments
+      // catch block — caption too long, bad file, Telegram API rejection,
+      // etc). The ticket itself still goes through fine, so this was
+      // never surfaced here before, which meant the agent saw a plain
+      // green "Submitted" success message even when the screenshots they
+      // attached never actually made it into the Telegram group. Now
+      // checked explicitly so that case shows as a visible warning
+      // instead of a silent, misleading success.
+      const hadAttachments = Array.isArray(files) ? files.length > 0 : false; // captured before form.reset() below clears `files`
+      const attachmentFailed = hadAttachments && Array.isArray(data.attachmentErrors) && data.attachmentErrors.length > 0;
+
+      let sheetPart;
+      if (!data.sheetAttempted) {
+        sheetPart = "posted to Telegram.";
+      } else if (data.sheetLogged) {
+        sheetPart = "posted to Telegram and logged to sheet.";
+      } else {
+        sheetPart = `posted to Telegram, but sheet logging failed: ${data.sheetError || "unknown error"}`;
+      }
+
+      if (attachmentFailed) {
+        status.textContent = `Submitted, but your screenshot(s) did NOT reach Telegram (sent as text-only instead) — ${data.attachmentErrors.join("; ")}. The ticket itself was ${sheetPart} Please re-attach and resend the screenshot(s) separately, or notify the team.`;
+        status.className = "status-msg err";
+        window.showToast?.("Screenshots failed to send to Telegram — see the note below.", "err");
+      } else {
+        status.textContent = `Submitted — ${sheetPart}`;
+        status.className = data.sheetAttempted && !data.sheetLogged ? "status-msg err" : "status-msg ok";
+      }
       form.reset();
       brandSelect.selectedIndex = 0;
       files = [];

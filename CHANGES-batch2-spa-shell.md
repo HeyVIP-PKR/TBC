@@ -198,3 +198,76 @@ Cloudflare 边缘节点的瞬时问题——`mount()` 这个 Promise 就直接 r
 - 点击 Retry 后成功重新拉取并正常渲染表单（QA 模块标题/字段正确出现）
 - 完整跑了一遍此前的回归测试（6 个路由挂载 + 打开工单看消息 + 前进后退 +
   停留在 threads 强制刷新），全部依旧正常，这次修复没有引入新问题
+
+---
+
+## 追加修复 3（2026-08-09）：Announcement 提示条不显示 + Promo/Deposit 页面样式丢失
+
+**症状 A**：切到 TG Reply Threads / 表单 / 其他任意 SPA 页面后，顶部原本该
+显示"FRIENDLY REMINDER"之类提示条的位置一直空白。
+
+**根因 A**：`announcement-banner.js` 是壳（index.html）加载时只跑一次的脚本，
+内部用 `document.getElementById("announcementBanner")` 去找挂载点。首页自己
+（隐藏时也不会被移除）和每个 SPA 挂载页面各自都有一个 `id="announcementBanner"`
+的容器——`getElementById` 在有重复 id 时永远只返回文档里第一个，也就是首页
+那个（此时是隐藏的），内容全渲染进了看不见的地方，当前可见页面的那个容器
+永远是空的。
+
+**修复 A**：把脚本从"只认第一个 id"改成"当前 DOM 里所有同 id 容器都独立
+渲染"（`document.querySelectorAll('[id="announcementBanner"]')` + 每次查找都
+用 `slot.querySelector(...)` 限定在对应容器内部，避免多个容器共用同一批
+`#annTextA` 等内部 id 时互相打架）。另外 `spa-shell.js` 现在每次挂载新页面
+成功后，会立刻调用一次 `window.refreshAnnouncementBanner()`，让刚挂载出来的
+容器马上补上内容，不用等最长 60 秒的下一次轮询。
+
+**症状 B**：Promo Code Search / Deposit Issue / Deposit Backup 这三个页面切
+进去后完全没有卡片样式，看起来像纯文字堆在左上角。
+
+**根因 B**：这三个页面各自在自己的 `<head>` 里有一段页面专属的 `<style>`
+（`.promo-shell`/`.promo-header-card`、`.dep-header-card` 等，不在公共
+style.css 里）。`spa-shell.js` 挂载时只从抓回来的文档里选取 body 部分的
+几个节点搬进 `#spaMount`，从没把这些页面专属的 `<style>` 标签一起搬过去，
+所以这几个页面在 SPA 模式下渲染出来完全没有样式。threads/announcements/
+form 因为所有样式都在公共 style.css 里，没有这个问题，之前没暴露出来。
+
+**修复 B**：`mount()` 现在会在首次挂载某个路由时，把该路由文档里所有
+`<style>` 标签克隆一份插进壳自己的 `<head>`（每个路由只插入一次，重复访问
+不会重复插入）。
+
+**验证**：模拟环境下确认 Home / Threads / Promo 三处的提示条内容完全一致
+地正确出现；Promo 的 `.promo-shell`（max-width/padding）、`.promo-header-card`
+（圆角/背景色）以及 Deposit Issue / Deposit Backup 的 `.dep-header-card`
+计算样式均正确生效。又完整跑了一遍此前全部回归测试（6 路由挂载、工单消息、
+前进后退、强制刷新），全部依旧正常。
+
+---
+
+## 追加优化（2026-08-09）：品牌 logo / 背景图瘦身
+
+之前一直识别出但没动手改的性能问题，现在处理了。
+
+**改了什么**：4 张品牌 logo（原始都是 640×640，但实际显示最大只有 32px）+
+1 张背景图，只做了尺寸/压缩调整，没碰任何代码、文件名、路径：
+
+| 文件 | 改动前 | 改动后 |
+|---|---|---|
+| `brands/kv8.png` | 339KB (640×640) | 17KB (128×128) |
+| `brands/superbaji.png` | 149KB (640×640) | 16KB (128×128) |
+| `brands/heybaji.png` | 140KB (640×640) | 11KB (128×128) |
+| `brands/darazplay.png` | 142KB (640×640) | 10KB (128×128) |
+| `bg-space.jpg` | 251KB | 202KB（quality 78→62，背景上一直盖着最深 75% 透明度的暗色渐变，肉眼看不出差别） |
+
+128×128 是给这几个 logo 留的安全余量——它们目前最大的实际显示尺寸是
+`.dep-brand-img`（Deposit Issue/Backup 页面）的 32px，128px 在 4 倍视网膜屏
+下依然清晰,不会糊。文件名、路径完全没变（`DEFAULT_LOGOS`
+`functions/api/brand-config.js`、`logoPath()` 这些引用都不用动）。
+
+**总体积**：这 5 个文件合计从 ~1004KB 降到 ~255KB（省了 75%）。首页跑马灯
+把 4 张大 logo 各重复渲染 4 份（36 个 `<img>` 里有 16 个是这几张大图），
+之前每次加载/解码这些图片是实打实的主线程开销——这也是之前诊断"跑马灯
+偶尔像加速/整体卡顿"最可能的根因,现在应该会明显缓解。
+
+**验证**：跑了完整回归测试（6 路由挂载、工单消息、前进后退、强制刷新、
+Announcement 提示条、Promo/Deposit 页面样式），全部依旧正常；跑马灯测速
+在压缩后依旧稳定在 ~94px/s，没有引入新问题。压缩后的 logo 目视检查过，
+清晰度没有明显损失。

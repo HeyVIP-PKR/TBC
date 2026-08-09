@@ -41,12 +41,31 @@
   let rotateIndex = 0;
   let rotateTimer = null;
 
-  // Builds the banner's DOM shell fresh — called whenever the visible
-  // set changes (new data from a poll, or a dismiss). Rotation itself
-  // (see showItem below) never rebuilds this, it only touches the two
-  // text nodes inside it, which is what makes the slide transition
-  // possible in the first place (a full innerHTML replace every tick
-  // would just snap instantly, no transition to animate).
+  // Under the SPA shell (spa-shell.js), more than one `#announcementBanner`
+  // placeholder can exist in the live DOM at the same time: index.html's
+  // own Home copy (hidden, not removed, while a different view is
+  // mounted) PLUS the currently-mounted route's own copy (cloned fresh
+  // into #spaMount on every visit — see mount() in spa-shell.js). Ids are
+  // only meant to be unique, but `document.getElementById` silently just
+  // returns the FIRST match in document order regardless — which, since
+  // Home's markup comes before #spaMount's, was ALWAYS Home's hidden
+  // copy, even while looking at threads/promo/etc. That's the bug this
+  // rewrite fixes: every DOM lookup below is scoped to a specific `slot`
+  // element (via `slot.querySelector(...)`, which correctly limits the
+  // match to that slot's own descendants even when the same id exists
+  // elsewhere in the document) rather than a single global
+  // `document.getElementById`, and every slot currently present gets
+  // painted/rotated together, not just whichever one happens to be first.
+  function slots() {
+    return Array.from(document.querySelectorAll('[id="announcementBanner"]'));
+  }
+
+  // Builds one slot's DOM shell fresh — called whenever the visible set
+  // changes (new data from a poll, or a dismiss). Rotation itself (see
+  // showItem below) never rebuilds this, it only touches the two text
+  // nodes inside it, which is what makes the slide transition possible
+  // in the first place (a full innerHTML replace every tick would just
+  // snap instantly, no transition to animate).
   function buildSkeleton(slot) {
     slot.innerHTML = `
       <div class="announcement-banner">
@@ -68,10 +87,10 @@
     });
   }
 
-  function renderDotsAndCounter(i) {
-    const labelEl = document.getElementById("annLabel");
+  function renderDotsAndCounter(slot, i) {
+    const labelEl = slot.querySelector("#annLabel");
     if (labelEl) labelEl.textContent = (visible[i].topic || "Reminder").toUpperCase();
-    const dotsEl = document.getElementById("annDots");
+    const dotsEl = slot.querySelector("#annDots");
     if (dotsEl) {
       dotsEl.innerHTML = visible.length > 1
         ? visible.map((_, di) => `<span class="${di === i ? "on" : ""}"></span>`).join("")
@@ -83,12 +102,11 @@
   // (nothing to transition FROM yet); animate=true is the actual
   // rotation tick — outgoing text fades out in place, incoming text
   // slides in as a complete block from the right.
-  function showItem(i, animate) {
-    rotateIndex = i;
+  function showItem(slot, i, animate) {
     const a = visible[i];
-    renderDotsAndCounter(i);
-    const front = document.getElementById("annTextA");
-    const back = document.getElementById("annTextB");
+    renderDotsAndCounter(slot, i);
+    const front = slot.querySelector("#annTextA");
+    const back = slot.querySelector("#annTextB");
     if (!front || !back) return;
     if (!animate) {
       front.textContent = a.text;
@@ -116,19 +134,25 @@
     }, TRANSITION_MS + 20);
   }
 
+  function paintSlot(slot) {
+    if (!visible.length) { slot.innerHTML = ""; return; }
+    buildSkeleton(slot);
+    showItem(slot, rotateIndex, false);
+  }
+
   function paint() {
-    const slot = document.getElementById("announcementBanner");
-    if (!slot) return;
     clearInterval(rotateTimer);
     const dismissed = getDismissed();
     visible = items.filter((a) => !dismissed.has(a.id));
-    if (!visible.length) { slot.innerHTML = ""; return; }
     if (rotateIndex >= visible.length) rotateIndex = 0;
-    buildSkeleton(slot);
-    showItem(rotateIndex, false);
+    slots().forEach(paintSlot);
     if (visible.length > 1) {
       rotateTimer = setInterval(() => {
-        showItem((rotateIndex + 1) % visible.length, true);
+        rotateIndex = (rotateIndex + 1) % visible.length;
+        // Re-query slots() on every tick rather than once up front — the
+        // SPA shell can swap which route (and therefore which slot) is
+        // mounted at any moment, including mid-rotation.
+        slots().forEach((slot) => showItem(slot, rotateIndex, true));
       }, rotateMs);
     }
   }

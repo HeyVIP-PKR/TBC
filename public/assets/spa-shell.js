@@ -90,6 +90,9 @@
   const scriptTextCache = new Map();  // absolute script path -> text
   const viewIntervals = {};           // view -> [intervalId, ...]
   const viewListeners = {};           // view -> [{target,type,fn,opts}, ...]
+  const stylesInjectedFor = new Set(); // view names whose <style> blocks
+                                        // have already been copied into
+                                        // the live <head> — see mount()
   let currentView = "home";
   let capturingFor = null;
 
@@ -193,6 +196,23 @@
     try {
       const doc = await getDoc(view);
 
+      // Route-specific <style> blocks (e.g. promo.html's own .promo-shell/
+      // .promo-header-card rules, not part of the shared style.css) live
+      // in the fetched document's <head> — route.select only pulls BODY
+      // nodes, so without this they'd silently never make it into the
+      // live page and the mounted content would render completely
+      // unstyled (this was a real bug: Promo / Deposit Issue / Deposit
+      // Backup all define page-specific <style> blocks this way). Only
+      // copy them in once per route — the rules are static, and
+      // re-appending identical <style> tags on every revisit would just
+      // grow <head> for no benefit.
+      if (!stylesInjectedFor.has(view)) {
+        doc.querySelectorAll("style").forEach((styleEl) => {
+          document.head.appendChild(styleEl.cloneNode(true));
+        });
+        stylesInjectedFor.add(view);
+      }
+
       let qs = `?view=${view}`;
       if (view === "form" && opts.module) qs += `&module=${encodeURIComponent(opts.module)}`;
       if (opts.pushUrl !== false) history.pushState({ view, module: opts.module || null }, "", `${SHELL_PATH}${qs}`);
@@ -245,6 +265,13 @@
       }
 
       updateActiveNav(view, opts.module || null);
+
+      // The view we just mounted has its own fresh #announcementBanner
+      // placeholder (see the fix in announcement-banner.js for why this
+      // is safe now that more than one such placeholder can exist in the
+      // DOM at once) — paint it immediately instead of leaving it blank
+      // until the script's own 60s poll happens to fire.
+      if (window.refreshAnnouncementBanner) window.refreshAnnouncementBanner();
     } catch (err) {
       console.error(`[spa-shell] failed to load "${view}":`, err);
       mountEl.innerHTML = `

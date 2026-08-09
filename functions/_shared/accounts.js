@@ -313,9 +313,26 @@ export async function getOffice(env, id) {
   return raw ? JSON.parse(raw) : null;
 }
 
-export async function saveOffice(env, { id, name, allowedIPs }) {
+export async function saveOffice(env, { id, name, allowedIPs, ipMeta }) {
   const officeId = id || `off_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-  const office = { id: officeId, name, allowedIPs: (allowedIPs || []).map((ip) => ip.trim()).filter(Boolean) };
+  const cleanIPs = (allowedIPs || []).map((ip) => ip.trim()).filter(Boolean);
+  // ipMeta (see _shared/ipAccess.js) tracks who added each IP and how
+  // (Approved / Manual) for the IP Access dashboard's "Added By"/"Date"
+  // columns. The OLD raw-textarea Whitelist IP form (public/index.html's
+  // openAcctModal("whitelist")) never sends this param at all — for that
+  // caller, preserve whatever metadata already existed on this office,
+  // dropping only the entries for IPs no longer present (so metadata
+  // can't quietly pile up for IPs someone removed via that older form).
+  // ip-access.js's own callers always pass ipMeta explicitly and take
+  // this branch entirely.
+  let meta = ipMeta;
+  if (!meta) {
+    const existing = id ? await getOffice(env, id) : null;
+    const existingMeta = existing?.ipMeta || {};
+    meta = {};
+    for (const ip of cleanIPs) if (existingMeta[ip]) meta[ip] = existingMeta[ip];
+  }
+  const office = { id: officeId, name, allowedIPs: cleanIPs, ipMeta: meta };
   await env.THREADS_KV.put(`office:${officeId}`, JSON.stringify(office));
   if (!id) {
     const raw = await env.THREADS_KV.get(OFFICES_INDEX_KEY);

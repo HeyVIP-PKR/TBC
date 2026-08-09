@@ -86,6 +86,7 @@
 import { getAccount, verifyPassword, officeIpCheckPasses, getOffice, requestIP, setAccountLocked, issueToken } from "../../_shared/accounts.js";
 import { sendTelegramMessage } from "../../_shared/telegram.js";
 import { getRouteOverride } from "../../_shared/routes.js";
+import { isIpBlocked, recordPendingIpRequest } from "../../_shared/ipAccess.js";
 
 // Reserved pseudo brand/module id pair — NOT a real brand — used so the
 // "TG Group / Channel" admin page (functions/api/admin/routes.js) can
@@ -135,6 +136,22 @@ async function handleLogin({ request, env, waitUntil }) {
     return json({ ok: false, error: `This account is locked${account.lockedReason ? ` (${account.lockedReason})` : ""}. Contact a SuperAdmin to unlock it.` }, 403);
   }
 
+  // Global IP block (see _shared/ipAccess.js's "IP Access" dashboard) —
+  // a NEW, separate rejection layered on top of the existing office/IP
+  // whitelist below, not a replacement for it: this is checked BEFORE
+  // the password so a blocked IP is refused outright even with a
+  // correct password, matching the dashboard's own "Blocking is global —
+  // independent of office or account" description. Owner is the one
+  // exemption, same as officeIpCheckPasses() below — a single blocked IP
+  // (e.g. someone's home network) must never be able to lock the
+  // business owner out of their own site with no override.
+  if (account.role !== "owner") {
+    const requestIp = requestIP(request) || "";
+    if (await isIpBlocked(env, requestIp)) {
+      return json({ ok: false, error: `Access from this IP address (${requestIp}) has been blocked. Contact a SuperAdmin if you believe this is a mistake.` }, 403);
+    }
+  }
+
   const passwordOk = await verifyPassword(password, account.salt, account.hash, account.iterations);
   if (!passwordOk) {
     const ip = requestIP(request) || "unknown";
@@ -177,6 +194,14 @@ async function handleLogin({ request, env, waitUntil }) {
 
     const office = await getOffice(env, account.officeId);
     const officeName = office?.name || "your office";
+
+    // Parks this exact (office, IP) pair on the IP Access dashboard's
+    // Pending list so an admin can Approve it in one click instead of
+    // manually copying the IP out of a Telegram alert into the old
+    // Whitelist IP textarea. Same fire-and-forget treatment as the
+    // Telegram alert above — recordPendingIpRequest() never throws.
+    if (waitUntil) waitUntil(recordPendingIpRequest(env, { officeId: account.officeId, officeName, ip, username: account.username }));
+
     return json({ ok: false, error: `Your IP address (${ip}) isn't on the approved list for ${officeName}. Ask an admin to whitelist it under Account Management → Whitelist IP.` }, 401);
   }
 

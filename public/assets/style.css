@@ -575,6 +575,133 @@ a { color: inherit; text-decoration: none; }
 .tgroute-divider { border: none; border-top: 1px solid var(--panel-border); margin: 18px 0 0; }
 .tgroute-footnote { margin-top: 12px; }
 
+/* ---- IP Access panel (Account Management → IP Access) — replaces the
+   old single-office Whitelist IP form. Lives inside the same .edit-modal
+   (opened via openAcctModal("whitelist"), .wide sized) as tgroutes/
+   settings/etc. above; see the big IP Access JS block near
+   openAcctModal() in index.html. ---- */
+.ipa-header-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.ipa-header-btn {
+  background: var(--field-bg); border: 1.5px solid var(--border); border-radius: 8px;
+  padding: 7px 14px; font-size: 12px; font-weight: 700; color: var(--ink);
+  cursor: pointer; white-space: nowrap; transition: border-color 0.15s ease, color 0.15s ease;
+}
+.ipa-header-btn:hover { border-color: var(--accent-gold); color: var(--accent-gold); }
+
+.ipa-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+.ipa-stat-card {
+  text-align: left; background: var(--field-bg); border: 1.5px solid var(--border); border-radius: 12px;
+  padding: 12px 14px; cursor: pointer; transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.ipa-stat-card:hover { transform: translateY(-1px); border-color: var(--accent-gold); }
+.ipa-stat-card.active { border-color: var(--accent-gold); box-shadow: 0 0 0 1px var(--accent-gold) inset; }
+.ipa-stat-label { display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 4px; }
+.ipa-stat-value { display: block; font-family: var(--font-display); font-size: 24px; font-weight: 600; color: var(--ink); }
+.ipa-stat-value.ipa-green { color: #34d399; }
+.ipa-stat-value.ipa-gold { color: var(--accent-gold); }
+.ipa-stat-value.ipa-red { color: #ef4a72; }
+
+.ipa-section { border: 1.5px solid var(--border); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
+.ipa-section-header {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  background: var(--field-bg); border: none; padding: 12px 16px;
+  font-size: 13px; font-weight: 700; color: var(--ink); cursor: pointer; text-align: left;
+}
+.ipa-chevron { color: var(--ink-soft); transition: transform 0.15s ease; font-size: 12px; }
+.ipa-chevron.open { transform: rotate(180deg); }
+.ipa-section-body { padding: 14px 16px 16px; }
+.ipa-form-grid { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.ipa-field { display: flex; flex-direction: column; gap: 5px; min-width: 160px; }
+.ipa-field-grow { flex: 1; min-width: 220px; }
+.ipa-field label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-soft); }
+.ipa-field select, .ipa-field input {
+  background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 8px;
+  padding: 9px 11px; font-size: 13px; color: var(--ink); font-family: inherit;
+}
+.ipa-field select:focus, .ipa-field input:focus { outline: none; border-color: var(--accent-gold); }
+.ipa-btn-primary, .ipa-btn-secondary {
+  border: none; border-radius: 10px; padding: 9px 20px; font-size: 13px; font-weight: 700; cursor: pointer;
+  white-space: nowrap; height: 38px;
+}
+.ipa-btn-primary { background: linear-gradient(90deg, #f3c463, #e0a83f); color: #241c05; }
+.ipa-btn-primary:hover { filter: brightness(1.05); }
+.ipa-btn-secondary { background: var(--field-bg); border: 1.5px solid #ef4a72; color: #ef4a72; }
+.ipa-btn-secondary:hover { background: rgba(239, 74, 114, 0.1); }
+.ipa-btn-primary:disabled, .ipa-btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+.ipa-hint { margin: 10px 0 0; font-size: 11px; color: var(--ink-soft); line-height: 1.5; }
+
+.ipa-hint-footer { text-align: center; font-size: 12px; color: var(--ink-soft); margin: 18px 0 0; }
+.ipa-tables { margin-top: 4px; }
+.ipa-settled-note { font-size: 11.5px; color: var(--ink-soft); margin: 4px 0 12px; }
+.ipa-table-block { margin-bottom: 18px; }
+.ipa-table-block:last-child { margin-bottom: 0; }
+.ipa-table-title {
+  font-family: var(--font-display); font-weight: 600; font-size: 13.5px; color: var(--ink);
+  margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+}
+.ipa-table-count {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px;
+  padding: 0 5px; border-radius: 999px; background: var(--accent-gold); color: #241c05;
+  font-size: 10.5px; font-weight: 800;
+}
+.ipa-table-scroll { max-height: 260px; overflow-y: auto; overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+.ipa-record-scroll { max-height: 340px; }
+/* Every cell (header AND body) gets a full grid of dividers, and every
+   cell's content is centered — the two specific things asked for, on
+   top of the borders .agent-profile-table already had. */
+.ipa-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ipa-table th {
+  position: sticky; top: 0; text-align: center; font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--ink-soft); font-weight: 700; padding: 10px 10px;
+  background: var(--card-bg); border-bottom: 1.5px solid var(--border); border-right: 1px solid var(--panel-border);
+}
+.ipa-table th:last-child { border-right: none; }
+.ipa-table td {
+  padding: 9px 10px; text-align: center; vertical-align: middle; color: var(--ink);
+  border-bottom: 1px solid var(--panel-border); border-right: 1px solid var(--panel-border);
+}
+.ipa-table td:last-child { border-right: none; }
+.ipa-table tr:last-child td { border-bottom: none; }
+.ipa-table .ipa-ip { color: #34d399; font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.01em; }
+.ipa-table .ipa-empty { color: var(--ink-soft); font-style: italic; padding: 18px 10px; }
+.ipa-actions { white-space: nowrap; }
+.ipa-link { background: none; border: none; cursor: pointer; font-size: 11.5px; font-weight: 700; padding: 2px 6px; text-decoration: underline; text-underline-offset: 2px; }
+.ipa-link.ok { color: #34d399; }
+.ipa-link.err { color: #ef4a72; }
+.ipa-link + .ipa-link { margin-left: 4px; }
+
+/* "Manage offices" / "Record" — anchored INSIDE the modal, near the
+   header buttons that open them (not separate centered backdrops — see
+   the reference screenshots this was built from). Positioned
+   absolutely against .edit-modal (position:relative already, see
+   .edit-modal rule above), so they float over whatever the panel body
+   is currently showing without shifting any of that content. */
+.ipa-popover {
+  position: absolute;
+  top: 58px; left: 24px; right: 24px;
+  max-height: calc(100% - 82px);
+  overflow-y: auto;
+  background: var(--card-bg); border: 1.5px solid var(--accent-gold); border-radius: 14px;
+  padding: 18px 20px 20px;
+  box-shadow: 0 20px 45px -12px rgba(0, 0, 0, 0.45);
+  z-index: 5;
+}
+.ipa-popover-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.ipa-popover-title { font-family: var(--font-display); font-weight: 600; font-size: 15px; margin: 0; color: var(--ink); }
+.ipa-popover-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+#ipaOfficesPopover textarea {
+  width: 100%; background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 8px;
+  padding: 9px 11px; font-size: 13px; color: var(--ink); font-family: inherit; resize: vertical;
+}
+#ipaOfficesPopover textarea:focus { outline: none; border-color: var(--accent-gold); }
+
+@media (max-width: 820px) {
+  .ipa-stats { grid-template-columns: repeat(2, 1fr); }
+  .ipa-form-grid { flex-direction: column; align-items: stretch; }
+  .ipa-btn-primary, .ipa-btn-secondary { width: 100%; }
+  .ipa-popover { left: 12px; right: 12px; top: 52px; }
+}
+
 /* ---- Settings (Maintenance / Coming soon toggle) — reuses .tgroute-row/
    .route-tag/.tgroute-action-btn styling above; the status + role fields
    themselves are .fs-dropdown instances (see settings-dropdown.css). */

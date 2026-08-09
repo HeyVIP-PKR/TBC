@@ -35,7 +35,7 @@ html[data-theme="light"] {
     linear-gradient(160deg, #dbe7fb 0%, #d9cef4 45%, #cdbdf2 75%, #c4b2ee 100%);
 }
 </style>
-<link rel="stylesheet" href="/assets/style.css?v=cab92e9c" />
+<link rel="stylesheet" href="/assets/style.css?v=ff3619f4" />
 <link rel="stylesheet" href="/assets/toast.css?v=5779b14e" />
 <script src="/assets/toast.js?v=d9d84724"></script>
 <link rel="stylesheet" href="/assets/feature-status.css?v=0c3c3213" />
@@ -89,8 +89,14 @@ html[data-theme="light"] {
           <option value="admin">Admin</option>
           <option value="superadmin">SuperAdmin</option>
         </select>
+        <div class="ipa-header-actions" id="ipaHeaderActions" style="display:none;">
+          <button type="button" class="ipa-header-btn" id="ipaManageOfficesBtn">+ Manage offices</button>
+          <button type="button" class="ipa-header-btn" id="ipaRecordBtn">🕒 Record</button>
+        </div>
       </div>
       <div id="acctModalBody"></div>
+      <div class="ipa-popover" id="ipaOfficesPopover" style="display:none;"></div>
+      <div class="ipa-popover" id="ipaRecordPopover" style="display:none;"></div>
       <p class="edit-modal-note" id="acctModalNote"></p>
       <div class="edit-modal-actions" id="acctModalActions">
         <button type="button" class="btn-submit" id="acctModalSave">Save</button>
@@ -122,7 +128,7 @@ html[data-theme="light"] {
         </div>
         <div class="sidebar-subitems" id="acctMgmtSubitems">
           <div class="sidebar-subitem" id="subCreateAccount" style="--sub-accent:#a78bfa33; display:none;"><span class="sub-icon">➕</span> Create Account</div>
-          <div class="sidebar-subitem" id="subWhitelistIp" style="--sub-accent:#60a5fa33; display:none;"><span class="sub-icon">🌐</span> Whitelist IP</div>
+          <div class="sidebar-subitem" id="subWhitelistIp" style="--sub-accent:#60a5fa33; display:none;"><span class="sub-icon">🌐</span> IP Access</div>
           <div class="sidebar-subitem" id="subTgRoutes" style="--sub-accent:#38bdf833; display:none;"><span class="sub-icon">📡</span> TG Group / Channel</div>
           <div class="sidebar-subitem" id="subDepositSheets" style="--sub-accent:#4fa6f533; display:none;"><span class="sub-icon">📊</span> Deposit Sheet Link</div>
           <div class="sidebar-subitem" id="subSettings" style="--sub-accent:#f59e0b33; display:none;"><span class="sub-icon">⚙️</span> Settings</div>
@@ -475,7 +481,7 @@ html[data-theme="light"] {
     // gains nothing.
     const ADMIN_SECTIONS_LIST = [
       { id: "createAccount", name: "Create Account", icon: "➕" },
-      { id: "whitelistIp", name: "Whitelist IP", icon: "🌐" },
+      { id: "whitelistIp", name: "IP Access", icon: "🌐" },
       { id: "tgRoutes", name: "TG Group / Channel", icon: "📡" },
       { id: "depositSheets", name: "Deposit Sheet Link", icon: "📊" },
       { id: "settings", name: "Settings", icon: "⚙️" },
@@ -616,12 +622,13 @@ html[data-theme="light"] {
       acctBody.innerHTML = '<p class="edit-modal-note">Loading…</p>';
       acctBackdrop.classList.add("is-open");
       const modalEl = acctBackdrop.querySelector(".edit-modal");
-      modalEl.classList.toggle("wide", mode === "profile" || mode === "tgroutes" || mode === "depositsheets" || mode === "settings");
-      // "profile", "tgroutes", "depositsheets", and "settings" all use
-      // per-row inline save buttons instead of one global footer Save
-      // (too many independently-editable rows for a single "Save" to
-      // mean anything useful).
-      const showFooterSave = mode !== "profile" && mode !== "tgroutes" && mode !== "depositsheets" && mode !== "settings";
+      modalEl.classList.toggle("wide", mode === "profile" || mode === "tgroutes" || mode === "depositsheets" || mode === "settings" || mode === "whitelist");
+      // "profile", "tgroutes", "depositsheets", "settings", and
+      // "whitelist" (IP Access) all use per-row/per-action inline
+      // buttons instead of one global footer Save — too many
+      // independently-actionable rows (or, for whitelist, independently
+      // submittable forms/cards) for a single "Save" to mean anything.
+      const showFooterSave = mode !== "profile" && mode !== "tgroutes" && mode !== "depositsheets" && mode !== "settings" && mode !== "whitelist";
       document.getElementById("acctModalSave").style.display = showFooterSave ? "" : "none";
       document.getElementById("acctModalActions").style.display = showFooterSave ? "" : "none";
       const roleFilterEl = document.getElementById("acctProfileRoleFilter");
@@ -630,6 +637,8 @@ html[data-theme="light"] {
       const searchEl = document.getElementById("acctProfileSearch");
       searchEl.style.display = mode === "profile" ? "" : "none";
       if (mode === "profile") searchEl.value = "";
+      document.getElementById("ipaHeaderActions").style.display = mode === "whitelist" ? "flex" : "none";
+      closeIpaPopovers();
 
       if (mode === "create") {
         acctTitle.textContent = "Create Account";
@@ -663,25 +672,8 @@ html[data-theme="light"] {
       }
 
       if (mode === "whitelist") {
-        acctTitle.textContent = "Whitelist IP";
-        const res = await window.AgentAuth.authFetch("/api/admin/offices");
-        const data = await res.json();
-        acctOffices = data.ok ? data.offices : [];
-        const officeOptions = acctOffices.map((o) => `<option value="${o.id}">${acctEsc(o.name)}</option>`).join("");
-        const canEditWhitelist = canEditAdminSection("whitelistIp");
-        const ro = canEditWhitelist ? "" : "disabled";
-        acctBody.innerHTML = `
-          <div class="field"><label>Office</label><select id="am_office_picker" ${ro}><option value="">+ New Office</option>${officeOptions}</select></div>
-          <div class="field"><label>Office name</label><input type="text" id="am_office_name" ${ro} autocomplete="off" /></div>
-          <div class="field"><label>Allowed IPs (one per line)</label><textarea id="am_office_ips" rows="4" placeholder="203.0.113.10" ${ro} autocomplete="off"></textarea></div>
-          ${canEditWhitelist ? "" : '<p class="edit-modal-note">View only.</p>'}`;
-        document.getElementById("am_office_picker").addEventListener("change", (e) => {
-          const office = acctOffices.find((o) => o.id === e.target.value);
-          document.getElementById("am_office_name").value = office ? office.name : "";
-          document.getElementById("am_office_ips").value = office ? (office.allowedIPs || []).join("\n") : "";
-        });
-        document.getElementById("acctModalSave").style.display = canEditWhitelist ? "" : "none";
-        document.getElementById("acctModalActions").style.display = canEditWhitelist ? "" : "none";
+        acctTitle.textContent = "IP Access";
+        await ipaLoadAndRender();
       }
 
       if (mode === "reset" && isSenior) {
@@ -1762,13 +1754,13 @@ html[data-theme="light"] {
       acctBackdrop.classList.remove("is-open");
       acctMode = null;
       cleanupOrphanedFsDropdownMenus();
+      closeIpaPopovers();
     }
     document.getElementById("acctModalClose").addEventListener("click", closeAcctModal);
     acctBackdrop.addEventListener("click", (e) => { if (e.target === acctBackdrop) closeAcctModal(); });
 
     document.getElementById("acctModalSave").addEventListener("click", async () => {
       if (acctMode === "create") return acctSaveCreate();
-      if (acctMode === "whitelist") return acctSaveWhitelist();
       if (acctMode === "reset") return isSenior ? acctSaveResetAdmin() : acctSaveResetSelf();
     });
 
@@ -1829,21 +1821,448 @@ html[data-theme="light"] {
       setTimeout(closeAcctModal, 700);
     }
 
-    async function acctSaveWhitelist() {
-      const name = document.getElementById("am_office_name").value.trim();
-      if (!name) return setAcctNote("Office name is required.", "err");
-      const allowedIPs = document.getElementById("am_office_ips").value.split("\n").map((s) => s.trim()).filter(Boolean);
-      const id = document.getElementById("am_office_picker").value || undefined;
-      setAcctNote("Saving…");
+    // Office create/edit/delete now lives entirely in the "Manage
+    // offices" popover inside the IP Access panel (see ipaOpenManageOffices()
+    // below) — it has its own dedicated Save button, not the modal's
+    // shared footer one, since the IP Access panel as a whole no longer
+    // uses that footer at all (see openAcctModal()'s showFooterSave).
+
+    // ========================================================
+    // IP Access panel (Account Management → IP Access) — replaces the
+    // old single-office "Whitelist IP" form. Backed by
+    // /api/admin/ip-access (functions/_shared/ipAccess.js has the full
+    // design note on Pending/Approved/Blocked and how this layers on
+    // top of the existing Office/allowedIPs whitelist without changing
+    // how a login is actually gated).
+    // ========================================================
+    let ipaData = null;           // last GET /api/admin/ip-access response
+    let ipaTablesOpen = false;    // Pending/Approved/Blocked tables visible?
+    let ipaActiveStat = null;     // which stat card triggered ipaTablesOpen
+    let ipaAddOpen = true;        // "Add IP manually" section expanded?
+    let ipaBlockOpen = true;      // "Block an IP" section expanded?
+    let ipaFullOffices = [];      // {id,name,allowedIPs} — only fetched
+                                   // when the Manage offices popover opens
+                                   // (ipaData.offices itself is kept to
+                                   // {id,name}, enough for the pickers
+                                   // used everywhere else in this panel)
+    let ipaOfficesEditId = "";
+
+    function ipaCanEdit() { return canEditAdminSection("whitelistIp"); }
+
+    async function ipaLoadAndRender() {
+      const res = await window.AgentAuth.authFetch("/api/admin/ip-access");
+      const data = await res.json();
+      if (!data.ok) {
+        acctBody.innerHTML = `<p class="edit-modal-note err">${acctEsc(data.error || "Failed to load.")}</p>`;
+        return;
+      }
+      ipaData = data;
+      ipaTablesOpen = false;
+      ipaActiveStat = null;
+      ipaAddOpen = true;
+      ipaBlockOpen = true;
+      ipaRender();
+    }
+
+    // Re-fetches after any mutating action and re-renders in place,
+    // preserving whatever open/closed state the panel was already in
+    // (an approve/reject/block/etc. action only ever happens from
+    // WITHIN the expanded tables view, so tables stay open afterward —
+    // unlike ipaLoadAndRender() above, which is the panel's very first
+    // open and always starts fresh on the "forms open" default view).
+    async function ipaReload() {
+      const res = await window.AgentAuth.authFetch("/api/admin/ip-access");
+      const data = await res.json();
+      if (!data.ok) return;
+      ipaData = data;
+      ipaRender();
+    }
+
+    function ipaRender() {
+      const canEdit = ipaCanEdit();
+      const s = ipaData.stats;
+      acctBody.innerHTML = `
+        <div class="ipa-wrap">
+          <div class="ipa-stats">
+            ${ipaStatCard("total", "TOTAL IPS", s.total, "")}
+            ${ipaStatCard("approved", "APPROVED", s.approved, "ipa-green")}
+            ${ipaStatCard("pending", "PENDING", s.pending, "ipa-gold")}
+            ${ipaStatCard("blocked", "BLOCKED", s.blocked, "ipa-red")}
+          </div>
+
+          <div class="ipa-section">
+            <button type="button" class="ipa-section-header" id="ipaAddToggle">
+              <span>Add IP manually</span><span class="ipa-chevron${ipaAddOpen ? " open" : ""}">↓</span>
+            </button>
+            <div class="ipa-section-body" id="ipaAddBody" style="display:${ipaAddOpen ? "" : "none"};">
+              <div class="ipa-form-grid">
+                <div class="ipa-field">
+                  <label>OFFICE</label>
+                  <select id="ipaAddOffice" ${canEdit ? "" : "disabled"}>${ipaData.offices.map((o) => `<option value="${o.id}">${acctEsc(o.name)}</option>`).join("")}</select>
+                </div>
+                <div class="ipa-field ipa-field-grow">
+                  <label>IP ADDRESS(ES)</label>
+                  <input type="text" id="ipaAddIps" placeholder="203.0.113.10, 203.0.113.11" autocomplete="off" ${canEdit ? "" : "disabled"} />
+                </div>
+                <button type="button" class="ipa-btn-primary" id="ipaAddBtn" ${canEdit ? "" : "disabled"}>Add</button>
+              </div>
+              <p class="ipa-hint">Adding more than one? Separate them with commas — 203.0.113.10, 203.0.113.11.</p>
+            </div>
+          </div>
+
+          <div class="ipa-section">
+            <button type="button" class="ipa-section-header" id="ipaBlockToggle">
+              <span>Block an IP</span><span class="ipa-chevron${ipaBlockOpen ? " open" : ""}">↓</span>
+            </button>
+            <div class="ipa-section-body" id="ipaBlockBody" style="display:${ipaBlockOpen ? "" : "none"};">
+              <div class="ipa-form-grid">
+                <div class="ipa-field ipa-field-grow">
+                  <label>IP ADDRESS(ES)</label>
+                  <input type="text" id="ipaBlockIps" placeholder="203.0.113.10, 203.0.113.11" autocomplete="off" ${canEdit ? "" : "disabled"} />
+                </div>
+                <div class="ipa-field ipa-field-grow">
+                  <label>REASON (OPTIONAL)</label>
+                  <input type="text" id="ipaBlockReason" placeholder="e.g. repeated brute-force attempts" autocomplete="off" ${canEdit ? "" : "disabled"} />
+                </div>
+                <button type="button" class="ipa-btn-secondary" id="ipaBlockBtn" ${canEdit ? "" : "disabled"}>Block</button>
+              </div>
+              <p class="ipa-hint">Separate multiple IPs with commas. Blocking is global — independent of office or account, each one is rejected outright at login, even with a correct password.</p>
+            </div>
+          </div>
+
+          <div class="ipa-tables" id="ipaTablesArea" style="display:${ipaTablesOpen ? "" : "none"};">
+            ${ipaTablesOpen ? ipaRenderTables() : ""}
+          </div>
+
+          <p class="ipa-hint-footer" id="ipaHintFooter" style="display:${ipaTablesOpen ? "none" : ""};">Click a card above to view its IPs and record.</p>
+          <p class="edit-modal-note" id="ipaNote"></p>
+        </div>
+      `;
+      ipaWire();
+    }
+
+    function ipaStatCard(key, label, value, colorClass) {
+      return `
+        <button type="button" class="ipa-stat-card${key === ipaActiveStat ? " active" : ""}" data-stat="${key}">
+          <span class="ipa-stat-label">${label}</span>
+          <span class="ipa-stat-value ${colorClass}">${value}</span>
+        </button>`;
+    }
+
+    // Pending (only when non-empty — "Pending has its own card") renders
+    // above Approved/Blocked, which are always shown together as "the
+    // settled ones" once any stat card has been clicked.
+    function ipaRenderTables() {
+      const canEdit = ipaCanEdit();
+      let html = "";
+      if (ipaData.pending.length) {
+        html += `
+          <div class="ipa-table-block">
+            <div class="ipa-table-title">Pending <span class="ipa-table-count">${ipaData.pending.length}</span></div>
+            <div class="ipa-table-scroll"><table class="ipa-table">
+              <thead><tr><th>IP ADDRESS</th><th>OFFICE</th><th>REQUESTED BY</th><th>ATTEMPTS</th><th>LAST ATTEMPT</th><th>ACTIONS</th></tr></thead>
+              <tbody>
+                ${ipaData.pending.map((p) => `
+                  <tr>
+                    <td class="ipa-ip">${acctEsc(p.ip)}</td>
+                    <td>${acctEsc(p.officeName || "—")}</td>
+                    <td>${acctEsc(p.username || "—")}</td>
+                    <td>${p.attempts || 1}</td>
+                    <td>${ipaFormatDate(p.lastAttemptAt)}</td>
+                    <td class="ipa-actions">${canEdit ? `<button type="button" class="ipa-link ok" data-approve="${acctEsc(p.officeId)}|${acctEsc(p.ip)}">Approve</button><button type="button" class="ipa-link err" data-reject="${acctEsc(p.officeId)}|${acctEsc(p.ip)}">Reject</button>` : "—"}</td>
+                  </tr>`).join("")}
+              </tbody>
+            </table></div>
+          </div>`;
+      }
+
+      html += `
+        <p class="ipa-settled-note">Approved and blocked IPs — the settled ones.${ipaData.pending.length ? "" : " Pending has its own card."}</p>
+        <div class="ipa-table-block">
+          <div class="ipa-table-title">Approved</div>
+          <div class="ipa-table-scroll"><table class="ipa-table">
+            <thead><tr><th>IP ADDRESS</th><th>OFFICE</th><th>ADDED BY</th><th>DATE</th><th>ACTIONS</th></tr></thead>
+            <tbody>
+              ${ipaData.approved.length ? ipaData.approved.map((a) => `
+                <tr>
+                  <td class="ipa-ip">${acctEsc(a.ip)}</td>
+                  <td>${acctEsc(a.officeName)}</td>
+                  <td>${acctEsc(a.addedBy)}</td>
+                  <td>${ipaFormatDate(a.addedAt)}</td>
+                  <td class="ipa-actions">${canEdit ? `<button type="button" class="ipa-link err" data-remove="${acctEsc(a.officeId)}|${acctEsc(a.ip)}">Remove</button>` : "—"}</td>
+                </tr>`).join("") : `<tr><td colspan="5" class="ipa-empty">No approved IPs yet.</td></tr>`}
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="ipa-table-block">
+          <div class="ipa-table-title">Blocked</div>
+          <div class="ipa-table-scroll"><table class="ipa-table">
+            <thead><tr><th>IP ADDRESS</th><th>REASON</th><th>BLOCKED BY</th><th>BLOCKED</th><th>ACTIONS</th></tr></thead>
+            <tbody>
+              ${ipaData.blocked.length ? ipaData.blocked.map((b) => `
+                <tr>
+                  <td class="ipa-ip">${acctEsc(b.ip)}</td>
+                  <td>${acctEsc(b.reason || "—")}</td>
+                  <td>${acctEsc(ipaByLabel(b.byRole, b.by))}</td>
+                  <td>${ipaFormatDate(b.blockedAt)}</td>
+                  <td class="ipa-actions">${canEdit ? `<button type="button" class="ipa-link ok" data-unblock="${acctEsc(b.ip)}">Unblock</button>` : "—"}</td>
+                </tr>`).join("") : `<tr><td colspan="5" class="ipa-empty">No blocked IPs.</td></tr>`}
+            </tbody>
+          </table></div>
+        </div>`;
+      return html;
+    }
+
+    function ipaByLabel(role, username) {
+      if (!username) return "—";
+      const roleLabel = role ? role.charAt(0).toUpperCase() + role.slice(1) : "";
+      return roleLabel ? `${roleLabel} - ${username}` : username;
+    }
+
+    function ipaFormatDate(iso) {
+      if (!iso) return "—";
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return "—";
+      const day = String(d.getDate()).padStart(2, "0");
+      const month = d.toLocaleString("en-US", { month: "short" }).toUpperCase();
+      const time = d.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      return `${day} ${month} ${time}`;
+    }
+
+    function ipaSetNote(msg, cls) {
+      const el = document.getElementById("ipaNote");
+      if (!el) return;
+      el.textContent = msg || "";
+      el.className = "edit-modal-note" + (cls ? ` ${cls}` : "");
+    }
+
+    function ipaWire() {
+      document.querySelectorAll(".ipa-stat-card").forEach((card) => {
+        card.addEventListener("click", () => {
+          const key = card.dataset.stat;
+          if (ipaTablesOpen && ipaActiveStat === key) {
+            // Clicking the already-active card again toggles back to
+            // the default "forms open, tables hidden" view.
+            ipaTablesOpen = false;
+            ipaActiveStat = null;
+            ipaAddOpen = true;
+            ipaBlockOpen = true;
+          } else {
+            ipaTablesOpen = true;
+            ipaActiveStat = key;
+            ipaAddOpen = false;
+            ipaBlockOpen = false;
+          }
+          ipaRender();
+        });
+      });
+
+      document.getElementById("ipaAddToggle").addEventListener("click", () => {
+        ipaAddOpen = !ipaAddOpen;
+        ipaRender();
+      });
+      document.getElementById("ipaBlockToggle").addEventListener("click", () => {
+        ipaBlockOpen = !ipaBlockOpen;
+        ipaRender();
+      });
+
+      if (!ipaCanEdit()) return;
+
+      document.getElementById("ipaAddBtn")?.addEventListener("click", ipaSubmitAdd);
+      document.getElementById("ipaBlockBtn")?.addEventListener("click", ipaSubmitBlock);
+      document.querySelectorAll("[data-approve]").forEach((btn) => {
+        const [officeId, ip] = btn.dataset.approve.split("|");
+        btn.addEventListener("click", () => ipaAction({ action: "approve", officeId, ip }));
+      });
+      document.querySelectorAll("[data-reject]").forEach((btn) => {
+        const [officeId, ip] = btn.dataset.reject.split("|");
+        btn.addEventListener("click", () => ipaAction({ action: "reject", officeId, ip }));
+      });
+      document.querySelectorAll("[data-remove]").forEach((btn) => {
+        const [officeId, ip] = btn.dataset.remove.split("|");
+        btn.addEventListener("click", () => { if (confirm(`Remove ${ip} from the approved list?`)) ipaAction({ action: "remove", officeId, ip }); });
+      });
+      document.querySelectorAll("[data-unblock]").forEach((btn) => {
+        btn.addEventListener("click", () => ipaAction({ action: "unblock", ip: btn.dataset.unblock }));
+      });
+    }
+
+    async function ipaPostRaw(body) {
+      const res = await window.AgentAuth.authFetch("/api/admin/ip-access", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      return res.json();
+    }
+
+    async function ipaAction(body) {
+      ipaSetNote("Working…");
+      const data = await ipaPostRaw(body);
+      if (!data.ok) return ipaSetNote(data.error || "Action failed.", "err");
+      await ipaReload();
+      ipaSetNote("Done.", "ok");
+    }
+
+    async function ipaSubmitAdd() {
+      const officeId = document.getElementById("ipaAddOffice").value;
+      const ips = document.getElementById("ipaAddIps").value.split(",").map((s) => s.trim()).filter(Boolean);
+      if (!officeId) return ipaSetNote("Pick an office first.", "err");
+      if (!ips.length) return ipaSetNote("Enter at least one IP address.", "err");
+      ipaSetNote("Adding…");
+      for (const ip of ips) {
+        const res = await ipaPostRaw({ action: "manualAdd", officeId, ip });
+        if (!res.ok) return ipaSetNote(res.error || `Failed to add ${ip}.`, "err");
+      }
+      await ipaReload();
+      ipaSetNote(`Added ${ips.length} IP${ips.length > 1 ? "s" : ""}.`, "ok");
+    }
+
+    async function ipaSubmitBlock() {
+      const ips = document.getElementById("ipaBlockIps").value.split(",").map((s) => s.trim()).filter(Boolean);
+      const reason = document.getElementById("ipaBlockReason").value.trim();
+      if (!ips.length) return ipaSetNote("Enter at least one IP address.", "err");
+      ipaSetNote("Blocking…");
+      for (const ip of ips) {
+        const res = await ipaPostRaw({ action: "block", ip, reason });
+        if (!res.ok) return ipaSetNote(res.error || `Failed to block ${ip}.`, "err");
+      }
+      await ipaReload();
+      ipaSetNote(`Blocked ${ips.length} IP${ips.length > 1 ? "s" : ""}.`, "ok");
+    }
+
+    // ---- "Manage offices" / "Record" popovers — anchored INSIDE the
+    // modal (not separate centered backdrops) near the header buttons
+    // that open them, per the reference screenshots. ----
+    function toggleIpaPopover(id, show) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = show ? "block" : "none";
+    }
+    function closeIpaPopovers() {
+      toggleIpaPopover("ipaOfficesPopover", false);
+      toggleIpaPopover("ipaRecordPopover", false);
+    }
+
+    async function ipaOpenManageOffices() {
+      if (!ipaData) return;
+      const res = await window.AgentAuth.authFetch("/api/admin/offices");
+      const data = await res.json();
+      ipaFullOffices = data.ok ? data.offices : [];
+      ipaOfficesEditId = "";
+      ipaRenderOfficesPopover();
+      toggleIpaPopover("ipaOfficesPopover", true);
+      toggleIpaPopover("ipaRecordPopover", false);
+    }
+
+    function ipaRenderOfficesPopover() {
+      const pop = document.getElementById("ipaOfficesPopover");
+      const canEdit = ipaCanEdit();
+      const editing = ipaFullOffices.find((o) => o.id === ipaOfficesEditId);
+      const officeOptions = ipaFullOffices.map((o) => `<option value="${o.id}"${o.id === ipaOfficesEditId ? " selected" : ""}>${acctEsc(o.name)}</option>`).join("");
+      pop.innerHTML = `
+        <div class="ipa-popover-header">
+          <p class="ipa-popover-title">Manage offices</p>
+          <button type="button" class="modal-close-btn" id="ipaOfficesClose" title="Close" aria-label="Close">✕</button>
+        </div>
+        <div class="field"><label>OFFICE</label>
+          <select id="ipaOfficePicker" ${canEdit ? "" : "disabled"}>
+            <option value="">+ New Office</option>${officeOptions}
+          </select>
+        </div>
+        <div class="field"><label>OFFICE NAME</label><input type="text" id="ipaOfficeName" value="${editing ? acctEsc(editing.name) : ""}" autocomplete="off" ${canEdit ? "" : "disabled"} /></div>
+        <div class="field"><label>ALLOWED IPS (ONE PER LINE)</label><textarea id="ipaOfficeIps" rows="5" placeholder="203.0.113.10" autocomplete="off" ${canEdit ? "" : "disabled"}>${editing ? (editing.allowedIPs || []).join("\n") : ""}</textarea></div>
+        ${canEdit ? `<div class="ipa-popover-actions">
+          ${editing ? `<button type="button" class="btn-secondary" id="ipaOfficeDelete">Delete office</button>` : ""}
+          <button type="button" class="btn-submit" id="ipaOfficeSave">Save office</button>
+        </div>` : `<p class="edit-modal-note">View only.</p>`}
+        <p class="edit-modal-note" id="ipaOfficeNote"></p>
+      `;
+      document.getElementById("ipaOfficesClose").addEventListener("click", () => toggleIpaPopover("ipaOfficesPopover", false));
+      document.getElementById("ipaOfficePicker").addEventListener("change", (e) => {
+        ipaOfficesEditId = e.target.value;
+        ipaRenderOfficesPopover();
+      });
+      if (canEdit) {
+        document.getElementById("ipaOfficeSave").addEventListener("click", ipaSaveOffice);
+        document.getElementById("ipaOfficeDelete")?.addEventListener("click", ipaDeleteOffice);
+      }
+    }
+
+    function ipaSetOfficeNote(msg, cls) {
+      const el = document.getElementById("ipaOfficeNote");
+      if (!el) return;
+      el.textContent = msg || "";
+      el.className = "edit-modal-note" + (cls ? ` ${cls}` : "");
+    }
+
+    async function ipaSaveOffice() {
+      const name = document.getElementById("ipaOfficeName").value.trim();
+      if (!name) return ipaSetOfficeNote("Office name is required.", "err");
+      const allowedIPs = document.getElementById("ipaOfficeIps").value.split("\n").map((s) => s.trim()).filter(Boolean);
+      const id = ipaOfficesEditId || undefined;
+      ipaSetOfficeNote("Saving…");
       const res = await window.AgentAuth.authFetch("/api/admin/offices", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "save", id, name, allowedIPs }),
       });
       const data = await res.json();
-      if (!data.ok) return setAcctNote(data.error || "Save failed.", "err");
-      setAcctNote("Office saved.", "ok");
-      setTimeout(closeAcctModal, 700);
+      if (!data.ok) return ipaSetOfficeNote(data.error || "Save failed.", "err");
+      ipaSetOfficeNote("Office saved.", "ok");
+      ipaOfficesEditId = data.office.id;
+      const idx = ipaFullOffices.findIndex((o) => o.id === data.office.id);
+      if (idx >= 0) ipaFullOffices[idx] = data.office; else ipaFullOffices.unshift(data.office);
+      ipaRenderOfficesPopover();
+      await ipaReload();
     }
+
+    async function ipaDeleteOffice() {
+      if (!ipaOfficesEditId) return;
+      if (!confirm("Delete this office? Any accounts assigned to it will lose their office binding.")) return;
+      ipaSetOfficeNote("Deleting…");
+      const res = await window.AgentAuth.authFetch("/api/admin/offices", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete", id: ipaOfficesEditId }),
+      });
+      const data = await res.json();
+      if (!data.ok) return ipaSetOfficeNote(data.error || "Delete failed.", "err");
+      ipaFullOffices = ipaFullOffices.filter((o) => o.id !== ipaOfficesEditId);
+      ipaOfficesEditId = "";
+      ipaRenderOfficesPopover();
+      await ipaReload();
+    }
+
+    function ipaOpenRecord() {
+      if (!ipaData) return;
+      ipaRenderRecordPopover();
+      toggleIpaPopover("ipaRecordPopover", true);
+      toggleIpaPopover("ipaOfficesPopover", false);
+    }
+
+    function ipaRenderRecordPopover() {
+      const pop = document.getElementById("ipaRecordPopover");
+      pop.innerHTML = `
+        <div class="ipa-popover-header">
+          <p class="ipa-popover-title">🕒 Record</p>
+          <button type="button" class="modal-close-btn" id="ipaRecordClose" title="Close" aria-label="Close">✕</button>
+        </div>
+        <div class="ipa-table-scroll ipa-record-scroll"><table class="ipa-table">
+          <thead><tr><th>IP ADDRESS</th><th>ACTION</th><th>BY</th><th>DETAIL</th><th>TIME</th></tr></thead>
+          <tbody>
+            ${ipaData.record.length ? ipaData.record.map((r) => `
+              <tr>
+                <td class="ipa-ip">${acctEsc(r.ip)}</td>
+                <td>${acctEsc(r.action)}</td>
+                <td>${acctEsc(ipaByLabel(r.byRole, r.by))}</td>
+                <td>${acctEsc(r.detail || "—")}</td>
+                <td>${ipaFormatDate(r.ts)}</td>
+              </tr>`).join("") : `<tr><td colspan="5" class="ipa-empty">No actions recorded yet.</td></tr>`}
+          </tbody>
+        </table></div>
+      `;
+      document.getElementById("ipaRecordClose").addEventListener("click", () => toggleIpaPopover("ipaRecordPopover", false));
+    }
+
+    document.getElementById("ipaManageOfficesBtn").addEventListener("click", ipaOpenManageOffices);
+    document.getElementById("ipaRecordBtn").addEventListener("click", ipaOpenRecord);
 
     async function acctSaveResetAdmin() {
       const username = document.getElementById("am_reset_account").value;

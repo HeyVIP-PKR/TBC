@@ -622,14 +622,6 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
 .subpage-right-col > #announcementBanner { flex-shrink: 0; }
 .subpage-main { flex: 1; min-height: 0; overflow-y: auto; }
 
-/* ---- SPA shell (index.html only) — #spaMount swaps in a fetched
-   route's content in place of #viewHome; see spa-shell.js ---- */
-#spaMount { min-width: 0; min-height: 0; }
-.spa-loading {
-  flex: 1; display: flex; align-items: center; justify-content: center;
-  color: var(--ink-soft); font-size: 13px; letter-spacing: 0.02em;
-}
-
 .hub-layout {
   display: flex;
   flex: 1;

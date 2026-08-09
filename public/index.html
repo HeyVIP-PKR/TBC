@@ -181,7 +181,7 @@ html[data-theme="light"] {
   </div>
 
   <script src="/assets/schemas.js?v=189eea70"></script>
-  <script src="/assets/spa-shell.js?v=48f41a93"></script>
+  <script src="/assets/spa-shell.js?v=dd9148a8"></script>
   <script>
     window.initThemeToggle();
     window.initClock();
@@ -223,6 +223,31 @@ html[data-theme="light"] {
       const visibleBrands = window.AgentAuth ? window.AgentAuth.filterAllowedBrands(window.BRANDS) : window.BRANDS;
       if (!visibleBrands.length) return;
 
+      // GUARD — do nothing while this row isn't actually visible
+      // (clientWidth 0), instead of measuring garbage. This happens for
+      // real: the SPA shell (spa-shell.js) can auto-restore a non-home
+      // view (e.g. loading the site directly at "/?view=threads", which
+      // is exactly what a hard refresh while on Threads produces) BEFORE
+      // this function's first call ever gets a chance to run against a
+      // visible #brandRow — #viewHome (and everything inside it,
+      // including this row) is display:none at that moment. A hidden
+      // element's clientWidth/scrollWidth are always 0, and the sizing
+      // math below has `|| 1` / `|| window.innerWidth` fallbacks meant
+      // for "not measured yet", not "genuinely zero" — with a 0 width
+      // container falling back to window.innerWidth (e.g. 1920) divided
+      // by a 0-falls-back-to-1px "copy width", copiesPerHalf came out as
+      // ~1900+, i.e. this built tens of thousands of duplicate logo
+      // pills into the DOM. That's not just wasteful: the marquee still
+      // only takes 26s per loop (see style.css) regardless of the
+      // track's real width, so a track that's ~1000x too wide covers
+      // ~1000x the distance in the same 26s — which is exactly the
+      // "marquee suddenly runs way too fast" bug. mount() in
+      // spa-shell.js calls this function again (via
+      // window.renderBrandRow) every time it navigates TO home, so once
+      // the row is genuinely visible this simply runs again with real
+      // measurements — nothing is lost by skipping it here.
+      if (!brandRowEl || brandRowEl.clientWidth === 0) return;
+
       // The marquee loops by scrolling exactly one HALF of the track's
       // total width (translateX(-50%), see the CSS) — so each half needs
       // to independently be at least as wide as the visible row, or the
@@ -237,7 +262,7 @@ html[data-theme="light"] {
       // two-halves track from that.
       visibleBrands.forEach((b, i) => brandRowTrack.appendChild(buildBrandPill(b, i)));
       const oneCopyWidth = brandRowTrack.scrollWidth || 1;
-      const containerWidth = (brandRowEl && brandRowEl.clientWidth) || window.innerWidth;
+      const containerWidth = brandRowEl.clientWidth;
       const copiesPerHalf = Math.max(1, Math.ceil(containerWidth / oneCopyWidth) + 1);
 
       brandRowTrack.innerHTML = "";
@@ -256,6 +281,12 @@ html[data-theme="light"] {
       clearTimeout(brandRowResizeTimer);
       brandRowResizeTimer = setTimeout(renderBrandRow, 200);
     });
+
+    // Exposed so spa-shell.js can re-run this once #brandRow is actually
+    // visible again (navigating back to Home from any other SPA view) —
+    // see the clientWidth-0 guard inside renderBrandRow() above for why
+    // that matters, not just for freshness.
+    window.renderBrandRow = renderBrandRow;
 
     async function loadBrandConfig() {
       try {

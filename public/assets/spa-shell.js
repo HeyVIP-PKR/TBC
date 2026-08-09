@@ -171,6 +171,14 @@
       if (opts.pushUrl !== false) history.pushState({ view: "home" }, "", SHELL_PATH);
       document.title = "PKR CS Team - TBC";
       updateActiveNav("home", null);
+      // #brandRow is only just becoming visible again (or for the very
+      // first time, if the page loaded directly at a non-home ?view= —
+      // see the clientWidth-0 guard in renderBrandRow() in index.html
+      // for why that first attempt may have silently skipped itself).
+      // Either way, this is the one moment it's guaranteed to have a
+      // real, measurable width — re-run it now rather than leaving a
+      // stale/empty track up.
+      if (window.renderBrandRow) window.renderBrandRow();
       return;
     }
 

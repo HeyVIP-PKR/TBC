@@ -646,15 +646,32 @@ a { color: inherit; text-decoration: none; }
 .ipa-settled-note { font-size: 11.5px; color: var(--ink-soft); margin: 4px 0 12px; }
 .ipa-table-block { margin-bottom: 18px; }
 .ipa-table-block:last-child { margin-bottom: 0; }
+.ipa-table-head-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
 .ipa-table-title {
   font-family: var(--font-display); font-weight: 600; font-size: 13.5px; color: var(--ink);
-  margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 8px;
 }
 .ipa-table-count {
   display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px;
   padding: 0 5px; border-radius: 999px; background: var(--accent-gold); color: #241c05;
   font-size: 10.5px; font-weight: 800;
 }
+.ipa-page-size {
+  background: var(--field-bg); border: 1.5px solid var(--border); border-radius: 8px;
+  padding: 5px 10px; font-size: 11.5px; font-weight: 600; color: var(--ink); font-family: inherit; cursor: pointer;
+}
+.ipa-page-size:focus { outline: none; border-color: var(--accent-gold); }
+.ipa-pagination {
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  margin-top: 10px; font-size: 12px;
+}
+.ipa-page-link {
+  background: none; border: none; color: var(--label-blue); font-weight: 700; font-size: 12px;
+  cursor: pointer; padding: 2px 4px; text-decoration: underline; text-underline-offset: 2px;
+}
+.ipa-page-link:hover:not(:disabled) { color: var(--accent-gold); }
+.ipa-page-link:disabled { color: var(--ink-soft); text-decoration: none; cursor: default; opacity: 0.55; }
+.ipa-page-status { color: var(--ink-soft); font-weight: 600; }
 .ipa-table-scroll { max-height: 260px; overflow-y: auto; overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
 .ipa-record-scroll { max-height: 340px; }
 /* Every cell (header AND body) gets a full grid of dividers, and every

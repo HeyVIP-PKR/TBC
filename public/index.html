@@ -35,7 +35,7 @@ html[data-theme="light"] {
     linear-gradient(160deg, #dbe7fb 0%, #d9cef4 45%, #cdbdf2 75%, #c4b2ee 100%);
 }
 </style>
-<link rel="stylesheet" href="/assets/style.css?v=0042aeef" />
+<link rel="stylesheet" href="/assets/style.css?v=5803873e" />
 <link rel="stylesheet" href="/assets/toast.css?v=5779b14e" />
 <script src="/assets/toast.js?v=d9d84724"></script>
 <link rel="stylesheet" href="/assets/feature-status.css?v=0c3c3213" />
@@ -1862,6 +1862,8 @@ html[data-theme="light"] {
       ipaActiveStat = null;
       ipaAddOpen = false;
       ipaBlockOpen = false;
+      ipaPageSize = { approved: 10, pending: 10, blocked: 10 };
+      ipaPage = { approved: 1, pending: 1, blocked: 1 };
       ipaRender();
     }
 
@@ -1950,68 +1952,123 @@ html[data-theme="light"] {
         </button>`;
     }
 
-    // Pending (only when non-empty — "Pending has its own card") renders
-    // above Approved/Blocked, which are always shown together as "the
-    // settled ones" once any stat card has been clicked.
-    function ipaRenderTables() {
-      const canEdit = ipaCanEdit();
-      let html = "";
-      if (ipaData.pending.length) {
-        html += `
-          <div class="ipa-table-block">
-            <div class="ipa-table-title">Pending <span class="ipa-table-count">${ipaData.pending.length}</span></div>
-            <div class="ipa-table-scroll"><table class="ipa-table">
-              <thead><tr><th>IP ADDRESS</th><th>OFFICE</th><th>REQUESTED BY</th><th>ATTEMPTS</th><th>LAST ATTEMPT</th><th>ACTIONS</th></tr></thead>
-              <tbody>
-                ${ipaData.pending.map((p) => `
-                  <tr>
-                    <td class="ipa-ip">${acctEsc(p.ip)}</td>
-                    <td>${acctEsc(p.officeName || "—")}</td>
-                    <td>${acctEsc(p.username || "—")}</td>
-                    <td>${p.attempts || 1}</td>
-                    <td>${ipaFormatDate(p.lastAttemptAt)}</td>
-                    <td class="ipa-actions">${canEdit ? `<button type="button" class="ipa-link ok" data-approve="${acctEsc(p.officeId)}|${acctEsc(p.ip)}">Approve</button><button type="button" class="ipa-link err" data-reject="${acctEsc(p.officeId)}|${acctEsc(p.ip)}">Reject</button>` : "—"}</td>
-                  </tr>`).join("")}
-              </tbody>
-            </table></div>
-          </div>`;
-      }
+    // Per-table pagination state — kept across re-renders (reload after
+    // an action, toggling a section open/closed) so the admin doesn't
+    // get bounced back to page 1 every time something in a DIFFERENT
+    // table changes. Only reset (see ipaLoadAndRender()) on the panel's
+    // very first open.
+    let ipaPageSize = { approved: 10, pending: 10, blocked: 10 };
+    let ipaPage = { approved: 1, pending: 1, blocked: 1 };
 
-      html += `
-        <p class="ipa-settled-note">Approved and blocked IPs — the settled ones.${ipaData.pending.length ? "" : " Pending has its own card."}</p>
-        <div class="ipa-table-block">
-          <div class="ipa-table-title">Approved</div>
-          <div class="ipa-table-scroll"><table class="ipa-table">
-            <thead><tr><th>IP ADDRESS</th><th>OFFICE</th><th>ADDED BY</th><th>DATE</th><th>ACTIONS</th></tr></thead>
-            <tbody>
-              ${ipaData.approved.length ? ipaData.approved.map((a) => `
-                <tr>
-                  <td class="ipa-ip">${acctEsc(a.ip)}</td>
-                  <td>${acctEsc(a.officeName)}</td>
-                  <td>${acctEsc(a.addedBy)}</td>
-                  <td>${ipaFormatDate(a.addedAt)}</td>
-                  <td class="ipa-actions">${canEdit ? `<button type="button" class="ipa-link err" data-remove="${acctEsc(a.officeId)}|${acctEsc(a.ip)}">Remove</button>` : "—"}</td>
-                </tr>`).join("") : `<tr><td colspan="5" class="ipa-empty">No approved IPs yet.</td></tr>`}
-            </tbody>
-          </table></div>
-        </div>
+    function ipaPaginate(list, page, pageSize) {
+      const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
+      const clamped = Math.min(Math.max(1, page), totalPages);
+      const start = (clamped - 1) * pageSize;
+      return { pageItems: list.slice(start, start + pageSize), page: clamped, totalPages };
+    }
 
+    // One self-contained table "card": title (+ count badge), a
+    // 10/20/30-per-page picker, the table itself (only the current
+    // page's rows), and a Previous/Page X of Y/Next footer — the footer
+    // only renders at all once there's more than one page, per the
+    // reference screenshot.
+    function ipaRenderTableSection({ key, title, showCount, columns, allRows, emptyMsg, renderRow }) {
+      ipaPage[key] = ipaPaginate(allRows, ipaPage[key], ipaPageSize[key]).page; // clamp persisted state first
+      const { pageItems, page, totalPages } = ipaPaginate(allRows, ipaPage[key], ipaPageSize[key]);
+      return `
         <div class="ipa-table-block">
-          <div class="ipa-table-title">Blocked</div>
-          <div class="ipa-table-scroll"><table class="ipa-table">
-            <thead><tr><th>IP ADDRESS</th><th>REASON</th><th>BLOCKED BY</th><th>BLOCKED</th><th>ACTIONS</th></tr></thead>
-            <tbody>
-              ${ipaData.blocked.length ? ipaData.blocked.map((b) => `
-                <tr>
-                  <td class="ipa-ip">${acctEsc(b.ip)}</td>
-                  <td>${acctEsc(b.reason || "—")}</td>
-                  <td>${acctEsc(ipaByLabel(b.byRole, b.by))}</td>
-                  <td>${ipaFormatDate(b.blockedAt)}</td>
-                  <td class="ipa-actions">${canEdit ? `<button type="button" class="ipa-link ok" data-unblock="${acctEsc(b.ip)}">Unblock</button>` : "—"}</td>
-                </tr>`).join("") : `<tr><td colspan="5" class="ipa-empty">No blocked IPs.</td></tr>`}
-            </tbody>
-          </table></div>
+          <div class="ipa-table-head-row">
+            <div class="ipa-table-title">${title}${showCount ? ` <span class="ipa-table-count">${allRows.length}</span>` : ""}</div>
+            <select class="ipa-page-size" data-pagesize="${key}">
+              <option value="10"${ipaPageSize[key] === 10 ? " selected" : ""}>10 / page</option>
+              <option value="20"${ipaPageSize[key] === 20 ? " selected" : ""}>20 / page</option>
+              <option value="30"${ipaPageSize[key] === 30 ? " selected" : ""}>30 / page</option>
+            </select>
+          </div>
+          <div class="ipa-table-scroll">
+            <table class="ipa-table">
+              <thead><tr>${columns.map((c) => `<th>${c}</th>`).join("")}</tr></thead>
+              <tbody>${allRows.length ? pageItems.map(renderRow).join("") : `<tr><td colspan="${columns.length}" class="ipa-empty">${emptyMsg}</td></tr>`}</tbody>
+            </table>
+          </div>
+          ${totalPages > 1 ? `
+            <div class="ipa-pagination">
+              <button type="button" class="ipa-page-link" data-page-prev="${key}"${page <= 1 ? " disabled" : ""}>Previous</button>
+              <span class="ipa-page-status">Page ${page} / ${totalPages}</span>
+              <button type="button" class="ipa-page-link" data-page-next="${key}"${page >= totalPages ? " disabled" : ""}>Next</button>
+            </div>` : ""}
         </div>`;
+    }
+
+    function ipaRenderPendingSection() {
+      const canEdit = ipaCanEdit();
+      return ipaRenderTableSection({
+        key: "pending", title: "Pending", showCount: true,
+        columns: ["IP ADDRESS", "OFFICE", "REQUESTED BY", "ATTEMPTS", "LAST ATTEMPT", "ACTIONS"],
+        allRows: ipaData.pending, emptyMsg: "No pending requests.",
+        renderRow: (p) => `
+          <tr>
+            <td class="ipa-ip">${acctEsc(p.ip)}</td>
+            <td>${acctEsc(p.officeName || "—")}</td>
+            <td>${acctEsc(p.username || "—")}</td>
+            <td>${p.attempts || 1}</td>
+            <td>${ipaFormatDate(p.lastAttemptAt)}</td>
+            <td class="ipa-actions">${canEdit ? `<button type="button" class="ipa-link ok" data-approve="${acctEsc(p.officeId)}|${acctEsc(p.ip)}">Approve</button><button type="button" class="ipa-link err" data-reject="${acctEsc(p.officeId)}|${acctEsc(p.ip)}">Reject</button>` : "—"}</td>
+          </tr>`,
+      });
+    }
+
+    function ipaRenderApprovedSection() {
+      const canEdit = ipaCanEdit();
+      return ipaRenderTableSection({
+        key: "approved", title: "Approved", showCount: false,
+        columns: ["IP ADDRESS", "OFFICE", "ADDED BY", "DATE", "ACTIONS"],
+        allRows: ipaData.approved, emptyMsg: "No approved IPs yet.",
+        renderRow: (a) => `
+          <tr>
+            <td class="ipa-ip">${acctEsc(a.ip)}</td>
+            <td>${acctEsc(a.officeName)}</td>
+            <td>${acctEsc(a.addedBy)}</td>
+            <td>${ipaFormatDate(a.addedAt)}</td>
+            <td class="ipa-actions">${canEdit ? `<button type="button" class="ipa-link err" data-remove="${acctEsc(a.officeId)}|${acctEsc(a.ip)}">Remove</button>` : "—"}</td>
+          </tr>`,
+      });
+    }
+
+    function ipaRenderBlockedSection() {
+      const canEdit = ipaCanEdit();
+      return ipaRenderTableSection({
+        key: "blocked", title: "Blocked", showCount: false,
+        columns: ["IP ADDRESS", "REASON", "BLOCKED BY", "BLOCKED", "ACTIONS"],
+        allRows: ipaData.blocked, emptyMsg: "No blocked IPs.",
+        renderRow: (b) => `
+          <tr>
+            <td class="ipa-ip">${acctEsc(b.ip)}</td>
+            <td>${acctEsc(b.reason || "—")}</td>
+            <td>${acctEsc(ipaByLabel(b.byRole, b.by))}</td>
+            <td>${ipaFormatDate(b.blockedAt)}</td>
+            <td class="ipa-actions">${canEdit ? `<button type="button" class="ipa-link ok" data-unblock="${acctEsc(b.ip)}">Unblock</button>` : "—"}</td>
+          </tr>`,
+      });
+    }
+
+    // Which card was clicked decides what's actually shown:
+    //   - "approved" / "pending" / "blocked": ONLY that one table (even
+    //     if it's empty — the admin explicitly asked to see it).
+    //   - "total" (or anything else): the combined view — Pending only
+    //     when it actually has rows ("Pending has its own card", so an
+    //     empty Pending table doesn't clutter the Total view), Approved
+    //     + Blocked always ("the settled ones").
+    function ipaRenderTables() {
+      if (ipaActiveStat === "approved") return ipaRenderApprovedSection();
+      if (ipaActiveStat === "pending") return ipaRenderPendingSection();
+      if (ipaActiveStat === "blocked") return ipaRenderBlockedSection();
+
+      let html = "";
+      if (ipaData.pending.length) html += ipaRenderPendingSection();
+      html += `<p class="ipa-settled-note">Approved and blocked IPs — the settled ones.${ipaData.pending.length ? "" : " Pending has its own card."}</p>`;
+      html += ipaRenderApprovedSection();
+      html += ipaRenderBlockedSection();
       return html;
     }
 
@@ -2066,6 +2123,32 @@ html[data-theme="light"] {
       document.getElementById("ipaBlockToggle").addEventListener("click", () => {
         ipaBlockOpen = !ipaBlockOpen;
         ipaRender();
+      });
+
+      // Pagination controls (page-size picker, Previous/Next) work for
+      // view-only accounts too — browsing pages isn't an edit action —
+      // so these are wired BEFORE the canEdit() early-return below.
+      document.querySelectorAll("[data-pagesize]").forEach((sel) => {
+        sel.addEventListener("change", (e) => {
+          const key = sel.dataset.pagesize;
+          ipaPageSize[key] = Number(e.target.value) || 10;
+          ipaPage[key] = 1;
+          ipaRender();
+        });
+      });
+      document.querySelectorAll("[data-page-prev]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const key = btn.dataset.pagePrev;
+          ipaPage[key] = Math.max(1, (ipaPage[key] || 1) - 1);
+          ipaRender();
+        });
+      });
+      document.querySelectorAll("[data-page-next]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const key = btn.dataset.pageNext;
+          ipaPage[key] = (ipaPage[key] || 1) + 1;
+          ipaRender();
+        });
       });
 
       if (!ipaCanEdit()) return;

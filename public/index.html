@@ -35,7 +35,7 @@ html[data-theme="light"] {
     linear-gradient(160deg, #dbe7fb 0%, #d9cef4 45%, #cdbdf2 75%, #c4b2ee 100%);
 }
 </style>
-<link rel="stylesheet" href="/assets/style.css?v=ff3619f4" />
+<link rel="stylesheet" href="/assets/style.css?v=0042aeef" />
 <link rel="stylesheet" href="/assets/toast.css?v=5779b14e" />
 <script src="/assets/toast.js?v=d9d84724"></script>
 <link rel="stylesheet" href="/assets/feature-status.css?v=0c3c3213" />
@@ -95,6 +95,7 @@ html[data-theme="light"] {
         </div>
       </div>
       <div id="acctModalBody"></div>
+      <div class="ipa-popover-scrim" id="ipaPopoverScrim" style="display:none;"></div>
       <div class="ipa-popover" id="ipaOfficesPopover" style="display:none;"></div>
       <div class="ipa-popover" id="ipaRecordPopover" style="display:none;"></div>
       <p class="edit-modal-note" id="acctModalNote"></p>
@@ -1838,8 +1839,8 @@ html[data-theme="light"] {
     let ipaData = null;           // last GET /api/admin/ip-access response
     let ipaTablesOpen = false;    // Pending/Approved/Blocked tables visible?
     let ipaActiveStat = null;     // which stat card triggered ipaTablesOpen
-    let ipaAddOpen = true;        // "Add IP manually" section expanded?
-    let ipaBlockOpen = true;      // "Block an IP" section expanded?
+    let ipaAddOpen = false;       // "Add IP manually" section expanded? (collapsed by default — only opens on click)
+    let ipaBlockOpen = false;     // "Block an IP" section expanded? (collapsed by default — only opens on click)
     let ipaFullOffices = [];      // {id,name,allowedIPs} — only fetched
                                    // when the Manage offices popover opens
                                    // (ipaData.offices itself is kept to
@@ -1859,8 +1860,8 @@ html[data-theme="light"] {
       ipaData = data;
       ipaTablesOpen = false;
       ipaActiveStat = null;
-      ipaAddOpen = true;
-      ipaBlockOpen = true;
+      ipaAddOpen = false;
+      ipaBlockOpen = false;
       ipaRender();
     }
 
@@ -1915,7 +1916,7 @@ html[data-theme="light"] {
               <span>Block an IP</span><span class="ipa-chevron${ipaBlockOpen ? " open" : ""}">↓</span>
             </button>
             <div class="ipa-section-body" id="ipaBlockBody" style="display:${ipaBlockOpen ? "" : "none"};">
-              <div class="ipa-form-grid">
+              <div class="ipa-form-grid ipa-form-2col">
                 <div class="ipa-field ipa-field-grow">
                   <label>IP ADDRESS(ES)</label>
                   <input type="text" id="ipaBlockIps" placeholder="203.0.113.10, 203.0.113.11" autocomplete="off" ${canEdit ? "" : "disabled"} />
@@ -2043,11 +2044,11 @@ html[data-theme="light"] {
           const key = card.dataset.stat;
           if (ipaTablesOpen && ipaActiveStat === key) {
             // Clicking the already-active card again toggles back to
-            // the default "forms open, tables hidden" view.
+            // the default "tables hidden, forms collapsed" view.
             ipaTablesOpen = false;
             ipaActiveStat = null;
-            ipaAddOpen = true;
-            ipaBlockOpen = true;
+            ipaAddOpen = false;
+            ipaBlockOpen = false;
           } else {
             ipaTablesOpen = true;
             ipaActiveStat = key;
@@ -2133,14 +2134,22 @@ html[data-theme="light"] {
     // ---- "Manage offices" / "Record" popovers — anchored INSIDE the
     // modal (not separate centered backdrops) near the header buttons
     // that open them, per the reference screenshots. ----
+    function syncIpaScrim() {
+      const officesOpen = document.getElementById("ipaOfficesPopover")?.style.display === "block";
+      const recordOpen = document.getElementById("ipaRecordPopover")?.style.display === "block";
+      const scrim = document.getElementById("ipaPopoverScrim");
+      if (scrim) scrim.style.display = (officesOpen || recordOpen) ? "block" : "none";
+    }
     function toggleIpaPopover(id, show) {
       const el = document.getElementById(id);
       if (el) el.style.display = show ? "block" : "none";
+      syncIpaScrim();
     }
     function closeIpaPopovers() {
       toggleIpaPopover("ipaOfficesPopover", false);
       toggleIpaPopover("ipaRecordPopover", false);
     }
+    document.getElementById("ipaPopoverScrim").addEventListener("click", closeIpaPopovers);
 
     async function ipaOpenManageOffices() {
       if (!ipaData) return;

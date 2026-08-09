@@ -610,11 +610,22 @@ a { color: inherit; text-decoration: none; }
 .ipa-chevron { color: var(--ink-soft); transition: transform 0.15s ease; font-size: 12px; }
 .ipa-chevron.open { transform: rotate(180deg); }
 .ipa-section-body { padding: 14px 16px 16px; }
-.ipa-form-grid { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
-.ipa-field { display: flex; flex-direction: column; gap: 5px; min-width: 160px; }
-.ipa-field-grow { flex: 1; min-width: 220px; }
+.ipa-form-grid {
+  display: grid;
+  grid-template-columns: minmax(170px, 220px) 1fr auto;
+  gap: 12px;
+  align-items: flex-end;
+}
+/* "Block an IP" has no Office column — IP Address and Reason should
+   read as two EQUAL-WEIGHT fields instead of inheriting "Add IP
+   manually"'s narrower fixed first column, which is what made the two
+   sections look mismatched/unbalanced side by side. */
+.ipa-form-grid.ipa-form-2col { grid-template-columns: 1fr 1fr auto; }
+.ipa-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.ipa-field-grow { min-width: 0; }
 .ipa-field label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-soft); }
 .ipa-field select, .ipa-field input {
+  width: 100%; box-sizing: border-box;
   background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 8px;
   padding: 9px 11px; font-size: 13px; color: var(--ink); font-family: inherit;
 }
@@ -648,8 +659,19 @@ a { color: inherit; text-decoration: none; }
 .ipa-record-scroll { max-height: 340px; }
 /* Every cell (header AND body) gets a full grid of dividers, and every
    cell's content is centered — the two specific things asked for, on
-   top of the borders .agent-profile-table already had. */
-.ipa-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+   top of the borders .agent-profile-table already had.
+   border-collapse:separate (NOT collapse) is deliberate: a sticky <th>
+   (position:sticky, needed so the header stays visible while the body
+   scrolls) inside a collapsed-border table is a known cross-browser
+   rendering conflict — the browser has to break the "merge adjacent
+   cell borders into one" model to keep the header pinned above the
+   scrolling body, and different engines resolve that inconsistently,
+   which is exactly what produced the table visually tearing into two
+   separate boxes (reported with screenshots). border-spacing:0 keeps
+   the separate model from adding any visible gap between cells, so the
+   divider look (via each cell's own border-right/border-bottom below)
+   ends up identical either way — just without the sticky-header bug. */
+.ipa-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
 .ipa-table th {
   position: sticky; top: 0; text-align: center; font-size: 10px; text-transform: uppercase;
   letter-spacing: 0.04em; color: var(--ink-soft); font-weight: 700; padding: 10px 10px;
@@ -676,6 +698,18 @@ a { color: inherit; text-decoration: none; }
    absolutely against .edit-modal (position:relative already, see
    .edit-modal rule above), so they float over whatever the panel body
    is currently showing without shifting any of that content. */
+/* Dark scrim behind the "Manage offices"/"Record" popovers — covers the
+   whole .edit-modal (not just the area behind the popover box itself),
+   so the IP Access panel underneath reads as visually backgrounded/
+   inactive while a popover is open, same as how the outer
+   .edit-modal-backdrop itself dims the page behind IT. Toggled by the
+   same JS that shows/hides each .ipa-popover (see toggleIpaPopover() —
+   it also toggles this). */
+.ipa-popover-scrim {
+  position: absolute; inset: 0; z-index: 4;
+  background: rgba(6, 8, 18, 0.6);
+  border-radius: inherit;
+}
 .ipa-popover {
   position: absolute;
   top: 58px; left: 24px; right: 24px;
@@ -697,7 +731,7 @@ a { color: inherit; text-decoration: none; }
 
 @media (max-width: 820px) {
   .ipa-stats { grid-template-columns: repeat(2, 1fr); }
-  .ipa-form-grid { flex-direction: column; align-items: stretch; }
+  .ipa-form-grid, .ipa-form-grid.ipa-form-2col { grid-template-columns: 1fr; align-items: stretch; }
   .ipa-btn-primary, .ipa-btn-secondary { width: 100%; }
   .ipa-popover { left: 12px; right: 12px; top: 52px; }
 }

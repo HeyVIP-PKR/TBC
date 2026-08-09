@@ -1,0 +1,249 @@
+/**
+ * spa-shell.js  (index.html ONLY — this is the shell)
+ *
+ * Turns "click a tool card / module link → full page navigation" into
+ * "click → fetch that page's markup, mount just its unique content into
+ * #spaMount, re-run its scripts" — no more full-page reload, so the
+ * Topbar/nav sidebar never unmount (no more logo-flash / white-flash
+ * between pages), and the browser's back/forward buttons still work.
+ *
+ * Ported from spa-shell-pattern-guide.md's battle-tested pattern, with
+ * two additions specific to this app:
+ *   1. Every one of these routes is a real, fully-independent static
+ *      page that's STILL directly reachable on its own (bookmarked,
+ *      opened in a new tab, refreshed) — this file only intercepts
+ *      clicks that originate from inside the shell (index.html).
+ *      Nothing about threads.html/etc. themselves changes.
+ *   2. A global addEventListener wrapper (not just the guide's
+ *      setInterval one) — several of these pages register document/
+ *      window-level listeners (paste handlers, Escape-to-close, etc.)
+ *      that would otherwise silently pile up duplicates every time the
+ *      agent revisits the same view in one session, since we destroy +
+ *      re-run each view's script fresh on every visit (matches a real
+ *      page load exactly, including for module changes on /form.html).
+ */
+(function () {
+  // .hub-layout's entrance animation (.page-slide-in, see style.css) ends
+  // with `transform: translateX(0)` and `animation-fill-mode: forwards`
+  // keeps that transform applied indefinitely — which, harmlessly on its
+  // own, ALSO creates a new CSS containing block for any `position:fixed`
+  // descendant. That never mattered before (nothing fixed-position lived
+  // inside .hub-layout), but #spaMount now nests each route's own fixed
+  // lightbox (#attachLightbox, #imgLightbox) inside it, which would
+  // otherwise render clipped to .hub-layout's box (starting below the
+  // Topbar) instead of covering the true viewport. Strip the class once
+  // the intro animation finishes — visually identical, just stops being
+  // a containing block for the rest of the session.
+  //
+  // NOT using an `animationend` listener here: by the time this script
+  // (loaded near the bottom of <body>, after several others) actually
+  // runs, the 0.28s animation may already be finished — the event would
+  // have already fired and been missed, since events aren't replayed.
+  // A plain timeout matching style.css's known 0.28s duration (with a
+  // margin) is simpler and can't lose that race.
+  const layout = document.querySelector(".hub-layout");
+  if (layout) setTimeout(() => layout.classList.remove("page-slide-in"), 350);
+})();
+
+(function () {
+  const SHELL_PATH = "/";
+  const MOUNT_ID = "spaMount";
+  const HOME_ID = "viewHome";
+
+  const ROUTES = {
+    threads: { url: "/threads.html", select: ["#attachLightbox", ".threads-sidebar", ".threads-right-col"], title: "TG Reply Threads" },
+    announcements: { url: "/announcements.html", select: [".threads-sidebar", ".threads-right-col"], title: "Announcements" },
+    promo: { url: "/promo.html", select: [".subpage-right-col"], title: "Promo Code Search" },
+    deposit_issue: { url: "/deposit-issue.html", select: ["#imgLightbox", ".subpage-right-col"], title: "Deposit Issue" },
+    deposit_backup: { url: "/deposit-backup.html", select: ["#imgLightbox", ".subpage-right-col"], title: "Deposit Backup" },
+    form: { url: "/form.html", select: [".subpage-right-col"], title: "Issue Submission" },
+  };
+
+  // Scripts the shell (this very page) has already loaded once — never
+  // re-fetch/re-run these even though the target page also references
+  // them, they're already active and idempotent re-running them adds
+  // nothing but risk (e.g. authguard.js's idle-timeout listener).
+  const SHELL_OWNED_SCRIPTS = new Set([
+    "/assets/theme.js", "/assets/toast.js", "/assets/starfield.js",
+    "/assets/authguard.js", "/assets/announcement-banner.js",
+    "/assets/apply-feature-status.js", "/assets/settings-dropdown.js",
+    "/assets/schemas.js", "/assets/hub-nav.js",
+  ]);
+
+  const htmlCache = new Map();        // view -> parsed Document
+  const scriptTextCache = new Map();  // absolute script path -> text
+  const viewIntervals = {};           // view -> [intervalId, ...]
+  const viewListeners = {};           // view -> [{target,type,fn,opts}, ...]
+  let currentView = "home";
+  let capturingFor = null;
+
+  // ---- track setInterval calls made while a view's script is running,
+  // so switching away can stop its polling (guide's 坑2) ----
+  const realSetInterval = window.setInterval.bind(window);
+  window.setInterval = function (...args) {
+    const id = realSetInterval(...args);
+    if (capturingFor) (viewIntervals[capturingFor] = viewIntervals[capturingFor] || []).push(id);
+    return id;
+  };
+
+  // ---- track document/window listeners added while a view's script is
+  // running, so re-running that script on a later visit doesn't stack
+  // duplicate listeners on top of the old ones ----
+  function trackListenersOn(target) {
+    const realAdd = target.addEventListener.bind(target);
+    const realRemove = target.removeEventListener.bind(target);
+    target.addEventListener = function (type, fn, opts) {
+      if (capturingFor) (viewListeners[capturingFor] = viewListeners[capturingFor] || []).push({ target, type, fn, opts });
+      return realAdd(type, fn, opts);
+    };
+    target.__spaRealRemoveEventListener = realRemove;
+  }
+  trackListenersOn(document);
+  trackListenersOn(window);
+
+  function cleanupView(view) {
+    (viewIntervals[view] || []).forEach(clearInterval);
+    viewIntervals[view] = [];
+    (viewListeners[view] || []).forEach(({ target, type, fn, opts }) => {
+      (target.__spaRealRemoveEventListener || target.removeEventListener).call(target, type, fn, opts);
+    });
+    viewListeners[view] = [];
+  }
+
+  async function getDoc(view) {
+    if (htmlCache.has(view)) return htmlCache.get(view);
+    const res = await fetch(ROUTES[view].url);
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    htmlCache.set(view, doc);
+    return doc;
+  }
+
+  async function getScriptText(path) {
+    if (scriptTextCache.has(path)) return scriptTextCache.get(path);
+    const res = await fetch(path);
+    const text = await res.text();
+    scriptTextCache.set(path, text);
+    return text;
+  }
+
+  function updateActiveNav(view, moduleId) {
+    document.querySelectorAll(".sidebar .sidebar-item").forEach((el) => {
+      const isHome = view === "home" && el.dataset.route === "home";
+      const isModule = view === "form" && el.dataset.route === "form" && el.dataset.module === moduleId;
+      el.classList.toggle("active", isHome || isModule);
+    });
+  }
+
+  async function mount(view, opts) {
+    opts = opts || {};
+    if (!ROUTES[view] && view !== "home") return;
+
+    cleanupView(currentView);
+    currentView = view;
+
+    const homeEl = document.getElementById(HOME_ID);
+    const mountEl = document.getElementById(MOUNT_ID);
+
+    if (view === "home") {
+      mountEl.style.display = "none";
+      mountEl.innerHTML = "";
+      homeEl.style.display = "";
+      if (opts.pushUrl !== false) history.pushState({ view: "home" }, "", SHELL_PATH);
+      document.title = "PKR CS Team - TBC";
+      updateActiveNav("home", null);
+      return;
+    }
+
+    homeEl.style.display = "none";
+    mountEl.style.display = "flex";
+    mountEl.innerHTML = '<div class="spa-loading">Loading…</div>';
+
+    const route = ROUTES[view];
+    const doc = await getDoc(view);
+
+    let qs = `?view=${view}`;
+    if (view === "form" && opts.module) qs += `&module=${encodeURIComponent(opts.module)}`;
+    if (opts.pushUrl !== false) history.pushState({ view, module: opts.module || null }, "", `${SHELL_PATH}${qs}`);
+    document.title = route.title;
+
+    const frag = document.createDocumentFragment();
+    route.select.forEach((sel) => {
+      const node = doc.querySelector(sel);
+      if (node) frag.appendChild(node.cloneNode(true));
+    });
+    mountEl.innerHTML = "";
+    mountEl.appendChild(frag);
+
+    // Collect scripts to run fresh: every inline <script> block in the
+    // fetched document, plus any local same-origin <script src> that
+    // isn't already owned/loaded by the shell (e.g. /assets/app.js,
+    // which the form route needs to re-run on every mount — it reads
+    // location.search for ?module= and rebuilds the form fields).
+    const scripts = [];
+    doc.querySelectorAll("script").forEach((s) => {
+      if (s.src) {
+        let path;
+        try { path = new URL(s.src, location.origin).pathname; } catch { return; }
+        if (path.startsWith("/assets/") && !SHELL_OWNED_SCRIPTS.has(path)) {
+          scripts.push({ kind: "src", path });
+        }
+      } else if (s.textContent.trim()) {
+        scripts.push({ kind: "inline", text: s.textContent });
+      }
+    });
+
+    capturingFor = view;
+    try {
+      for (const s of scripts) {
+        const text = s.kind === "src" ? await getScriptText(s.path) : s.text;
+        try {
+          new Function(text)();
+        } catch (err) {
+          console.error(`[spa-shell] ${view} script error:`, err);
+        }
+      }
+    } finally {
+      capturingFor = null;
+    }
+
+    updateActiveNav(view, opts.module || null);
+  }
+
+  // ---- capture-phase click interception, matches the guide's fix for
+  // "some other script on the page grabs the click first" ----
+  document.addEventListener(
+    "click",
+    (e) => {
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const el = e.target.closest("[data-route]");
+      if (!el) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      mount(el.dataset.route, { module: el.dataset.module || undefined }).catch((err) => console.error("[spa-shell] mount failed:", err));
+    },
+    { capture: true }
+  );
+
+  window.addEventListener("popstate", (e) => {
+    const state = e.state || {};
+    mount(state.view || "home", { module: state.module || undefined, pushUrl: false });
+  });
+
+  // Restore whichever view was active if the page loads with ?view= in
+  // the address bar (deep link, or a refresh after navigating in-app —
+  // see the guide's 坑7: pushState never points at a real file path, so
+  // a refresh always re-loads THIS shell and lands here, not a 404).
+  document.addEventListener("DOMContentLoaded", () => {
+    const params = new URLSearchParams(location.search);
+    const view = params.get("view");
+    if (view && ROUTES[view]) {
+      mount(view, { module: params.get("module") || undefined, pushUrl: false });
+    }
+  });
+
+  // Exposed so index.html's own inline script can trigger navigation
+  // too (e.g. a "View all threads" button elsewhere), without needing
+  // to know any of the above.
+  window.SpaShell = { mount };
+})();

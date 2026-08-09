@@ -51,8 +51,17 @@
   const HOME_ID = "viewHome";
 
   const ROUTES = {
-    threads: { url: "/threads.html", select: ["#attachLightbox", ".threads-sidebar", ".threads-right-col"], title: "TG Reply Threads" },
-    announcements: { url: "/announcements.html", select: [".threads-sidebar", ".threads-right-col"], title: "Announcements" },
+    // "#announcementBanner" is listed FIRST in threads/announcements below
+    // — it now lives outside the .threads-sidebar/.threads-right-col pair
+    // in the source markup (moved so it spans the FULL content width,
+    // matching the brand marquee above it, instead of being nested inside
+    // .threads-right-col where it only spanned the narrower right column
+    // — see style.css's "#spaMount > #announcementBanner" rule, which
+    // forces it onto its own full-width row via flex-wrap regardless of
+    // DOM position, but keeping it first here matches source order to
+    // visual order for anyone reading the markup later).
+    threads: { url: "/threads.html", select: ["#attachLightbox", "#announcementBanner", ".threads-sidebar", ".threads-right-col"], title: "TG Reply Threads" },
+    announcements: { url: "/announcements.html", select: ["#announcementBanner", ".threads-sidebar", ".threads-right-col"], title: "Announcements" },
     promo: { url: "/promo.html", select: [".subpage-right-col"], title: "Promo Code Search" },
     deposit_issue: { url: "/deposit-issue.html", select: ["#imgLightbox", ".subpage-right-col"], title: "Deposit Issue" },
     deposit_backup: { url: "/deposit-backup.html", select: ["#imgLightbox", ".subpage-right-col"], title: "Deposit Backup" },

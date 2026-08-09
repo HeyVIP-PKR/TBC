@@ -685,6 +685,24 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
 .hub-right-col > #announcementBanner {
   flex-shrink: 0;
 }
+/* #spaMount (also .hub-right-col, see index.html) is forced to
+   flex-direction:row via an inline style so its mounted route's
+   .threads-sidebar + .threads-right-col (or #imgLightbox +
+   .subpage-right-col) sit side by side — but the threads/announcements
+   routes' #announcementBanner (see spa-shell.js's ROUTES.threads/
+   .announcements `select`) needs to span the FULL width of that row
+   instead of sitting beside the sidebar as a third narrow column.
+   flex-wrap + flex-basis:100% forces it onto its own full-width line,
+   pushing the sidebar/right-col pair down to wrap below it — same
+   visual result as .threads-content-col's own column-stacked layout
+   (brand-row / announcementBanner / threads-body-row) used on the
+   standalone (non-SPA) page. Other routes never have #announcementBanner
+   as a direct child of #spaMount (it stays nested inside their own
+   .subpage-right-col, which doesn't have this narrower-than-marquee
+   problem — see the conversation history this fix came from), so this
+   rule is inert for them. */
+#spaMount { flex-wrap: wrap; }
+#spaMount > #announcementBanner { flex: 0 0 100%; }
 .sidebar-header {
   display: flex;
   align-items: center;
@@ -1041,14 +1059,21 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
    as .hub-content-col / .subpage-content-col. */
 .threads-content-col { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .threads-content-col > .brand-row { flex-shrink: 0; }
+/* Announcement banner now lives here (sibling of .brand-row, above the
+   sidebar/main split below) so it always spans the FULL content width
+   and stays edge-aligned with the marquee above it. It used to be nested
+   one level deeper, inside .threads-right-col — which only spans the
+   width of the right (main) column, not the .threads-sidebar (search +
+   thread-list) column beside it, so the banner rendered narrower than
+   the marquee and visually misaligned with it. See conversation history
+   for the reported bug + before/after screenshots. */
+.threads-content-col > #announcementBanner { flex-shrink: 0; }
 .threads-body-row { display: flex; flex: 1; min-height: 0; }
-/* Right column of the shell — announcement banner + "Back to Home" topline
-   + main content, all width-aligned to the content area instead of
-   spanning full-page-width and sitting on top of the sidebar. Same fix
-   already applied to index.html's .hub-right-col — see
-   CHANGES-batch1-modal-cache-layout.md. */
+/* Right column of the shell — "Back to Home" topline + main content,
+   width-aligned to the content area instead of spanning full-page-width
+   and sitting on top of the sidebar. Same fix already applied to
+   index.html's .hub-right-col — see CHANGES-batch1-modal-cache-layout.md. */
 .threads-right-col { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.threads-right-col > #announcementBanner,
 .threads-right-col > .threads-topline { flex-shrink: 0; }
 .threads-sidebar {
   width: 300px;

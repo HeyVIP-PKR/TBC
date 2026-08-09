@@ -35,7 +35,7 @@ html[data-theme="light"] {
     linear-gradient(160deg, #dbe7fb 0%, #d9cef4 45%, #cdbdf2 75%, #c4b2ee 100%);
 }
 </style>
-<link rel="stylesheet" href="/assets/style.css?v=d4b055c1" />
+<link rel="stylesheet" href="/assets/style.css?v=26050fca" />
 <link rel="stylesheet" href="/assets/toast.css?v=5779b14e" />
 <script src="/assets/toast.js?v=d9d84724"></script>
 <script src="/assets/starfield.js?v=b6e92821" defer></script>
@@ -54,6 +54,9 @@ html[data-theme="light"] {
       <button class="theme-pill" id="themeToggle"></button>
     </div>
   </header>
+
+  <nav class="brand-row" id="pageBrandRow"><div class="brand-row-track"></div></nav>
+
   <div class="threads-shell">
     <aside class="sidebar" id="hubNavMount"></aside>
     <aside class="threads-sidebar" style="width:280px;">
@@ -80,10 +83,12 @@ html[data-theme="light"] {
   </div>
 
   <script src="/assets/hub-nav.js?v=09124992"></script>
+  <script src="/assets/brand-row.js?v=ea371f55"></script>
   <script>
     window.initThemeToggle();
     window.initClock();
     window.HubNav.mount("hubNavMount", {});
+    window.BrandRow.mount("pageBrandRow");
 
     const ROLE_RANK = { agent: 0, senior: 1, admin: 2, superadmin: 3, owner: 4 };
     const auth = window.AgentAuth.getAuth();

@@ -194,6 +194,7 @@ html:has(body.threads-page), body.threads-page {
   flex-direction: column;
 }
 body.threads-page .topbar { flex-shrink: 0; }
+body.threads-page > .brand-row { flex-shrink: 0; }
 body.threads-page .threads-topline { flex-shrink: 0; }
 body.threads-page .threads-shell { flex: 1; height: auto; min-height: 0; }
 
@@ -605,6 +606,7 @@ html:has(body.hub-page), body.hub-page {
   flex-direction: column;
 }
 body.hub-page .topbar { flex-shrink: 0; }
+body.hub-page > .brand-row { flex-shrink: 0; }
 
 /* ---- Generic fixed-viewport 2-column shell for sub-pages that get the
    shared "Issue Submission" nav (form.html, promo.html, deposit-issue.html,
@@ -617,6 +619,7 @@ html:has(body.subpage-fixed), body.subpage-fixed {
   flex-direction: column;
 }
 body.subpage-fixed .topbar { flex-shrink: 0; }
+body.subpage-fixed > .brand-row { flex-shrink: 0; }
 .subpage-shell { display: flex; flex: 1; min-height: 0; }
 .subpage-right-col { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .subpage-right-col > #announcementBanner { flex-shrink: 0; }
@@ -663,7 +666,6 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
   display: flex;
   flex-direction: column;
 }
-.hub-right-col > .brand-row,
 .hub-right-col > #announcementBanner {
   flex-shrink: 0;
 }

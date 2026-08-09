@@ -356,3 +356,50 @@ threads 强制刷新"这个操作，就会复现）。
 打开"这个正常路径完全一致（1600px 宽度窗口下两种路径测出来的速度都是
 ~141px/s，完全吻合，之前是几十倍的差距）。又跑了一遍完整回归测试，全部
 正常。
+
+---
+
+## 新功能（2026-08-09）：品牌跑马灯改为每个页面顶部常驻
+
+**需求**：参考 INR 项目的效果——跑马灯不再只在首页显示，而是在 TG Reply
+Threads / Promo / Deposit Issue / Deposit Backup / Announcement / 表单等
+每个页面顶部（topbar 下面、提醒条上面）都能看到。
+
+**实现方式**：
+
+1. **首页/SPA 壳这边**：把跑马灯从 `#viewHome`（首页专属区域）挪到了
+   index.html 的**常驻区域**（`</header>` 之后，跟 topbar、Account
+   Management 编辑弹窗同级）。这样不管 SPA 壳当前显示的是首页还是别的
+   任何视图，看到的都是同一个跑马灯，不需要每个视图各自重新渲染一份—
+   —也顺带避免了再次触发之前那个"容器隐藏时宽度测成 0 导致渲染出三万多
+   个重复元素"的 bug（因为这个跑马灯现在永远不会被隐藏了）。
+
+2. **6 个独立子页面**（threads.html / announcements.html / promo.html /
+   deposit-issue.html / deposit-backup.html / form.html）：新增了一个
+   共享脚本 `public/assets/brand-row.js`，逻辑上是首页那份的简化版——
+   只显示 logo + 品牌名，点击跳转到配置的链接，**没有**首页那个编辑
+   铅笔图标（编辑品牌 logo/链接目前还是只在首页能操作，没有把整套编辑
+   弹窗也搬到 6 个页面上，避免不必要的重复 UI）。这 6 个页面各自的挂载
+   点用的是 `id="pageBrandRow"`，跟首页的 `id="brandRow"` 特意用了不同
+   的 id——这样即使某天两者同时出现在同一个页面里（比如 SPA 挂载时），
+   也不会互相冲突或者被对方覆盖。
+
+3. 每个子页面自己的 `<style>` 里都加了 `flex-shrink:0`，保证跑马灯不会
+   在窗口变窄时被意外压缩。
+
+**为什么 SPA 模式下不会重复显示两个跑马灯**：SPA 挂载某个视图时，只会
+把该页面 `.threads-sidebar`/`.subpage-right-col` 之类的内容节点搬进
+`#spaMount`，每个子页面自己 `pageBrandRow` 所在的 topbar 区域根本不在
+搬运范围内，所以 SPA 模式下只有首页那个常驻跑马灯在起作用；`
+brand-row.js` 在 SPA 模式下依然会跟着页面脚本一起重新执行一次，但因为
+找不到 `#pageBrandRow` 这个元素，会安全地什么都不做（跟 `hub-nav.js`
+处理 `#hubNavMount` 的方式完全一样）。只有**直接访问**（书签/新标签页/
+不经过 SPA 壳）这 6 个页面时，`brand-row.js` 才会真正派上用场。
+
+**验证**：
+- SPA 模式下点遍全部 6 个路由，确认全程只有 1 个 `#brandRow` 元素、
+  内容正确（54 个 logo pill），没有 `#pageBrandRow` 意外混进来
+- 6 个子页面分别用真实 URL 直接打开（不经过首页），各自的 `#pageBrandRow`
+  都正确渲染出 54 个 logo pill，0 条 JS 报错
+- 完整跑了一遍此前全部回归测试（Loading 重试、Announcement 提示条、
+  Promo/Deposit 样式、跑马灯速度一致性），全部依旧正常

@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Announcements</title>
-<script src="/assets/theme.js"></script>
+<script src="/assets/theme.js?v=5b27e630"></script>
 <style>
 /* Inline placeholder canvas background — first thing the browser parses
    in <head>, so it paints before any network request (external CSS, the
@@ -35,12 +35,13 @@ html[data-theme="light"] {
     linear-gradient(160deg, #dbe7fb 0%, #d9cef4 45%, #cdbdf2 75%, #c4b2ee 100%);
 }
 </style>
-<link rel="stylesheet" href="/assets/style.css" />
-<link rel="stylesheet" href="/assets/toast.css" />
-<script src="/assets/toast.js"></script>
-<script src="/assets/starfield.js" defer></script>
-<script src="/assets/authguard.js"></script>
-<script src="/assets/announcement-banner.js" defer></script>
+<link rel="stylesheet" href="/assets/style.css?v=17ffeb90" />
+<link rel="stylesheet" href="/assets/toast.css?v=5779b14e" />
+<script src="/assets/toast.js?v=d9d84724"></script>
+<script src="/assets/starfield.js?v=b6e92821" defer></script>
+<script src="/assets/authguard.js?v=19b1b251"></script>
+<script src="/assets/announcement-banner.js?v=1fe18b8d" defer></script>
+<script src="/assets/schemas.js?v=189eea70"></script>
 </head>
 <body class="threads-page">
   <header class="topbar">
@@ -53,13 +54,8 @@ html[data-theme="light"] {
       <button class="theme-pill" id="themeToggle"></button>
     </div>
   </header>
-  <div id="announcementBanner"></div>
-
-  <div class="threads-topline">
-    <a href="/" class="back-pill">&larr; Back to Home</a>
-  </div>
-
   <div class="threads-shell">
+    <aside class="sidebar" id="hubNavMount"></aside>
     <aside class="threads-sidebar" style="width:280px;">
       <button type="button" class="announce-new-btn" id="newBtn">+ New announcement</button>
       <div class="threads-search">
@@ -73,16 +69,21 @@ html[data-theme="light"] {
       <div class="thread-list" id="announceList" style="margin-bottom:0;"></div>
     </aside>
 
-    <main class="threads-main">
-      <div class="thread-scroll-area" style="padding:30px 40px; display:flex; justify-content:center;">
-        <div id="formArea" style="width:640px; height:100%; flex:none;"></div>
-      </div>
-    </main>
+    <div class="threads-right-col">
+      <div id="announcementBanner"></div>
+      <main class="threads-main">
+        <div class="thread-scroll-area" style="padding:30px 40px; display:flex; justify-content:center;">
+          <div id="formArea" style="width:640px; height:100%; flex:none;"></div>
+        </div>
+      </main>
+    </div>
   </div>
 
+  <script src="/assets/hub-nav.js?v=09124992"></script>
   <script>
     window.initThemeToggle();
     window.initClock();
+    window.HubNav.mount("hubNavMount", {});
 
     const ROLE_RANK = { agent: 0, senior: 1, admin: 2, superadmin: 3, owner: 4 };
     const auth = window.AgentAuth.getAuth();

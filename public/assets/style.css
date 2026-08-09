@@ -347,12 +347,16 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   position: fixed; inset: 0; z-index: 50;
   background: rgba(10, 12, 25, 0.55);
-  align-items: center; justify-content: center;
+  /* flex-start (not center) + generous top padding: with overflow-y:auto,
+     align-items:center clips content that overflows ABOVE the viewport —
+     you can scroll down to the bottom but never up to the true top. See
+     php-issue-hub-完整优化记录.md §5.3 for the full writeup. */
+  align-items: flex-start; justify-content: center;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.18s ease;
   overflow-y: auto;
-  padding: 24px 12px;
+  padding: 40px 12px;
 }
 .edit-modal-backdrop.is-open { opacity: 1; pointer-events: auto; }
 .edit-modal {
@@ -589,9 +593,41 @@ a { color: inherit; text-decoration: none; }
 .theme-toggle:hover { transform: translateY(-1px); }
 
 /* ---- Sidebar hub layout ---- */
+/* ---- Fixed-viewport hub page: topbar stays put, sidebar scrolls
+   independently, right column (brand ticker + banner + main content)
+   is its own scroll container. Same pattern already proven on
+   threads.html (body.threads-page) — see
+   php-issue-hub-完整优化记录.md §6 for the writeup this was ported from. */
+html:has(body.hub-page), body.hub-page {
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+body.hub-page .topbar { flex-shrink: 0; }
+
+/* ---- Generic fixed-viewport 2-column shell for sub-pages that get the
+   shared "Issue Submission" nav (form.html, promo.html, deposit-issue.html,
+   deposit-backup.html) — mirrors body.hub-page's pattern above. Reuses
+   .sidebar as-is for the nav column. ---- */
+html:has(body.subpage-fixed), body.subpage-fixed {
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+body.subpage-fixed .topbar { flex-shrink: 0; }
+.subpage-shell { display: flex; flex: 1; min-height: 0; }
+.subpage-right-col { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.subpage-right-col > #announcementBanner { flex-shrink: 0; }
+.subpage-main { flex: 1; min-height: 0; overflow-y: auto; }
+
 .hub-layout {
   display: flex;
-  min-height: calc(100vh - 60px);
+  flex: 1;
+  min-height: 0; /* flex children default to min-height:auto and will
+                    otherwise refuse to shrink below their content size,
+                    silently breaking the "independent scroll" effect */
 }
 .sidebar {
   width: 290px;
@@ -602,6 +638,17 @@ a { color: inherit; text-decoration: none; }
   overflow-y: auto;
   backdrop-filter: blur(16px) saturate(160%);
   -webkit-backdrop-filter: blur(16px) saturate(160%);
+}
+.hub-right-col {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.hub-right-col > .brand-row,
+.hub-right-col > #announcementBanner {
+  flex-shrink: 0;
 }
 .sidebar-header {
   display: flex;
@@ -780,6 +827,9 @@ a { color: inherit; text-decoration: none; }
 
 .hub-main {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto; /* only scrolls if content actually exceeds the
+                        visible height — normally sits still */
   position: relative;
   padding: 36px 40px;
   display: flex;
@@ -951,6 +1001,14 @@ a { color: inherit; text-decoration: none; }
 
 /* ---- TG Reply Threads ---- */
 .threads-shell { display: flex; height: calc(100vh - 61px); }
+/* Right column of the shell — announcement banner + "Back to Home" topline
+   + main content, all width-aligned to the content area instead of
+   spanning full-page-width and sitting on top of the sidebar. Same fix
+   already applied to index.html's .hub-right-col — see
+   CHANGES-batch1-modal-cache-layout.md. */
+.threads-right-col { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.threads-right-col > #announcementBanner,
+.threads-right-col > .threads-topline { flex-shrink: 0; }
 .threads-sidebar {
   width: 300px;
   flex-shrink: 0;

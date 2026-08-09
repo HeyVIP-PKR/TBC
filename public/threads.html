@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>TG Reply Threads</title>
-<script src="/assets/theme.js"></script>
+<script src="/assets/theme.js?v=5b27e630"></script>
 <style>
 /* Inline placeholder canvas background — first thing the browser parses
    in <head>, so it paints before any network request (external CSS, the
@@ -35,13 +35,13 @@ html[data-theme="light"] {
     linear-gradient(160deg, #dbe7fb 0%, #d9cef4 45%, #cdbdf2 75%, #c4b2ee 100%);
 }
 </style>
-<link rel="stylesheet" href="/assets/style.css" />
-<link rel="stylesheet" href="/assets/toast.css" />
-<script src="/assets/toast.js"></script>
-<script src="/assets/starfield.js" defer></script>
-<script src="/assets/authguard.js"></script>
-<script src="/assets/announcement-banner.js" defer></script>
-<script src="/assets/schemas.js"></script>
+<link rel="stylesheet" href="/assets/style.css?v=17ffeb90" />
+<link rel="stylesheet" href="/assets/toast.css?v=5779b14e" />
+<script src="/assets/toast.js?v=d9d84724"></script>
+<script src="/assets/starfield.js?v=b6e92821" defer></script>
+<script src="/assets/authguard.js?v=19b1b251"></script>
+<script src="/assets/announcement-banner.js?v=1fe18b8d" defer></script>
+<script src="/assets/schemas.js?v=189eea70"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/twemoji.min.js"></script>
 </head>
 <body class="threads-page">
@@ -62,13 +62,8 @@ html[data-theme="light"] {
       <button class="theme-pill" id="themeToggle"></button>
     </div>
   </header>
-  <div id="announcementBanner"></div>
-
-  <div class="threads-topline">
-    <a href="/" class="back-pill">&larr; Back to Home</a>
-  </div>
-
   <div class="threads-shell" id="threadsShell">
+    <aside class="sidebar" id="hubNavMount"></aside>
     <aside class="threads-sidebar">
       <div class="threads-search">
         <span>🔍</span>
@@ -102,12 +97,18 @@ html[data-theme="light"] {
       </div>
     </aside>
 
-    <main class="threads-main" id="threadsMain">
+    <div class="threads-right-col">
+      <div id="announcementBanner"></div>
+      <main class="threads-main" id="threadsMain">
       <div class="threads-placeholder">Pick a thread on the left, or submit a form to start one.</div>
     </main>
+    </div>
   </div>
 
+  <script src="/assets/hub-nav.js?v=09124992"></script>
   <script>
+    window.HubNav.mount("hubNavMount", {});
+
     // ---- Note on feedback (alert vs. the site-wide toast) --------------
     // This page deliberately keeps native alert() for send/edit/recall/
     // delete failures instead of the /assets/toast.js "click anywhere to

@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Issue Submission</title>
-<script src="/assets/theme.js"></script>
+<script src="/assets/theme.js?v=5b27e630"></script>
 <style>
 /* Inline placeholder canvas background — first thing the browser parses
    in <head>, so it paints before any network request (external CSS, the
@@ -35,14 +35,14 @@ html[data-theme="light"] {
     linear-gradient(160deg, #dbe7fb 0%, #d9cef4 45%, #cdbdf2 75%, #c4b2ee 100%);
 }
 </style>
-<link rel="stylesheet" href="/assets/style.css" />
-<link rel="stylesheet" href="/assets/toast.css" />
-<script src="/assets/toast.js"></script>
-<script src="/assets/starfield.js" defer></script>
-<script src="/assets/authguard.js"></script>
-<script src="/assets/announcement-banner.js" defer></script>
+<link rel="stylesheet" href="/assets/style.css?v=17ffeb90" />
+<link rel="stylesheet" href="/assets/toast.css?v=5779b14e" />
+<script src="/assets/toast.js?v=d9d84724"></script>
+<script src="/assets/starfield.js?v=b6e92821" defer></script>
+<script src="/assets/authguard.js?v=19b1b251"></script>
+<script src="/assets/announcement-banner.js?v=1fe18b8d" defer></script>
 </head>
-<body>
+<body class="subpage-fixed">
   <header class="topbar">
     <div class="topbar-left">
       <img src="/assets/img/logo.webp" alt="HeyVIP" class="logo-img" />
@@ -54,11 +54,13 @@ html[data-theme="light"] {
       <span class="agent-whoami" id="agentWhoami"></span>
     </div>
   </header>
-  <div id="announcementBanner"></div>
 
-  <a href="/" class="back-pill" id="backPill">&larr; Back to Home</a>
-
-  <div class="form-page page-slide-in">
+  <div class="subpage-shell">
+    <aside class="sidebar" id="hubNavMount"></aside>
+    <div class="subpage-right-col">
+      <div id="announcementBanner"></div>
+      <main class="subpage-main">
+      <div class="form-page page-slide-in">
     <div class="form-card">
       <div class="form-header"><span class="icon" id="formIcon"></span><span id="formTitle">Loading…</span></div>
       <p class="form-hint" id="formHint"></p>
@@ -97,20 +99,16 @@ html[data-theme="light"] {
         </div>
       </form>
     </div>
+      </div>
+      </main>
+    </div>
   </div>
 
-  <script src="/assets/schemas.js"></script>
-  <script src="/assets/app.js"></script>
+  <script src="/assets/schemas.js?v=189eea70"></script>
+  <script src="/assets/hub-nav.js?v=09124992"></script>
+  <script src="/assets/app.js?v=9aa08077"></script>
   <script>
-    // Mirrors the topic-click transition on index.html (see .page-slide-out
-    // in style.css): play the slide-out animation on the form card first,
-    // then do the real navigation back to "/" — separate static pages, so
-    // this setTimeout has to match the CSS animation's 0.2s duration.
-    document.getElementById("backPill").addEventListener("click", (e) => {
-      e.preventDefault();
-      document.querySelector(".form-page").classList.replace("page-slide-in", "page-slide-out");
-      setTimeout(() => { location.href = "/"; }, 200);
-    });
+    window.HubNav.mount("hubNavMount", { activeModule: new URLSearchParams(location.search).get("module") });
   </script>
 </body>
 </html>

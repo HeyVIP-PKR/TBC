@@ -897,9 +897,18 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
   flex: 1;
   min-height: 0;
   overflow-y: auto; /* only scrolls if content actually exceeds the
-                        visible height — normally sits still */
+                        visible height — normally sits still. Kept
+                        (not removed) even though the spacing below was
+                        tightened specifically so this never has to
+                        trigger on a normal desktop window: a very short
+                        window (small laptop, heavy browser zoom) can
+                        still legitimately need it, and removing this
+                        would silently clip the bottom of the page with
+                        no way to reach it — the exact bug already fixed
+                        once elsewhere on this site (see conversation
+                        history). */
   position: relative;
-  padding: 36px 40px;
+  padding: 24px 40px;
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -908,7 +917,7 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
 .hub-main .inner { max-width: 480px; }
 .status-badge-corner {
   display: inline-flex;
-  margin-top: 14px;
+  margin-top: 10px;
 }
 .hub-main h1 { font-family: var(--font-display); font-weight: 600; font-size: 28px; margin: 0 0 10px; letter-spacing: -0.01em; }
 .hub-main p { color: var(--ink-soft); margin: 0 0 24px; line-height: 1.6; }
@@ -928,8 +937,8 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
   display: flex;
   justify-content: center;
   gap: 22px;
-  margin-top: 26px;
-  padding-top: 20px;
+  margin-top: 18px;
+  padding-top: 14px;
   border-top: 1px solid var(--panel-border);
 }
 .hub-stats .stat { text-align: center; }
@@ -950,7 +959,7 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 14px;
-  margin-top: 30px;
+  margin-top: 20px;
   max-width: 520px;
 }
 .tool-card {

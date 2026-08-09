@@ -67,8 +67,24 @@
     "/assets/theme.js", "/assets/toast.js", "/assets/starfield.js",
     "/assets/authguard.js", "/assets/announcement-banner.js",
     "/assets/apply-feature-status.js", "/assets/settings-dropdown.js",
-    "/assets/schemas.js", "/assets/hub-nav.js",
+    "/assets/schemas.js",
   ]);
+  // NOTE: /assets/hub-nav.js is deliberately NOT in this set. index.html
+  // (the shell) has its own separate, hand-written sidebar and never
+  // loads hub-nav.js itself — that script only exists to render the
+  // matching sidebar on the STANDALONE versions of threads.html/
+  // form.html/etc. Every one of those pages' inline <script> starts
+  // with `window.HubNav.mount("hubNavMount", {})`; treating hub-nav.js
+  // as shell-owned left `window.HubNav` undefined under the SPA shell,
+  // so that very first line threw and silently aborted the entire rest
+  // of the view's script (thread list, form fields, everything) below
+  // it — since it all lives in that one script block. HubNav.mount()
+  // already no-ops safely when its target (#hubNavMount) isn't present
+  // in the DOM, which is exactly the case here (the shell's persistent
+  // sidebar is used instead, and #hubNavMount is intentionally excluded
+  // from every route's `select` list) — so letting this script load and
+  // run fresh on every mount is simply correct, not a duplicate-render
+  // risk.
 
   const htmlCache = new Map();        // view -> parsed Document
   const scriptTextCache = new Map();  // absolute script path -> text
@@ -160,54 +176,89 @@
     mountEl.innerHTML = '<div class="spa-loading">Loading…</div>';
 
     const route = ROUTES[view];
-    const doc = await getDoc(view);
 
-    let qs = `?view=${view}`;
-    if (view === "form" && opts.module) qs += `&module=${encodeURIComponent(opts.module)}`;
-    if (opts.pushUrl !== false) history.pushState({ view, module: opts.module || null }, "", `${SHELL_PATH}${qs}`);
-    document.title = route.title;
-
-    const frag = document.createDocumentFragment();
-    route.select.forEach((sel) => {
-      const node = doc.querySelector(sel);
-      if (node) frag.appendChild(node.cloneNode(true));
-    });
-    mountEl.innerHTML = "";
-    mountEl.appendChild(frag);
-
-    // Collect scripts to run fresh: every inline <script> block in the
-    // fetched document, plus any local same-origin <script src> that
-    // isn't already owned/loaded by the shell (e.g. /assets/app.js,
-    // which the form route needs to re-run on every mount — it reads
-    // location.search for ?module= and rebuilds the form fields).
-    const scripts = [];
-    doc.querySelectorAll("script").forEach((s) => {
-      if (s.src) {
-        let path;
-        try { path = new URL(s.src, location.origin).pathname; } catch { return; }
-        if (path.startsWith("/assets/") && !SHELL_OWNED_SCRIPTS.has(path)) {
-          scripts.push({ kind: "src", path });
-        }
-      } else if (s.textContent.trim()) {
-        scripts.push({ kind: "inline", text: s.textContent });
-      }
-    });
-
-    capturingFor = view;
+    // Everything below this point touches the network (the route's HTML,
+    // then each of its own script files) — ANY of those requests can
+    // fail on a real connection (a dropped packet, a slow mobile link, a
+    // brief edge hiccup), not just in theory. Before this fix, a failure
+    // here left the "Loading…" placeholder up FOREVER: the rejected
+    // promise just bubbled up to the click handler's .catch(), which
+    // only logs to the console — nothing ever told the agent it had
+    // failed, and nothing let them retry without knowing to reload the
+    // whole page. That's the root cause behind "click a Topic → stuck on
+    // Loading / page doesn't respond" reports. Now any failure anywhere
+    // in this block (fetching the page, OR fetching one of its scripts)
+    // is caught in one place and turned into a visible retry state
+    // instead of a silent, permanent freeze.
     try {
-      for (const s of scripts) {
-        const text = s.kind === "src" ? await getScriptText(s.path) : s.text;
-        try {
-          new Function(text)();
-        } catch (err) {
-          console.error(`[spa-shell] ${view} script error:`, err);
-        }
-      }
-    } finally {
-      capturingFor = null;
-    }
+      const doc = await getDoc(view);
 
-    updateActiveNav(view, opts.module || null);
+      let qs = `?view=${view}`;
+      if (view === "form" && opts.module) qs += `&module=${encodeURIComponent(opts.module)}`;
+      if (opts.pushUrl !== false) history.pushState({ view, module: opts.module || null }, "", `${SHELL_PATH}${qs}`);
+      document.title = route.title;
+
+      const frag = document.createDocumentFragment();
+      route.select.forEach((sel) => {
+        const node = doc.querySelector(sel);
+        if (node) frag.appendChild(node.cloneNode(true));
+      });
+      mountEl.innerHTML = "";
+      mountEl.appendChild(frag);
+
+      // Collect scripts to run fresh: every inline <script> block in the
+      // fetched document, plus any local same-origin <script src> that
+      // isn't already owned/loaded by the shell (e.g. /assets/app.js,
+      // which the form route needs to re-run on every mount — it reads
+      // location.search for ?module= and rebuilds the form fields).
+      const scripts = [];
+      doc.querySelectorAll("script").forEach((s) => {
+        if (s.src) {
+          let path;
+          try { path = new URL(s.src, location.origin).pathname; } catch { return; }
+          if (path.startsWith("/assets/") && !SHELL_OWNED_SCRIPTS.has(path)) {
+            scripts.push({ kind: "src", path });
+          }
+        } else if (s.textContent.trim()) {
+          scripts.push({ kind: "inline", text: s.textContent });
+        }
+      });
+
+      capturingFor = view;
+      try {
+        for (const s of scripts) {
+          // Only the fetch itself is allowed to escape to the outer
+          // catch (network failure -> retry screen, see above). Once we
+          // actually HAVE the script's text, a bug INSIDE that script
+          // must not block the rest of the view's scripts from running
+          // — same as a real page load, where one broken <script> tag
+          // doesn't stop the ones after it.
+          const text = s.kind === "src" ? await getScriptText(s.path) : s.text;
+          try {
+            new Function(text)();
+          } catch (err) {
+            console.error(`[spa-shell] ${view} script error:`, err);
+          }
+        }
+      } finally {
+        capturingFor = null;
+      }
+
+      updateActiveNav(view, opts.module || null);
+    } catch (err) {
+      console.error(`[spa-shell] failed to load "${view}":`, err);
+      mountEl.innerHTML = `
+        <div class="spa-loading spa-error">
+          <p>Couldn't load this page. Check your connection and try again.</p>
+          <button type="button" class="spa-retry-btn">Retry</button>
+        </div>`;
+      const retryBtn = mountEl.querySelector(".spa-retry-btn");
+      if (retryBtn) {
+        retryBtn.addEventListener("click", () => {
+          mount(view, opts).catch((e) => console.error("[spa-shell] retry failed:", e));
+        });
+      }
+    }
   }
 
   // ---- capture-phase click interception, matches the guide's fix for

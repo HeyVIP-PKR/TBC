@@ -51,17 +51,26 @@
   const HOME_ID = "viewHome";
 
   const ROUTES = {
-    // "#announcementBanner" is listed FIRST in threads/announcements below
-    // — it now lives outside the .threads-sidebar/.threads-right-col pair
-    // in the source markup (moved so it spans the FULL content width,
-    // matching the brand marquee above it, instead of being nested inside
-    // .threads-right-col where it only spanned the narrower right column
-    // — see style.css's "#spaMount > #announcementBanner" rule, which
-    // forces it onto its own full-width row via flex-wrap regardless of
-    // DOM position, but keeping it first here matches source order to
-    // visual order for anyone reading the markup later).
-    threads: { url: "/threads.html", select: ["#attachLightbox", "#announcementBanner", ".threads-sidebar", ".threads-right-col"], title: "TG Reply Threads" },
-    announcements: { url: "/announcements.html", select: ["#announcementBanner", ".threads-sidebar", ".threads-right-col"], title: "Announcements" },
+    // "#announcementBanner" comes first, then the WHOLE ".threads-body-row"
+    // as one unit (not ".threads-sidebar"/".threads-right-col" pulled
+    // separately) — #spaMount is a column-direction flex container (see
+    // its default via .hub-right-col in style.css; no longer forced to
+    // row via an inline style), so stacking #announcementBanner above
+    // .threads-body-row here mirrors EXACTLY the standalone page's own
+    // .threads-content-col structure (brand-row / announcementBanner /
+    // threads-body-row, all stacked). .threads-body-row already ships
+    // with its own correct `flex:1; min-height:0` in style.css (it's the
+    // same class used on the standalone page), so it stretches to fill
+    // the remaining height and its own children's internal scrolling
+    // (.thread-scroll-area) keeps working — pulling .threads-sidebar and
+    // .threads-right-col out of that wrapper and relying on flex-wrap to
+    // re-stack them was a bug: a wrapped multi-line flex row doesn't
+    // stretch each line to the container's full height the way a
+    // single-line row does, which silently broke the internal-scroll
+    // height chain for every SPA-mounted thread/announcement view (no
+    // scrollbar, reply box pushed off-screen — see conversation history).
+    threads: { url: "/threads.html", select: ["#attachLightbox", "#announcementBanner", ".threads-body-row"], title: "TG Reply Threads" },
+    announcements: { url: "/announcements.html", select: ["#announcementBanner", ".threads-body-row"], title: "Announcements" },
     promo: { url: "/promo.html", select: [".subpage-right-col"], title: "Promo Code Search" },
     deposit_issue: { url: "/deposit-issue.html", select: ["#imgLightbox", ".subpage-right-col"], title: "Deposit Issue" },
     deposit_backup: { url: "/deposit-backup.html", select: ["#imgLightbox", ".subpage-right-col"], title: "Deposit Backup" },

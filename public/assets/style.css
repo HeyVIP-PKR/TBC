@@ -186,9 +186,22 @@ body {
 
 /* threads.html only — locks the whole page to the viewport so the only
    thing that ever scrolls is the conversation area, and the reply bar
-   stays genuinely pinned regardless of browser zoom level. */
-html:has(body.threads-page), body.threads-page {
-  height: 100%;
+   stays genuinely pinned regardless of browser zoom level.
+   height:100dvh/100vh is used directly on <body> instead of the previous
+   `html:has(body.threads-page){height:100%} + body.threads-page
+   {height:100%}` pair — percentage heights need <html> itself to have a
+   definite height first, which is what that :has() selector existed to
+   provide, but that makes this whole fixed-viewport system depend on
+   :has() actually matching. Viewport units resolve directly against the
+   viewport with NO ancestor sizing required at all, so this removes that
+   dependency entirely — a strictly more robust base for a mechanism the
+   reply box's visibility depends on. (100vh first as a plain fallback
+   for any engine that doesn't recognize dvh; a browser that doesn't
+   recognize a value ignores that whole declaration and keeps the
+   previous one, it doesn't fall through to auto.) */
+body.threads-page {
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -598,9 +611,13 @@ a { color: inherit; text-decoration: none; }
    independently, right column (brand ticker + banner + main content)
    is its own scroll container. Same pattern already proven on
    threads.html (body.threads-page) — see
-   php-issue-hub-完整优化记录.md §6 for the writeup this was ported from. */
-html:has(body.hub-page), body.hub-page {
-  height: 100%;
+   php-issue-hub-完整优化记录.md §6 for the writeup this was ported from.
+   height:100dvh/100vh directly on <body> instead of relying on
+   `html:has(body.hub-page){height:100%}` to give <html> a definite
+   height first — see body.threads-page above for why. */
+body.hub-page {
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -611,8 +628,9 @@ body.hub-page .topbar { flex-shrink: 0; }
    shared "Issue Submission" nav (form.html, promo.html, deposit-issue.html,
    deposit-backup.html) — mirrors body.hub-page's pattern above. Reuses
    .sidebar as-is for the nav column. ---- */
-html:has(body.subpage-fixed), body.subpage-fixed {
-  height: 100%;
+body.subpage-fixed {
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -685,24 +703,21 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
 .hub-right-col > #announcementBanner {
   flex-shrink: 0;
 }
-/* #spaMount (also .hub-right-col, see index.html) is forced to
-   flex-direction:row via an inline style so its mounted route's
-   .threads-sidebar + .threads-right-col (or #imgLightbox +
-   .subpage-right-col) sit side by side — but the threads/announcements
-   routes' #announcementBanner (see spa-shell.js's ROUTES.threads/
-   .announcements `select`) needs to span the FULL width of that row
-   instead of sitting beside the sidebar as a third narrow column.
-   flex-wrap + flex-basis:100% forces it onto its own full-width line,
-   pushing the sidebar/right-col pair down to wrap below it — same
-   visual result as .threads-content-col's own column-stacked layout
-   (brand-row / announcementBanner / threads-body-row) used on the
-   standalone (non-SPA) page. Other routes never have #announcementBanner
-   as a direct child of #spaMount (it stays nested inside their own
-   .subpage-right-col, which doesn't have this narrower-than-marquee
-   problem — see the conversation history this fix came from), so this
-   rule is inert for them. */
-#spaMount { flex-wrap: wrap; }
-#spaMount > #announcementBanner { flex: 0 0 100%; }
+/* #spaMount (also .hub-right-col, see index.html) stacks its mounted
+   route's content in a column — same as .hub-right-col's own default
+   direction, no inline override needed. For threads/announcements (see
+   spa-shell.js's ROUTES.threads/.announcements `select`), that means
+   #announcementBanner sits above the WHOLE .threads-body-row as a single
+   unit, mirroring .threads-content-col's own stacked layout on the
+   standalone (non-SPA) page exactly — .threads-body-row already carries
+   its own correct `flex:1; min-height:0` (see below), so it stretches to
+   fill the remaining height and the internal scroll chain inside it
+   keeps working. (An earlier version of this forced #spaMount to
+   flex-direction:row and used flex-wrap to push the banner onto its own
+   line — that silently broke height-stretching for the wrapped second
+   line, killing internal scrolling on every SPA-mounted thread view. See
+   conversation history for the reported bug + fix.) */
+#spaMount > #announcementBanner { flex-shrink: 0; }
 .sidebar-header {
   display: flex;
   align-items: center;

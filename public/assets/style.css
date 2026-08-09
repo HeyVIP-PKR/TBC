@@ -612,7 +612,16 @@ a { color: inherit; text-decoration: none; }
 .ipa-section-body { padding: 14px 16px 16px; }
 .ipa-form-grid {
   display: grid;
-  grid-template-columns: minmax(170px, 220px) 1fr auto;
+  /* minmax(0, 1fr) — NOT bare "1fr" — for the flexible middle column.
+     A plain `1fr` track's implicit minimum is "auto" (the content's own
+     min-content width), not 0 — if that content (the IP address input,
+     which has a fairly wide placeholder) needs more room than is
+     actually available, the TRACK REFUSES TO SHRINK below that and the
+     row overflows instead, which is exactly what made this whole
+     section render squeezed/misaligned with text cut off (reported
+     with screenshots). Wrapping it in minmax(0, 1fr) removes that
+     implicit floor so the track can actually shrink to fit. */
+  grid-template-columns: minmax(170px, 220px) minmax(0, 1fr) auto;
   gap: 12px;
   align-items: flex-end;
 }
@@ -620,7 +629,7 @@ a { color: inherit; text-decoration: none; }
    read as two EQUAL-WEIGHT fields instead of inheriting "Add IP
    manually"'s narrower fixed first column, which is what made the two
    sections look mismatched/unbalanced side by side. */
-.ipa-form-grid.ipa-form-2col { grid-template-columns: 1fr 1fr auto; }
+.ipa-form-grid.ipa-form-2col { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
 .ipa-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .ipa-field-grow { min-width: 0; }
 .ipa-field label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-soft); }
@@ -690,7 +699,19 @@ a { color: inherit; text-decoration: none; }
    ends up identical either way — just without the sticky-header bug. */
 .ipa-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
 .ipa-table th {
-  position: sticky; top: 0; text-align: center; font-size: 10px; text-transform: uppercase;
+  /* NOT position:sticky (removed) — a sticky <th> inside a container
+     that scrolls on BOTH axes (.ipa-table-scroll has overflow-x AND
+     overflow-y:auto) is a known source of cross-browser rendering
+     corruption, and switching border-collapse to "separate" (see the
+     .ipa-table rule above) reduced it but didn't fully eliminate it —
+     still reported, with screenshots, as the table visually tearing
+     into separate boxes with a stray scrollbar rendered mid-table.
+     The scroll area here only holds up to ~260px of content anyway, so
+     a header that stays pinned while scrolling isn't worth carrying
+     that risk for — a plain (non-sticky) header that scrolls away with
+     the rest of the table is a small UX trade for a table that
+     actually renders correctly every time. */
+  text-align: center; font-size: 10px; text-transform: uppercase;
   letter-spacing: 0.04em; color: var(--ink-soft); font-weight: 700; padding: 10px 10px;
   background: var(--card-bg); border-bottom: 1.5px solid var(--border); border-right: 1px solid var(--panel-border);
 }

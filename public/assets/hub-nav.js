@@ -85,19 +85,15 @@
           <span class="arrow">&rarr;</span>
         </a>
       `;
-      // Active Agents — flat, Owner-granted permission (NOT rank-tiered,
-      // unlike every Account Management subitem below), so this is the
-      // one nav entry that ISN'T decided by accountCanSeeAdminSection().
-      // See canViewActiveAgents() in functions/_shared/accounts.js.
-      if (authInfo?.role === "owner" || authInfo?.canViewActiveAgents) {
-        html += `
-          <a href="/active-agents.html" class="sidebar-item" style="--item-accent:#34d399;">
-            <div class="icon" style="background:#34d39933;">🟢</div>
-            <div class="text"><div class="name">Active Agents</div><div class="desc">Who's online right now</div></div>
-            <span class="arrow">&rarr;</span>
-          </a>
-        `;
-      }
+      // Active Agents no longer has its own sidebar entry — it now opens
+      // as a popup from the Home page's tool-card grid instead (see
+      // #activeAgentsCard / window.ActiveAgentsModal in index.html), so
+      // there's nothing to render here anymore. Kept as a code comment
+      // (not deleted silently) so a future reader knows this was a
+      // deliberate removal, not an oversight — see canViewActiveAgents()
+      // in functions/_shared/accounts.js for the permission this used to
+      // gate; that permission and its API endpoints are unchanged, only
+      // this nav link is gone.
 
       visibleModules.forEach((m) => {
         const isActive = opts.activeModule && opts.activeModule === m.id;

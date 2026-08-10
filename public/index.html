@@ -106,6 +106,42 @@ html[data-theme="light"] {
     </div>
   </div>
 
+  <!-- Active Agents popup — replaces the old dedicated /active-agents.html
+       full page as the way this gets viewed (that page still exists on
+       disk, just unlinked now). Same underlying /api/presence/* endpoints,
+       same feature set (search, stats, list, Record drill-down); only the
+       container changed from "whole page" to "modal", and the row styling
+       picked up rounder icon-pill tags to match the reference design. -->
+  <div class="edit-modal-backdrop" id="aaModalBackdrop">
+    <div class="edit-modal wide">
+      <button type="button" class="modal-close-btn" id="aaModalClose" title="Close" aria-label="Close">✕</button>
+      <div class="aa-modal-header">
+        <div class="aa-modal-header-icon">🟢</div>
+        <div class="aa-modal-header-text">
+          <p class="edit-modal-title" style="margin:0;">Active Agents</p>
+          <p class="aa-modal-subtitle">Tab switch = inactive · Auto-refreshes every 10s</p>
+        </div>
+        <span class="aa-online-badge" id="aaOnlineBadge">0 online</span>
+        <button type="button" class="ipa-header-btn" id="aaRefreshBtn" title="Refresh">↻</button>
+        <button type="button" class="ipa-header-btn" id="aaRecordBtn" title="Record">🕒 Record</button>
+      </div>
+
+      <div style="position:relative; margin:14px 0;">
+        <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--ink-soft); font-size:13px;">🔍</span>
+        <input type="text" id="aaSearch" placeholder="Search by username or office..." autocomplete="off"
+          style="width:100%; box-sizing:border-box; height:36px; background:var(--field-bg); border:1.5px solid var(--border); border-radius:8px; padding:0 12px 0 34px; color:var(--ink); font-size:12.5px; font-family:inherit;" />
+      </div>
+
+      <div class="ipa-stats" id="aaStats"></div>
+
+      <div id="aaList" class="aa-list"></div>
+      <p id="aaEmpty" class="ipa-empty" style="display:none; text-align:center; padding:24px;">No agents match.</p>
+
+      <div class="ipa-popover-scrim" id="aaPopoverScrim" style="display:none;"></div>
+      <div class="ipa-popover" id="aaRecordPopover" style="display:none; max-width:820px;"></div>
+    </div>
+  </div>
+
   <div class="hub-layout page-slide-in">
     <aside class="sidebar">
       <div class="sidebar-header"><span class="dot"></span> ISSUE SUBMISSION</div>
@@ -186,6 +222,12 @@ html[data-theme="light"] {
             <div class="t-sub-stat" id="activeAgentsStat"></div>
             <span class="t-arrow">&rarr;</span>
           </a>
+          <!-- Clicking the card above no longer navigates to
+               /active-agents.html — it opens the popup below in-place
+               (see window.ActiveAgentsModal.open(), wired near the
+               canSeeActiveAgents block further down). The real page
+               still exists on disk as a fallback for anyone with it
+               bookmarked, it's just not linked from anywhere anymore. -->
         </div>
 
         <div class="hub-stats" id="hubStats"></div>
@@ -199,6 +241,7 @@ html[data-theme="light"] {
   </div>
 
   <script src="/assets/schemas.js?v=189eea70"></script>
+  <script src="/assets/active-agents-modal.js?v=1"></script>
   <script src="/assets/spa-shell.js?v=8d816b21"></script>
   <script>
     window.initThemeToggle();
@@ -468,6 +511,17 @@ html[data-theme="light"] {
     const canSeeActiveAgents = authInfo?.role === "owner" || !!authInfo?.canViewActiveAgents;
     const activeAgentsCard = document.getElementById("activeAgentsCard");
     if (activeAgentsCard) activeAgentsCard.style.display = canSeeActiveAgents ? "" : "none";
+    // Opens as a popup now instead of navigating to /active-agents.html —
+    // see active-agents-modal.js. Real href stays on the <a> as a working
+    // fallback (open-in-new-tab, JS-disabled, right-click), only a normal
+    // left-click is intercepted, same convention spa-shell.js uses elsewhere.
+    if (activeAgentsCard) {
+      activeAgentsCard.addEventListener("click", (e) => {
+        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        if (window.ActiveAgentsModal) window.ActiveAgentsModal.open();
+      });
+    }
     async function loadActiveAgentsCardStat() {
       if (!canSeeActiveAgents) return;
       try {

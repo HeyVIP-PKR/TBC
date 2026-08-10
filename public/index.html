@@ -42,6 +42,7 @@ html[data-theme="light"] {
 <link rel="stylesheet" href="/assets/settings-dropdown.css?v=248916b3" />
 <script src="/assets/starfield.js?v=b6e92821" defer></script>
 <script src="/assets/authguard.js?v=19b1b251"></script>
+<script src="/assets/presence-heartbeat.js?v=5e3bab29"></script>
 <script src="/assets/announcement-banner.js?v=26c15118" defer></script>
 <script src="/assets/apply-feature-status.js?v=98e16085"></script>
 <script src="/assets/settings-dropdown.js?v=83379e28"></script>
@@ -1609,6 +1610,21 @@ html[data-theme="light"] {
                 </label>` : ""}
               </div>
             </div>` : ""}
+
+            ${authInfo?.role === "owner" && !isSelfProfile ? `
+            <div class="agent-profile-collapsible" data-section="activeAgents">
+              <button type="button" class="agent-profile-collapsible-header" data-collapse-toggle>
+                <span class="agent-profile-section-label agent-profile-section-label-lg">🟢 Active Agents <span class="agent-profile-section-hint">(real-time presence — Owner only, no rank floor)</span></span>
+                <span class="agent-profile-chev">→</span>
+              </button>
+              <div class="agent-profile-collapsible-body" style="display:none;">
+                <label class="agent-profile-module-check">
+                  <input type="checkbox" id="ap_canViewActiveAgents" ${a.canViewActiveAgents ? "checked" : ""} />
+                  Can view the Active Agents presence page
+                </label>
+                <p class="agent-profile-section-hint" style="margin:6px 0 0;">Unlike every other section above, this isn't tiered by role — you can grant it to ANY account, including Agent or Senior, and nobody gets it by default (not even SuperAdmin).</p>
+              </div>
+            </div>` : ""}
           </div>
 
           <div class="edit-details-status" id="agentProfileStatus"></div>
@@ -1733,6 +1749,10 @@ html[data-theme="light"] {
       const delegationToggle = document.getElementById("ap_canManageAdminAccess");
       if (delegationToggle) {
         payload.canManageAdminAccess = delegationToggle.checked;
+      }
+      const activeAgentsToggle = document.getElementById("ap_canViewActiveAgents");
+      if (activeAgentsToggle) {
+        payload.canViewActiveAgents = activeAgentsToggle.checked;
       }
       statusEl.textContent = "Saving…";
       statusEl.className = "edit-details-status";

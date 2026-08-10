@@ -136,6 +136,13 @@ async function handlePost({ request, env }) {
   if (body.action === "save" && (body.allowedAdminSections !== undefined || body.adminSectionEditAccess !== undefined) && !canManageOthersAdminAccess(auth.account)) {
     return json({ ok: false, error: "You don't have permission to change Account Management Access." }, 403);
   }
+  // canViewActiveAgents: flat, per-account, Owner-only — no delegation
+  // path at all (unlike allowedAdminSections above, this one isn't even
+  // extended to canManageOthersAdminAccess delegates). See
+  // canViewActiveAgents() in _shared/accounts.js for the full reasoning.
+  if (body.action === "save" && body.canViewActiveAgents !== undefined && auth.account?.role !== "owner") {
+    return json({ ok: false, error: "Only the account owner can grant or revoke Active Agents access." }, 403);
+  }
 
   // Bootstrap mode (no real account yet) is treated as superadmin-rank
   // for this one-time setup call — same trust level BRAND_EDIT_PASSWORD
@@ -249,6 +256,7 @@ async function handlePost({ request, env }) {
         allowedAdminSections: body.allowedAdminSections !== undefined ? body.allowedAdminSections : undefined,
         adminSectionEditAccess: body.adminSectionEditAccess !== undefined ? body.adminSectionEditAccess : undefined,
         canManageAdminAccess: body.canManageAdminAccess !== undefined ? body.canManageAdminAccess : undefined,
+        canViewActiveAgents: body.canViewActiveAgents !== undefined ? body.canViewActiveAgents : undefined,
       });
       return json({ ok: true, account });
     } catch (e) {

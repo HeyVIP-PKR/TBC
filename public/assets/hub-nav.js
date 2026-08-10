@@ -85,6 +85,20 @@
           <span class="arrow">&rarr;</span>
         </a>
       `;
+      // Active Agents — flat, Owner-granted permission (NOT rank-tiered,
+      // unlike every Account Management subitem below), so this is the
+      // one nav entry that ISN'T decided by accountCanSeeAdminSection().
+      // See canViewActiveAgents() in functions/_shared/accounts.js.
+      if (authInfo?.role === "owner" || authInfo?.canViewActiveAgents) {
+        html += `
+          <a href="/active-agents.html" class="sidebar-item" style="--item-accent:#34d399;">
+            <div class="icon" style="background:#34d39933;">🟢</div>
+            <div class="text"><div class="name">Active Agents</div><div class="desc">Who's online right now</div></div>
+            <span class="arrow">&rarr;</span>
+          </a>
+        `;
+      }
+
       visibleModules.forEach((m) => {
         const isActive = opts.activeModule && opts.activeModule === m.id;
         html += `

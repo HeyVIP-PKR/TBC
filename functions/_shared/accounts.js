@@ -148,6 +148,23 @@ export function canManageOthersAdminAccess(account) {
   return !!account && (account.role === "owner" || !!account.canManageAdminAccess);
 }
 
+/**
+ * Can `account` see the Active Agents presence feature? UNLIKE every
+ * other admin section above, this is deliberately NOT rank-tiered —
+ * there is no default any role gets for free, not even SuperAdmin, and
+ * there is no rank floor blocking Agent/Senior from being granted it
+ * either. It is a flat, per-account boolean that only an Owner can ever
+ * set (enforced in functions/api/admin/accounts.js, mirroring how
+ * canManageAdminAccess is owner-only above) — Owner decides, account by
+ * account, full stop. Owner itself always sees it, same as every other
+ * section.
+ */
+export function canViewActiveAgents(account) {
+  if (!account) return false;
+  if (account.role === "owner") return true;
+  return !!account.canViewActiveAgents;
+}
+
 // ---- password hashing (PBKDF2 via Web Crypto, available in Workers) ----
 //
 // ITERATION COUNT — lowered this session, see below for why.
@@ -402,7 +419,7 @@ function stripSecret(account) {
 // `passwordChangedBy` is only meaningful when `password` is also given —
 // the username of whoever triggered the change (their own, for
 // self-service; the admin's, for an admin-driven reset).
-export async function saveAccount(env, { username, password, passwordChangedBy, role, officeId, allowedBrands, allowedModules, fullName, pid, allowedAdminSections, adminSectionEditAccess, canManageAdminAccess }) {
+export async function saveAccount(env, { username, password, passwordChangedBy, role, officeId, allowedBrands, allowedModules, fullName, pid, allowedAdminSections, adminSectionEditAccess, canManageAdminAccess, canViewActiveAgents }) {
   const key = username.toLowerCase();
   const existing = await getAccount(env, key);
   let salt = existing?.salt;
@@ -477,6 +494,10 @@ export async function saveAccount(env, { username, password, passwordChangedBy, 
       ? (adminSectionEditAccess === "all" ? "all" : (Array.isArray(adminSectionEditAccess) ? adminSectionEditAccess : []))
       : existing?.adminSectionEditAccess,
     canManageAdminAccess: canManageAdminAccess !== undefined ? !!canManageAdminAccess : !!existing?.canManageAdminAccess,
+    // Owner-only flag, see canViewActiveAgents() above — same
+    // patch/merge semantics as canManageAdminAccess: omitted keeps
+    // whatever was there, explicit true/false overwrites it.
+    canViewActiveAgents: canViewActiveAgents !== undefined ? !!canViewActiveAgents : !!existing?.canViewActiveAgents,
     lastActiveAt: existing?.lastActiveAt || null,
     lastPasswordChange,
     // Lock state is intentionally NOT a parameter of saveAccount() — it's

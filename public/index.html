@@ -179,6 +179,13 @@ html[data-theme="light"] {
             <div class="t-sub-stat" id="announceStat"></div>
             <span class="t-arrow">&rarr;</span>
           </a>
+          <a href="/active-agents.html" class="tool-card" id="activeAgentsCard" data-route="active_agents" style="--tool-accent:#34d399; display:none;">
+            <div class="t-icon">🟢</div>
+            <div class="t-name">Active Agents</div>
+            <div class="t-desc">Real-time presence — who's online right now</div>
+            <div class="t-sub-stat" id="activeAgentsStat"></div>
+            <span class="t-arrow">&rarr;</span>
+          </a>
         </div>
 
         <div class="hub-stats" id="hubStats"></div>
@@ -453,6 +460,24 @@ html[data-theme="light"] {
     const canSeeAnnouncements = canSeeAdminSection("announcements");
     const announceCard = document.getElementById("announceCard");
     if (announceCard) announceCard.style.display = canSeeAnnouncements ? "" : "none";
+
+    // ---- Active Agents card: gated by canViewActiveAgents — a flat,
+    // Owner-granted permission with NO rank tiering (see the design note
+    // in functions/_shared/accounts.js), so this deliberately does NOT
+    // go through canSeeAdminSection() like every other card above. ----
+    const canSeeActiveAgents = authInfo?.role === "owner" || !!authInfo?.canViewActiveAgents;
+    const activeAgentsCard = document.getElementById("activeAgentsCard");
+    if (activeAgentsCard) activeAgentsCard.style.display = canSeeActiveAgents ? "" : "none";
+    async function loadActiveAgentsCardStat() {
+      if (!canSeeActiveAgents) return;
+      try {
+        const res = await window.AgentAuth.authFetch("/api/presence/list", { cache: "no-store" });
+        const data = await res.json();
+        const statEl = document.getElementById("activeAgentsStat");
+        if (statEl && data.ok) statEl.textContent = `${data.stats.online} online now`;
+      } catch { /* card still works without the sub-stat */ }
+    }
+    loadActiveAgentsCardStat();
     async function loadAnnounceCardStat() {
       if (!canSeeAnnouncements) return;
       try {

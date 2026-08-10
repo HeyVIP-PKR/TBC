@@ -881,6 +881,21 @@ html[data-theme="light"] .aa-online-badge { color: #16805c; }
 .aa-footer-live { display: inline-flex; align-items: center; gap: 5px; }
 .aa-record-pick:hover { background: var(--sidebar-item-hover); }
 .aa-day-pick:hover { background: var(--field-bg); }
+/* #aaRecordPopover overrides .ipa-popover's left:24px/right:24px with an
+   explicit centered transform. Needed because this popover ALSO sets an
+   inline max-width:820px (see ACTIVE-AGENTS-SPEC.md §2) while its parent
+   .edit-modal.wide is 940px — with left+right+max-width all constrained
+   at once, the CSS spec resolves the over-constraint by dropping "right"
+   and anchoring to the left, which is what made it visibly hug the left
+   edge with dead space on the right instead of sitting centered. Scoped
+   to this ID only (not a change to the shared .ipa-popover class) so the
+   IP Access modal's own popovers, which don't hit this over-constraint
+   (no max-width set on them), are untouched. */
+#aaRecordPopover {
+  left: 50%; right: auto;
+  width: calc(100% - 48px);
+  transform: translateX(-50%);
+}
 @media (max-width: 720px) {
   .aa-modal-header { margin-right: 0; }
   #aaModalBackdrop .edit-modal.wide { max-width: 100%; }

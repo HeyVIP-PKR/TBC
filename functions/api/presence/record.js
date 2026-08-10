@@ -1,12 +1,18 @@
 /**
- * GET /api/presence/record?username=<u>&date=<yyyy-mm-dd>
+ * GET /api/presence/record?username=<u>
  *
  * Backs the Record popover on the Active Agents page: one specific
- * agent's timeline for a given day (defaults to today) plus their last
- * 7 days rollup. Same canViewActiveAgents gate as list.js.
+ * agent's current status (today's total online time, last active time)
+ * plus their last 7 days rollup. Same canViewActiveAgents gate as
+ * list.js.
+ *
+ * No `date` param / per-day timeline anymore — that was removed from
+ * presence.js for KV-quota reasons, see the module note at the top of
+ * _shared/presence.js. This endpoint only ever returns "now" plus the
+ * last 7 days' daily totals.
  */
 import { authenticateStaff, ROLE_RANK, canViewActiveAgents, getAccount } from "../../_shared/accounts.js";
-import { getDayTimeline, getLastNDays } from "../../_shared/presence.js";
+import { getListRow, getLastNDays } from "../../_shared/presence.js";
 
 export async function onRequestGet(context) {
   try {
@@ -29,12 +35,9 @@ async function handle({ request, env }) {
   const target = await getAccount(env, username);
   if (!target || target.role === "owner") return json({ ok: false, error: "Agent not found." }, 404);
 
-  const date = url.searchParams.get("date") || new Date().toISOString().slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return json({ ok: false, error: "Invalid date." }, 400);
+  const [today, last7] = await Promise.all([getListRow(env, target), getLastNDays(env, username, 7)]);
 
-  const [timeline, last7] = await Promise.all([getDayTimeline(env, username, date), getLastNDays(env, username, 7)]);
-
-  return json({ ok: true, username, date, timeline, last7 });
+  return json({ ok: true, username, today, last7 });
 }
 
 function json(obj, status = 200) {

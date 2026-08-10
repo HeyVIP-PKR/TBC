@@ -42,7 +42,7 @@ html[data-theme="light"] {
 <link rel="stylesheet" href="/assets/settings-dropdown.css?v=248916b3" />
 <script src="/assets/starfield.js?v=b6e92821" defer></script>
 <script src="/assets/authguard.js?v=19b1b251"></script>
-<script src="/assets/presence-heartbeat.js?v=5e3bab29"></script>
+<script src="/assets/presence-heartbeat.js?v=a0820d9b"></script>
 <script src="/assets/announcement-banner.js?v=26c15118" defer></script>
 <script src="/assets/apply-feature-status.js?v=98e16085"></script>
 <script src="/assets/settings-dropdown.js?v=83379e28"></script>
@@ -107,11 +107,12 @@ html[data-theme="light"] {
   </div>
 
   <!-- Active Agents popup — replaces the old dedicated /active-agents.html
-       full page as the way this gets viewed (that page still exists on
-       disk, just unlinked now). Same underlying /api/presence/* endpoints,
-       same feature set (search, stats, list, Record drill-down); only the
-       container changed from "whole page" to "modal", and the row styling
-       picked up rounder icon-pill tags to match the reference design. -->
+       full page as the way this gets viewed. That standalone page has
+       since been DELETED (see the "record.js API shape changed" note
+       further down in this project — the old page's inline script
+       called the pre-throttling API shape and would have thrown on
+       every open, so it was removed rather than left as broken dead
+       code once the popup covered everything it did). -->
   <div class="edit-modal-backdrop" id="aaModalBackdrop">
     <div class="edit-modal wide">
       <button type="button" class="modal-close-btn" id="aaModalClose" title="Close" aria-label="Close">✕</button>
@@ -215,19 +216,17 @@ html[data-theme="light"] {
             <div class="t-sub-stat" id="announceStat"></div>
             <span class="t-arrow">&rarr;</span>
           </a>
-          <a href="/active-agents.html" class="tool-card" id="activeAgentsCard" style="--tool-accent:#34d399; display:none;">
+          <a href="#" class="tool-card" id="activeAgentsCard" style="--tool-accent:#34d399; display:none;">
             <div class="t-icon" id="activeAgentsIcon">👥</div>
             <div class="t-name">Active Agents</div>
             <div class="t-desc">Real-time presence — who's online right now</div>
             <div class="t-sub-stat" id="activeAgentsStat"></div>
             <span class="t-arrow">&rarr;</span>
           </a>
-          <!-- Clicking the card above no longer navigates to
-               /active-agents.html — it opens the popup below in-place
-               (see window.ActiveAgentsModal.open(), wired near the
-               canSeeActiveAgents block further down). The real page
-               still exists on disk as a fallback for anyone with it
-               bookmarked, it's just not linked from anywhere anymore. -->
+          <!-- href="#" (not a real page anymore, see above) — the click
+               handler below always preventDefault()s and opens the
+               popup instead; there's no working no-JS fallback for this
+               one card since its dedicated page was removed. -->
         </div>
 
         <div class="hub-stats" id="hubStats"></div>
@@ -241,7 +240,7 @@ html[data-theme="light"] {
   </div>
 
   <script src="/assets/schemas.js?v=189eea70"></script>
-  <script src="/assets/active-agents-modal.js?v=183433cc"></script>
+  <script src="/assets/active-agents-modal.js?v=2d846145"></script>
   <script src="/assets/spa-shell.js?v=8d816b21"></script>
   <script>
     window.initThemeToggle();
@@ -511,10 +510,10 @@ html[data-theme="light"] {
     const canSeeActiveAgents = authInfo?.role === "owner" || !!authInfo?.canViewActiveAgents;
     const activeAgentsCard = document.getElementById("activeAgentsCard");
     if (activeAgentsCard) activeAgentsCard.style.display = canSeeActiveAgents ? "" : "none";
-    // Opens as a popup now instead of navigating to /active-agents.html —
-    // see active-agents-modal.js. Real href stays on the <a> as a working
-    // fallback (open-in-new-tab, JS-disabled, right-click), only a normal
-    // left-click is intercepted, same convention spa-shell.js uses elsewhere.
+    // Opens as a popup now instead of navigating anywhere — see
+    // active-agents-modal.js. href="#" above has no real fallback
+    // destination since the old dedicated page was removed; every click
+    // is expected to go through this handler.
     if (activeAgentsCard) {
       activeAgentsCard.addEventListener("click", (e) => {
         if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;

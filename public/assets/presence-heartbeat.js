@@ -4,7 +4,8 @@
  *
  * Sends a heartbeat to /api/presence/heartbeat every 15s for as long as
  * this tab is open and the agent is logged in, so the Active Agents
- * page (public/active-agents.html) can show near-real-time presence.
+ * popup (see public/assets/active-agents-modal.js, opened from the
+ * Home page's tool-card grid) can show near-real-time presence.
  *
  * "Active" vs "inactive" is decided by the Page Visibility API, NOT a
  * mouse/keyboard idle timer — switching to another tab, minimizing the

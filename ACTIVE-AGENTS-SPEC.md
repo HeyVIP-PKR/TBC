@@ -1,5 +1,35 @@
 # Active Agents — full spec & code reference
 
+> **⚠️ PARTIALLY OUTDATED — read this note before trusting anything below.**
+> This document describes the FEATURE AS ORIGINALLY DELIVERED. Since
+> then, real production usage surfaced a KV-quota problem and the
+> backend was substantially rewritten:
+> - The per-heartbeat `presence:log:<user>:<date>` timeline (§8's
+>   `getDayTimeline()`, the "Today's timeline" table in §3/§8, the
+>   `logKey()`/`getLog()`/`closeOpenSegment()` functions) has been
+>   **removed entirely** — it was the single biggest KV-write cost, and
+>   background-tab heartbeat throttling was fragmenting a continuous
+>   "Inactive" stretch into dozens of spurious segments per day per
+>   agent. The Record popover now only shows current status + today's
+>   total online time + the Last 7 days rollup — no per-day timeline.
+> - `recordHeartbeat()` no longer writes to KV on every heartbeat — see
+>   `MIN_KV_WRITE_INTERVAL_MS` in the actual `functions/_shared/
+>   presence.js` on disk. Most heartbeats are now a no-op server-side.
+> - The offline thresholds in §4/§8 (45s flat) are stale — the real
+>   values are `ONLINE_OFFLINE_AFTER_MS` (90s) and
+>   `INACTIVE_OFFLINE_AFTER_MS` (120s) in the current file.
+> - The feature is no longer a dedicated page
+>   (`public/active-agents.html`, referenced throughout §3/§8/§9, has
+>   been DELETED) — it's a popup opened from the Home page's tool-card
+>   grid, in `public/assets/active-agents-modal.js`.
+>
+> **The actual source on disk is authoritative.** Everything below this
+> notice — design tokens, component sizes, layout structure — is still
+> accurate for the visual/UX side; only the presence-tracking BACKEND
+> (§4 status logic, §5 is fine, §8 full source) has moved on. Don't
+> port §8's presence.js/record.js code as-is; read the real files
+> instead.
+
 Everything needed to port this feature to another project: exact sizes,
 colors, spacing, thresholds, and the complete source of every file.
 
@@ -76,8 +106,9 @@ offline  -> no heartbeat for 45s+  (ALWAYS DERIVED, never sent by the client —
             a crashed/closed browser can never reliably announce "I'm offline")
 ```
 
-- Heartbeat interval: **15 seconds**.
-- Offline threshold: **45 seconds** (3 missed heartbeats) — absorbs a slow network blip or a throttled background timer without flapping to "offline" prematurely.
+- Heartbeat interval: **15 seconds** (client-side POST cadence — unchanged).
+- Offline threshold: **90 seconds while online, 120 seconds while inactive** (was a single flat 45s originally — split apart after two real-world issues surfaced: (1) backgrounded tabs get throttled by the browser to ~1 heartbeat/min, which flapped a 45s threshold to "offline" every cycle; (2) the server itself now throttles KV writes to at most once per 60s per agent when nothing's actually changed — see "KV write throttling" below — so a real write can legitimately lag up to that long behind the true heartbeat).
+- **KV write throttling (added after a real quota incident):** the server does NOT write to KV on every heartbeat anymore. A heartbeat that doesn't represent a real status/device change, and arrived less than `MIN_KV_WRITE_INTERVAL_MS` (60s) after the last actual write, is acknowledged and dropped — zero KV operations. This is a server-only change; the client still POSTs every 15s exactly as before. See `MIN_KV_WRITE_INTERVAL_MS` in `functions/_shared/presence.js` for the full reasoning — an always-online agent went from ~4 writes/min to ~1 write/min this way.
 - Status changes on `visibilitychange` fire **immediately**, not on the next heartbeat tick — switching tabs registers as inactive within milliseconds, not up to 15s late.
 
 ## 5. Time/duration formatting (single source of truth — reused everywhere to avoid the "6m vs 6 mins" inconsistency that came up repeatedly during design review)

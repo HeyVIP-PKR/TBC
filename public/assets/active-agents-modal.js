@@ -3,12 +3,13 @@
  *
  * Renders the Active Agents feature (list + search + stats + Record
  * drill-down) as a popup instead of a dedicated page — replaces the old
- * click-through to /active-agents.html. Same backend
+ * click-through to what used to be /active-agents.html. Same backend
  * (/api/presence/list, /api/presence/record, /api/presence/heartbeat),
  * same canViewActiveAgents gate, same underlying data — only the
- * container changed. /public/active-agents.html itself is untouched and
- * still works if visited directly, it's just no longer linked from
- * anywhere in the nav.
+ * container changed. The old standalone /public/active-agents.html has
+ * since been DELETED (it called the pre-throttling record.js response
+ * shape and would have thrown on open, so it wasn't worth keeping as
+ * dead/broken code once this popup covered everything it did).
  *
  * Requires (must be loaded first): authguard.js (window.AgentAuth), and
  * the #aaModalBackdrop markup block in index.html.
@@ -184,10 +185,6 @@
 
   function aaRenderRecordSearch(term) {
     const pop = el("aaRecordPopover");
-    const t = term.trim().toLowerCase();
-    const matches = (aaData ? aaData.agents : [])
-      .filter((a) => !t || a.username.toLowerCase().includes(t))
-      .slice(0, 30);
     pop.innerHTML = `
       <div class="ipa-popover-header">
         <p class="ipa-popover-title">🕒 Record</p>
@@ -198,32 +195,51 @@
         <input type="text" id="aaRecordSearchInput" placeholder="Search agent by name..." autocomplete="off" value="${escAttr(term)}"
           style="width:100%; box-sizing:border-box; height:36px; background:var(--field-bg); border:1.5px solid var(--border); border-radius:8px; padding:0 12px 0 32px; color:var(--ink); font-size:12.5px; font-family:inherit;" />
       </div>
-      <div style="display:flex; flex-direction:column; gap:5px; max-height:280px; overflow-y:auto;">
-        ${matches.map((a) => {
-          const dotColor = a.status === "online" ? "#34d399" : "var(--ink-soft)";
-          return `
-            <div class="aa-record-pick" data-username="${escAttr(a.username)}" style="display:flex; align-items:center; gap:10px; padding:8px 9px; border-radius:7px; cursor:pointer;">
-              <div style="width:26px; height:26px; border-radius:7px; background:var(--field-bg); display:flex; align-items:center; justify-content:center; color:var(--ink-soft); font-weight:700; font-size:11px; flex-shrink:0;">${escHtml(a.username.charAt(0).toUpperCase())}</div>
-              <span style="color:var(--ink); font-size:12.5px; flex:1;">${escHtml(a.username)}</span>
-              <span style="width:6px; height:6px; border-radius:50%; background:${dotColor};"></span>
-            </div>
-          `;
-        }).join("") || '<p class="ipa-hint" style="text-align:center;">No matches.</p>'}
-      </div>
+      <div id="aaRecordMatches" style="display:flex; flex-direction:column; gap:5px; max-height:280px; overflow-y:auto;"></div>
     `;
     el("aaRecordClose").addEventListener("click", aaCloseRecord);
-    el("aaRecordSearchInput").addEventListener("input", (e) => aaRenderRecordSearch(e.target.value));
-    pop.querySelectorAll(".aa-record-pick").forEach((elx) => {
+    // Only the matches list (#aaRecordMatches) re-renders on every
+    // keystroke below — the <input> element itself is created ONCE here
+    // and never touched again while typing. The previous version rebuilt
+    // this whole popover's innerHTML (input included) on every "input"
+    // event, which destroys and recreates the <input> DOM node each
+    // time — the browser has nothing to keep focused, so it silently
+    // drops focus after every single character and the agent has to
+    // click back into the box to keep typing. Updating a separate child
+    // container instead leaves the input element (and its focus/cursor
+    // position) completely untouched.
+    el("aaRecordSearchInput").addEventListener("input", (e) => aaRenderRecordMatches(e.target.value));
+    aaRenderRecordMatches(term);
+  }
+
+  function aaRenderRecordMatches(term) {
+    const t = term.trim().toLowerCase();
+    const matches = (aaData ? aaData.agents : [])
+      .filter((a) => !t || a.username.toLowerCase().includes(t))
+      .slice(0, 30);
+    const matchesEl = el("aaRecordMatches");
+    if (!matchesEl) return; // popover may have been closed/replaced mid-keystroke
+    matchesEl.innerHTML = matches.map((a) => {
+      const dotColor = a.status === "online" ? "#34d399" : "var(--ink-soft)";
+      return `
+        <div class="aa-record-pick" data-username="${escAttr(a.username)}" style="display:flex; align-items:center; gap:10px; padding:8px 9px; border-radius:7px; cursor:pointer;">
+          <div style="width:26px; height:26px; border-radius:7px; background:var(--field-bg); display:flex; align-items:center; justify-content:center; color:var(--ink-soft); font-weight:700; font-size:11px; flex-shrink:0;">${escHtml(a.username.charAt(0).toUpperCase())}</div>
+          <span style="color:var(--ink); font-size:12.5px; flex:1;">${escHtml(a.username)}</span>
+          <span style="width:6px; height:6px; border-radius:50%; background:${dotColor};"></span>
+        </div>
+      `;
+    }).join("") || '<p class="ipa-hint" style="text-align:center;">No matches.</p>';
+    matchesEl.querySelectorAll(".aa-record-pick").forEach((elx) => {
       elx.addEventListener("click", () => aaOpenRecordDetail(elx.dataset.username));
     });
   }
 
-  async function aaOpenRecordDetail(username, date) {
+  async function aaOpenRecordDetail(username) {
     aaRecordSelectedUsername = username;
     const pop = el("aaRecordPopover");
     pop.innerHTML = `<div class="ipa-popover-header"><p class="ipa-popover-title">🕒 Loading…</p></div>`;
     try {
-      const url = "/api/presence/record?username=" + encodeURIComponent(username) + (date ? "&date=" + encodeURIComponent(date) : "");
+      const url = "/api/presence/record?username=" + encodeURIComponent(username);
       const res = await authFetch()(url);
       const data = await res.json();
       if (!data.ok) {
@@ -239,7 +255,16 @@
 
   function aaRenderRecordDetail(data) {
     const pop = el("aaRecordPopover");
-    const lastActive = data.timeline.length ? data.timeline[0].to : null;
+    const t = data.today;
+    const isOnline = t.status === "online";
+    const isInactive = t.status === "inactive";
+    const statusColor = isOnline ? "#34d399" : isInactive ? "var(--ink-soft)" : "#5f5e5a";
+    const statusLabel = isOnline ? "Online" : isInactive ? "Inactive" : "Offline";
+    const statusTime = isOnline || isInactive ? fmtRelative(t.statusSince) : fmtRelative(t.lastActiveAt);
+    // No more per-day timeline table — see the module note at the top of
+    // _shared/presence.js for why that was removed (KV write cost). This
+    // now shows just the current status + today's total + Last 7 days,
+    // which is the only history that's still cheaply available.
     pop.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
         <span style="color:var(--ink-soft); font-size:12px; cursor:pointer;" id="aaBackToSearch">← Back to search</span>
@@ -247,42 +272,13 @@
       </div>
       <div style="display:flex; align-items:center; gap:10px; margin:10px 0 4px;">
         <div style="width:30px; height:30px; border-radius:8px; background:var(--field-bg); display:flex; align-items:center; justify-content:center; color:#34d399; font-weight:700; font-size:12px; flex-shrink:0;">${escHtml(data.username.charAt(0).toUpperCase())}</div>
-        <span style="color:var(--ink); font-weight:600; font-size:14.5px;">${escHtml(data.username)}</span>
+        <span style="color:var(--ink); font-weight:600; font-size:14.5px; flex:1;">${escHtml(data.username)}</span>
+        <span style="display:inline-flex; align-items:center; gap:5px;">
+          <span style="width:7px; height:7px; border-radius:50%; background:${statusColor}; flex-shrink:0;"></span>
+          <span style="color:${statusColor}; font-size:12px; font-weight:700;">${statusLabel}</span>
+        </span>
       </div>
-      <div style="color:var(--ink-soft); font-size:11.5px; margin:8px 0 12px;">Last active: ${escHtml(fmtClock(lastActive))}</div>
-
-      <div style="color:var(--label-blue); font-size:10px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:8px;">${data.date === new Date().toISOString().slice(0, 10) ? "Today's" : escHtml(data.date)} timeline</div>
-      <div style="border:1px solid var(--border); border-radius:10px; margin-bottom:16px;">
-        <table style="width:100%; border-collapse:collapse; font-size:11.5px; table-layout:fixed;">
-          <thead><tr>
-            <th style="text-align:left; padding:7px 10px; color:var(--ink-soft); font-size:9.5px; text-transform:uppercase; background:var(--card-bg); border-bottom:1.5px solid var(--border); border-right:1px solid var(--panel-border); width:17%;">From</th>
-            <th style="text-align:left; padding:7px 10px; color:var(--ink-soft); font-size:9.5px; text-transform:uppercase; background:var(--card-bg); border-bottom:1.5px solid var(--border); border-right:1px solid var(--panel-border); width:17%;">To</th>
-            <th style="text-align:center; padding:7px 10px; color:var(--ink-soft); font-size:9.5px; text-transform:uppercase; background:var(--card-bg); border-bottom:1.5px solid var(--border); border-right:1px solid var(--panel-border); width:15%;">Status</th>
-            <th style="text-align:right; padding:7px 10px; color:var(--ink-soft); font-size:9.5px; text-transform:uppercase; background:var(--card-bg); border-bottom:1.5px solid var(--border); border-right:1px solid var(--panel-border); width:19%;">Duration</th>
-            <th style="text-align:right; padding:7px 10px; color:var(--ink-soft); font-size:9.5px; text-transform:uppercase; background:var(--card-bg); border-bottom:1.5px solid var(--border); width:32%;">Device</th>
-          </tr></thead>
-          <tbody>
-            ${data.timeline.length ? data.timeline.map((seg, i) => {
-              const isLast = i === data.timeline.length - 1;
-              const isOnline = seg.status === "online";
-              const color = isOnline ? "#34d399" : seg.status === "inactive" ? "var(--ink-soft)" : "#5f5e5a";
-              const label = isOnline ? "Online" : seg.status === "inactive" ? "Inactive" : "Offline";
-              const deviceText = isOnline ? `${escHtml(seg.browser)} · ${escHtml(seg.os)}` : "—";
-              const toIsOngoing = seg.to && new Date(seg.to).getTime() > Date.now() - 20000 && i === 0;
-              const bb = isLast ? "" : "border-bottom:1px solid var(--panel-border);";
-              return `
-                <tr>
-                  <td style="padding:8px 10px; color:var(--ink); font-family:var(--font-mono); ${bb} border-right:1px solid var(--panel-border); word-break:break-word;">${escHtml(fmtClock(seg.from))}</td>
-                  <td style="padding:8px 10px; color:var(--label-blue); font-family:var(--font-mono); ${bb} border-right:1px solid var(--panel-border); word-break:break-word;">${toIsOngoing ? "now" : escHtml(fmtClock(seg.to))}</td>
-                  <td style="padding:8px 10px; color:${color}; font-weight:700; text-align:center; ${bb} border-right:1px solid var(--panel-border);">● ${label}</td>
-                  <td style="padding:8px 10px; color:var(--ink-soft); text-align:right; font-family:var(--font-mono); ${bb} border-right:1px solid var(--panel-border); word-break:break-word;">${escHtml(fmtDuration(seg.durationSeconds))}</td>
-                  <td style="padding:8px 10px; color:var(--ink-soft); text-align:right; ${bb} word-break:break-word;">${deviceText}</td>
-                </tr>
-              `;
-            }).join("") : `<tr><td colspan="5" class="ipa-empty" style="padding:16px;">No activity recorded for this day.</td></tr>`}
-          </tbody>
-        </table>
-      </div>
+      <div style="color:var(--ink-soft); font-size:11.5px; margin:2px 0 16px;">${escHtml(statusTime)} · Today online: ${escHtml(fmtDuration(t.totalOnlineSecondsToday))} · Last active: ${escHtml(fmtClock(t.lastActiveAt))}</div>
 
       <div style="color:var(--label-blue); font-size:10px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:8px;">Last 7 days</div>
       <div style="border:1px solid var(--border); border-radius:10px;">
@@ -296,10 +292,9 @@
             ${data.last7.map((d, i) => {
               const isLast = i === data.last7.length - 1;
               const bb = isLast ? "" : "border-bottom:1px solid var(--panel-border);";
-              const isSelected = d.date === data.date;
               return `
-                <tr class="aa-day-pick" data-date="${escAttr(d.date)}" style="cursor:pointer; ${isSelected ? "background:rgba(200,145,47,0.08);" : ""}">
-                  <td style="padding:8px 12px; color:${isSelected ? "var(--accent-gold)" : "var(--ink)"}; font-weight:${i === 0 ? "700" : "400"}; ${bb} border-right:1px solid var(--panel-border);">${escHtml(d.label)}</td>
+                <tr style="${i === 0 ? "background:rgba(200,145,47,0.08);" : ""}">
+                  <td style="padding:8px 12px; color:${i === 0 ? "var(--accent-gold)" : "var(--ink)"}; font-weight:${i === 0 ? "700" : "400"}; ${bb} border-right:1px solid var(--panel-border);">${escHtml(d.label)}</td>
                   <td style="padding:8px 12px; color:var(--ink); text-align:right; font-family:var(--font-mono); ${bb} border-right:1px solid var(--panel-border); white-space:nowrap;">${escHtml(fmtDuration(d.totalOnlineSeconds))}</td>
                   <td style="padding:8px 12px; color:var(--ink-soft); text-align:right; font-family:var(--font-mono); ${bb} white-space:nowrap;">${escHtml(fmtClock(d.lastActiveAt))}</td>
                 </tr>
@@ -311,9 +306,6 @@
     `;
     el("aaRecordClose3").addEventListener("click", aaCloseRecord);
     el("aaBackToSearch").addEventListener("click", () => aaRenderRecordSearch(""));
-    pop.querySelectorAll(".aa-day-pick").forEach((elx) => {
-      elx.addEventListener("click", () => aaOpenRecordDetail(aaRecordSelectedUsername, elx.dataset.date));
-    });
   }
 
   // ---- Open/close (mirrors the existing #acctModalBackdrop pattern in

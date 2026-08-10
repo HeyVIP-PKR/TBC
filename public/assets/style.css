@@ -1336,6 +1336,12 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
   font-weight: 800;
   animation: breathe 1.8s ease-in-out infinite;
 }
+/* Active Agents home-card — icon + "N online now" text both breathe
+   together while at least one agent is online, same shared keyframe as
+   the unsolved-threads badge above and the announcement icon below —
+   stops breathing (goes static) the moment online count hits 0, see
+   loadActiveAgentsCardStat() in index.html. */
+.t-sub-stat.breathing { animation: breathe 1.8s ease-in-out infinite; }
 @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 .tool-card .t-icon.breathing { animation: breathe 1.8s ease-in-out infinite; }
 @media (max-width: 560px) {

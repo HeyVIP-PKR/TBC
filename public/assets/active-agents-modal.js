@@ -58,6 +58,7 @@
 
   let aaData = null;
   let aaSearchTerm = "";
+  let aaStatusFilter = null; // null = show all; "online"|"inactive"|"offline" when a stat card is active
   let aaPollTimer = null;
   let aaRecordSelectedUsername = null;
 
@@ -79,29 +80,42 @@
   function aaRenderBadgeAndStats() {
     const s = aaData.stats;
     el("aaOnlineBadge").innerHTML = `<span class="aa-dot-online" style="width:7px;height:7px;border-radius:50%;display:inline-block;"></span> ${s.online} online`;
+    // Clickable filter cards — same pattern as .ipa-stat-card on the IP
+    // Access page (see ipaStatCard()/ipaWire() in index.html): a <button>
+    // per stat, "active" class on whichever one is the current filter,
+    // clicking the already-active one again clears the filter.
     el("aaStats").innerHTML = `
-      <div class="ipa-stat-card active" style="border-color:var(--accent-gold);">
+      <button type="button" class="ipa-stat-card${aaStatusFilter === null ? " active" : ""}" data-stat="all" style="${aaStatusFilter === null ? "border-color:var(--accent-gold);" : ""}">
         <span class="ipa-stat-label">Total</span>
         <span class="ipa-stat-value">${s.total}</span>
-      </div>
-      <div class="ipa-stat-card">
+      </button>
+      <button type="button" class="ipa-stat-card${aaStatusFilter === "online" ? " active" : ""}" data-stat="online">
         <span class="ipa-stat-label">Online</span>
         <span class="ipa-stat-value ipa-green">${s.online}</span>
-      </div>
-      <div class="ipa-stat-card">
+      </button>
+      <button type="button" class="ipa-stat-card${aaStatusFilter === "inactive" ? " active" : ""}" data-stat="inactive">
         <span class="ipa-stat-label">Inactive</span>
         <span class="ipa-stat-value">${s.inactive}</span>
-      </div>
-      <div class="ipa-stat-card">
+      </button>
+      <button type="button" class="ipa-stat-card${aaStatusFilter === "offline" ? " active" : ""}" data-stat="offline">
         <span class="ipa-stat-label">Offline</span>
         <span class="ipa-stat-value">${s.offline}</span>
-      </div>
+      </button>
     `;
+    el("aaStats").querySelectorAll(".ipa-stat-card").forEach((card) => {
+      card.addEventListener("click", () => {
+        const key = card.dataset.stat;
+        aaStatusFilter = (key === "all" || key === aaStatusFilter) ? null : key;
+        aaRenderBadgeAndStats();
+        aaRenderList();
+      });
+    });
   }
 
   function aaRenderList() {
     const term = aaSearchTerm.trim().toLowerCase();
     const agents = aaData.agents
+      .filter((a) => !aaStatusFilter || a.status === aaStatusFilter)
       .filter((a) => !term || a.username.toLowerCase().includes(term) || (a.officeName || "").toLowerCase().includes(term))
       .sort((a, b) => {
         const rank = { online: 0, inactive: 1, offline: 2 };
@@ -113,6 +127,7 @@
     const emptyEl = el("aaEmpty");
     if (!agents.length) {
       listEl.innerHTML = "";
+      emptyEl.textContent = aaStatusFilter ? `No ${aaStatusFilter} agents match.` : "No agents match.";
       emptyEl.style.display = "";
       return;
     }
@@ -308,6 +323,7 @@
     if (!backdrop) return;
     backdrop.classList.add("is-open");
     aaSearchTerm = "";
+    aaStatusFilter = null;
     el("aaSearch").value = "";
     aaLoadList();
     if (aaPollTimer) clearInterval(aaPollTimer);

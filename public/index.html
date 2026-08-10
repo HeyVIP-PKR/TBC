@@ -1616,9 +1616,23 @@ html[data-theme="light"] {
       const allModulesSelected = a.allowedModules === "all" || a.allowedModules === undefined;
       const moduleChecks = AGENT_PROFILE_MODULE_LIST.map((m) => `
         <label class="agent-profile-module-check">
-          <input type="checkbox" value="${acctEsc(m.id)}" ${allModulesSelected || (Array.isArray(a.allowedModules) && a.allowedModules.includes(m.id)) ? "checked" : ""} ${canManageAccess ? "" : "disabled"} />
+          <input type="checkbox" class="ap-module-checkbox" value="${acctEsc(m.id)}" ${allModulesSelected || (Array.isArray(a.allowedModules) && a.allowedModules.includes(m.id)) ? "checked" : ""} ${canManageAccess ? "" : "disabled"} />
           ${m.icon || ""} ${acctEsc(m.name)}
         </label>`).join("");
+      // Active Agents — folded directly into the Topic Access list as
+      // just another row (not its own collapsible, not even visually
+      // separated by a divider) per explicit request. Still gated the
+      // same as before (Owner only, never on the Owner's own profile)
+      // and still tracked as its own field (canViewActiveAgents), NOT
+      // swept into allowedModules — that's why it uses a plain checkbox
+      // with no .ap-module-checkbox class, so saveAgentProfileModal's
+      // module-count query (which now targets that class specifically)
+      // skips right over it.
+      const activeAgentsCheck = (authInfo?.role === "owner" && !isSelfProfile) ? `
+        <label class="agent-profile-module-check">
+          <input type="checkbox" id="ap_canViewActiveAgents" ${a.canViewActiveAgents ? "checked" : ""} />
+          👥 Active Agents
+        </label>` : "";
 
       // ---- Account Management Access (2026-07) — only rendered for
       // whoever is allowed to manage OTHER accounts' admin-section access
@@ -1685,7 +1699,7 @@ html[data-theme="light"] {
               </button>
               <div class="agent-profile-collapsible-body" style="display:none;">
                 ${!canManageAccess ? '<p class="agent-profile-locked-note" style="margin:-4px 0 8px;">(requires outranking this account)</p>' : ""}
-                <div class="agent-profile-module-list">${moduleChecks}</div>
+                <div class="agent-profile-module-list">${moduleChecks}${activeAgentsCheck}</div>
               </div>
             </div>
 
@@ -1703,21 +1717,6 @@ html[data-theme="light"] {
                   <input type="checkbox" id="ap_canManageAdminAccess" ${a.canManageAdminAccess ? "checked" : ""} />
                   Can manage Account Management Access for other accounts
                 </label>` : ""}
-              </div>
-            </div>` : ""}
-
-            ${authInfo?.role === "owner" && !isSelfProfile ? `
-            <div class="agent-profile-collapsible" data-section="activeAgents">
-              <button type="button" class="agent-profile-collapsible-header" data-collapse-toggle>
-                <span class="agent-profile-section-label agent-profile-section-label-lg">👥 Active Agents <span class="agent-profile-section-hint">(real-time presence — Owner only, no rank floor)</span></span>
-                <span class="agent-profile-chev">→</span>
-              </button>
-              <div class="agent-profile-collapsible-body" style="display:none;">
-                <label class="agent-profile-module-check">
-                  <input type="checkbox" id="ap_canViewActiveAgents" ${a.canViewActiveAgents ? "checked" : ""} />
-                  Can view the Active Agents presence page
-                </label>
-                <p class="agent-profile-section-hint" style="margin:6px 0 0;">Unlike every other section above, this isn't tiered by role — you can grant it to ANY account, including Agent or Senior, and nobody gets it by default (not even SuperAdmin).</p>
               </div>
             </div>` : ""}
           </div>
@@ -1818,7 +1817,7 @@ html[data-theme="light"] {
         const pills = Array.from(document.querySelectorAll("#ap_brandGrid .brand-toggle-pill"));
         const selected = pills.filter((p) => p.classList.contains("selected")).map((p) => p.dataset.brand);
         payload.allowedBrands = pills.length > 0 && selected.length === pills.length ? "all" : selected;
-        const moduleChecks = Array.from(document.querySelectorAll(".agent-profile-module-list input[type=checkbox]"));
+        const moduleChecks = Array.from(document.querySelectorAll(".agent-profile-module-list input.ap-module-checkbox"));
         const selectedModules = moduleChecks.filter((c) => c.checked).map((c) => c.value);
         payload.allowedModules = selectedModules.length === moduleChecks.length ? "all" : selectedModules;
       }

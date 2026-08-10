@@ -632,11 +632,12 @@ a { color: inherit; text-decoration: none; }
 .ipa-form-grid.ipa-form-2col { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
 .ipa-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .ipa-field-grow { min-width: 0; }
-.ipa-field label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-soft); }
+.ipa-field label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--label-blue); }
 .ipa-field select, .ipa-field input {
   width: 100%; box-sizing: border-box;
   background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 8px;
   padding: 9px 11px; font-size: 13px; color: var(--ink); font-family: inherit;
+  text-overflow: ellipsis;
 }
 .ipa-field select:focus, .ipa-field input:focus { outline: none; border-color: var(--accent-gold); }
 .ipa-btn-primary, .ipa-btn-secondary {
@@ -645,8 +646,8 @@ a { color: inherit; text-decoration: none; }
 }
 .ipa-btn-primary { background: linear-gradient(90deg, #f3c463, #e0a83f); color: #241c05; }
 .ipa-btn-primary:hover { filter: brightness(1.05); }
-.ipa-btn-secondary { background: var(--field-bg); border: 1.5px solid #ef4a72; color: #ef4a72; }
-.ipa-btn-secondary:hover { background: rgba(239, 74, 114, 0.1); }
+.ipa-btn-secondary { background: none; border: 1.5px solid var(--border); color: var(--ink); }
+.ipa-btn-secondary:hover { border-color: var(--accent-gold); color: var(--accent-gold); }
 .ipa-btn-primary:disabled, .ipa-btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
 .ipa-hint { margin: 10px 0 0; font-size: 11px; color: var(--ink-soft); line-height: 1.5; }
 
@@ -1372,6 +1373,7 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
   border-left: 3px solid transparent;
   cursor: pointer;
   transition: background 0.15s ease;
+  position: relative;
 }
 .thread-item:hover { background: var(--sidebar-item-hover); }
 .thread-item.selected { background: var(--sidebar-item-hover); border-left-color: var(--thread-accent, var(--accent-gold)); }

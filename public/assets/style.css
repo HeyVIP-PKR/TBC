@@ -625,20 +625,44 @@ a { color: inherit; text-decoration: none; }
   gap: 12px;
   align-items: flex-end;
 }
-/* "Block an IP" has no Office column — IP Address and Reason should
-   read as two EQUAL-WEIGHT fields instead of inheriting "Add IP
-   manually"'s narrower fixed first column, which is what made the two
-   sections look mismatched/unbalanced side by side. */
-.ipa-form-grid.ipa-form-2col { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+/* Matches .ipa-form-grid's first column exactly (same minmax formula) so
+   the "Block an IP" row's IP ADDRESS(ES) box lines up edge-to-edge with
+   "Add IP manually"'s OFFICE box above it — the two rows previously used
+   different column formulas here (equal-weight vs fixed-width first
+   column), which kept their boxes from aligning vertically between the
+   two stacked sections (reported with screenshots). */
+.ipa-form-grid.ipa-form-2col { grid-template-columns: minmax(170px, 220px) minmax(0, 1fr) auto; }
 .ipa-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .ipa-field-grow { min-width: 0; }
 .ipa-field label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--label-blue); }
 .ipa-field select, .ipa-field input {
-  width: 100%; box-sizing: border-box;
+  width: 100%; box-sizing: border-box; height: 38px;
   background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 8px;
-  padding: 9px 11px; font-size: 13px; color: var(--ink); font-family: inherit;
+  padding: 0 11px; font-size: 13px; color: var(--ink); font-family: inherit;
   text-overflow: ellipsis;
 }
+/* Native <select> chrome (internal padding + built-in arrow) is controlled
+   by the browser/OS, not by our padding/border rules, so even with
+   identical CSS the select's rendered box height drifts a few px from the
+   text <input> next to it in the same row — the two boxes don't line up
+   (reported with screenshots). appearance:none strips that native chrome
+   so the explicit height above is what actually renders; we draw our own
+   arrow since removing native appearance also removes the built-in one. */
+.ipa-field select {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%239aa3c4' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='5 8 10 13 15 8'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 11px center; background-size: 14px;
+  padding-right: 32px;
+}
+/* <select> has a long-standing browser quirk: unlike <input>, it refuses to
+   shrink narrower than its widest <option>'s intrinsic content width, even
+   with width:100% set on a narrower parent. When the OFFICE column (clamped
+   170-220px) is narrower than an office name needs, the select just
+   overflows past its grid column and visually sits on top of the next
+   field (IP ADDRESS(ES)) instead of respecting the layout — reported with
+   screenshots. min-width:0 + overflow:hidden forces it to actually honor
+   the 100% width and ellipsis-truncate the option text instead. */
+.ipa-field select { min-width: 0; overflow: hidden; white-space: nowrap; }
 .ipa-field select:focus, .ipa-field input:focus { outline: none; border-color: var(--accent-gold); }
 .ipa-btn-primary, .ipa-btn-secondary {
   border: none; border-radius: 10px; padding: 9px 20px; font-size: 13px; font-weight: 700; cursor: pointer;

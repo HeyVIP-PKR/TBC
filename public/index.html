@@ -35,7 +35,7 @@ html[data-theme="light"] {
     linear-gradient(160deg, #dbe7fb 0%, #d9cef4 45%, #cdbdf2 75%, #c4b2ee 100%);
 }
 </style>
-<link rel="stylesheet" href="/assets/style.css?v=c6f34523" />
+<link rel="stylesheet" href="/assets/style.css?v=a12268ce" />
 <link rel="stylesheet" href="/assets/toast.css?v=5779b14e" />
 <script src="/assets/toast.js?v=d9d84724"></script>
 <link rel="stylesheet" href="/assets/feature-status.css?v=0c3c3213" />
@@ -1972,9 +1972,21 @@ html[data-theme="light"] {
     // page's rows), and a Previous/Page X of Y/Next footer — the footer
     // only renders at all once there's more than one page, per the
     // reference screenshot.
-    function ipaRenderTableSection({ key, title, showCount, columns, allRows, emptyMsg, renderRow }) {
+    // Approved and Blocked are both 5-column tables (IP / col2 / col3 / col4 /
+    // ACTIONS) rendered one above the other. With table-layout:auto each table
+    // sizes its own columns from its own content (e.g. "Colombo Outsource" vs
+    // "testing" are very different widths), so the vertical divider lines
+    // between the two stacked tables don't line up even though the CSS is
+    // identical. Pending has a different shape (6 columns) and isn't stacked
+    // directly against another table, so it keeps auto sizing.
+    const IPA_FIXED_COL_WIDTHS = ["20%", "24%", "20%", "20%", "16%"];
+
+    function ipaRenderTableSection({ key, title, showCount, columns, allRows, emptyMsg, renderRow, fixedWidths }) {
       ipaPage[key] = ipaPaginate(allRows, ipaPage[key], ipaPageSize[key]).page; // clamp persisted state first
       const { pageItems, page, totalPages } = ipaPaginate(allRows, ipaPage[key], ipaPageSize[key]);
+      const colgroup = fixedWidths
+        ? `<colgroup>${fixedWidths.map((w) => `<col style="width:${w}">`).join("")}</colgroup>`
+        : "";
       return `
         <div class="ipa-table-block">
           <div class="ipa-table-head-row">
@@ -1986,7 +1998,8 @@ html[data-theme="light"] {
             </select>
           </div>
           <div class="ipa-table-scroll">
-            <table class="ipa-table">
+            <table class="ipa-table"${fixedWidths ? ' style="table-layout:fixed"' : ""}>
+              ${colgroup}
               <thead><tr>${columns.map((c) => `<th>${c}</th>`).join("")}</tr></thead>
               <tbody>${allRows.length ? pageItems.map(renderRow).join("") : `<tr><td colspan="${columns.length}" class="ipa-empty">${emptyMsg}</td></tr>`}</tbody>
             </table>
@@ -2023,6 +2036,7 @@ html[data-theme="light"] {
       return ipaRenderTableSection({
         key: "approved", title: "Approved", showCount: false,
         columns: ["IP ADDRESS", "OFFICE", "ADDED BY", "DATE", "ACTIONS"],
+        fixedWidths: IPA_FIXED_COL_WIDTHS,
         allRows: ipaData.approved, emptyMsg: "No approved IPs yet.",
         renderRow: (a) => `
           <tr>
@@ -2040,6 +2054,7 @@ html[data-theme="light"] {
       return ipaRenderTableSection({
         key: "blocked", title: "Blocked", showCount: false,
         columns: ["IP ADDRESS", "REASON", "BLOCKED BY", "BLOCKED", "ACTIONS"],
+        fixedWidths: IPA_FIXED_COL_WIDTHS,
         allRows: ipaData.blocked, emptyMsg: "No blocked IPs.",
         renderRow: (b) => `
           <tr>

@@ -35,7 +35,7 @@ html[data-theme="light"] {
     linear-gradient(160deg, #dbe7fb 0%, #d9cef4 45%, #cdbdf2 75%, #c4b2ee 100%);
 }
 </style>
-<link rel="stylesheet" href="/assets/style.css?v=1ca375fc" />
+<link rel="stylesheet" href="/assets/style.css?v=b023f57b" />
 <link rel="stylesheet" href="/assets/toast.css?v=5779b14e" />
 <script src="/assets/toast.js?v=d9d84724"></script>
 <link rel="stylesheet" href="/assets/feature-status.css?v=0c3c3213" />
@@ -1930,7 +1930,7 @@ html[data-theme="light"] {
           icon: document.getElementById("blRulesIcon").value.trim() || "📄",
         };
       } else {
-        const cards = Array.from(document.querySelectorAll(".br-result-card"));
+        const cards = Array.from(document.querySelectorAll(".br-result-row"));
         if (!cards.length && !document.getElementById("blResultsList")) return;
         acctBettingLinksData.results = cards.map((card) => ({
           name: card.querySelector(".bl-result-name").value.trim(),
@@ -1971,20 +1971,14 @@ html[data-theme="light"] {
       } else {
         const results = acctBettingLinksData.results || [];
         const cardsHtml = results.map((link, i) => `
-          <div class="br-form-card br-result-card" data-idx="${i}">
-            <div class="br-form-card-header">
-              <span class="br-form-card-icon">${acctEsc(link.icon || "🔗")}</span>
-              <span class="br-form-card-desc">Link #${i + 1} — shown in the right panel</span>
-              ${canEdit ? '<button type="button" class="br-result-remove" title="Remove">✕</button>' : ""}
-            </div>
-            <div class="edit-fields-row">
-              <div class="field br-icon-field"><label>Icon</label><input type="text" class="bl-result-icon" value="${acctEsc(link.icon || "🔗")}" maxlength="8" ${roAttr} autocomplete="off" /></div>
-              <div class="field"><label>Name</label><input type="text" class="bl-result-name" value="${acctEsc(link.name)}" placeholder="e.g. Fotmob Football" ${roAttr} autocomplete="off" /></div>
-              <div class="field"><label>URL</label><input type="text" class="bl-result-url" value="${acctEsc(link.url)}" placeholder="https://..." ${roAttr} autocomplete="off" /></div>
-            </div>
+          <div class="br-result-row" data-idx="${i}">
+            <div class="field br-icon-field"><label>Icon</label><input type="text" class="bl-result-icon" value="${acctEsc(link.icon || "🔗")}" maxlength="8" ${roAttr} autocomplete="off" /></div>
+            <div class="field"><label>Name</label><input type="text" class="bl-result-name" value="${acctEsc(link.name)}" placeholder="e.g. Fotmob Football" ${roAttr} autocomplete="off" /></div>
+            <div class="field"><label>URL</label><input type="text" class="bl-result-url" value="${acctEsc(link.url)}" placeholder="https://..." ${roAttr} autocomplete="off" /></div>
+            ${canEdit ? '<button type="button" class="br-result-remove" title="Remove">🗑</button>' : ""}
           </div>`).join("");
         formHtml = `
-          <div id="blResultsList">${cardsHtml}</div>
+          <div id="blResultsList" class="br-result-list">${cardsHtml}</div>
           ${canEdit ? '<button type="button" class="br-add-link-btn" id="blAddLinkBtn">+ Add link</button>' : ""}
           ${!results.length ? '<p class="edit-modal-note">No links yet.</p>' : ""}
           <p class="edit-modal-note">Powers the "HeyVIP Betting Rules" home card — left panel is a single link, right panel is the link list. Click Save (bottom) to publish changes to both sections at once.</p>`;
@@ -2015,7 +2009,7 @@ html[data-theme="light"] {
         acctBody.querySelectorAll(".br-result-remove").forEach((btn) => {
           btn.addEventListener("click", () => {
             syncBettingLinksFormIntoData();
-            const idx = Number(btn.closest(".br-result-card").dataset.idx);
+            const idx = Number(btn.closest(".br-result-row").dataset.idx);
             acctBettingLinksData.results = acctBettingLinksData.results.filter((_, i) => i !== idx);
             renderBettingLinks();
           });

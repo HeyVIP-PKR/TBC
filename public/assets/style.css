@@ -1563,6 +1563,29 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
   font-size: 15px;
 }
 .br-form-card-desc { font-size: 12.5px; font-weight: 700; color: var(--ink); flex: 1; }
+/* Results list rows (2026-08 follow-up) — the per-link header banner
+   ("Link #N — shown in the right panel") from the first mockup pass got
+   dropped per a second reference screenshot: with potentially a dozen+
+   results links, a 2-line header per row ate too much vertical space
+   for what it said, and the owner's updated mockup showed plain rows —
+   just the Icon/Name/URL fields (own labels each, same as before) plus
+   a small trash-icon remove button inline at the end of the row instead
+   of a separate header line. The "rules" (single link) card above still
+   keeps its header — only ever one of those, so the extra context line
+   isn't a density problem the way it is repeated N times in the list. */
+.br-result-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.br-result-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  border: 1px solid var(--border);
+  background: var(--field-bg);
+  border-radius: 12px;
+  padding: 12px;
+}
+.br-result-row .field { flex: 1; min-width: 0; }
+.br-result-row .field.br-icon-field { flex: 0 0 56px; }
+.br-result-row .field.br-icon-field input { text-align: center; font-size: 17px; padding-left: 4px; padding-right: 4px; }
 .edit-fields-row { display: flex; gap: 10px; align-items: flex-end; }
 .edit-fields-row .field { flex: 1; margin: 0; min-width: 0; }
 .edit-fields-row .field.br-icon-field { flex: 0 0 64px; }
@@ -1570,20 +1593,24 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
 @media (max-width: 480px) {
   .edit-fields-row { flex-direction: column; align-items: stretch; }
   .edit-fields-row .field.br-icon-field { flex: none; }
+  .br-result-row { flex-wrap: wrap; }
+  .br-result-row .field.br-icon-field { flex: 0 0 56px; }
+  .br-result-row .field:not(.br-icon-field) { flex: 1 1 100%; }
 }
 .br-result-remove {
   flex: none;
-  width: 24px; height: 24px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--card-bg);
-  color: var(--ink-soft);
-  font-size: 12px;
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(239, 74, 114, 0.16);
+  color: #ef4a72;
+  font-size: 13px;
   line-height: 1;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
 }
-.br-result-remove:hover { color: #ef4a72; border-color: #ef4a72; }
+.br-result-remove:hover { background: #ef4a72; color: #fff; }
 .br-add-link-btn {
   width: 100%;
   padding: 10px;

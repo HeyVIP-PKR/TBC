@@ -1585,9 +1585,24 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
 }
 .br-result-row .field { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; justify-content: center; }
 .br-result-row .field.br-icon-field { flex: 0 0 56px; }
+/* Fixed height on every input in this row (icon/name/url alike) —
+   without this, the icon input's height was following the emoji
+   glyph's own font metrics (emoji line-height/ascent varies by
+   codepoint across browsers), which made rows with different icons
+   render at slightly different heights and threw off row-to-row
+   alignment even though the markup/CSS was otherwise identical. Height
+   is now decided by CSS, not by whichever emoji happens to be in the
+   box. */
+.br-result-row .field input {
+  display: block;
+  height: 40px;
+  line-height: 38px;
+  padding-top: 0;
+  padding-bottom: 0;
+  box-sizing: border-box;
+}
 .br-result-row .field.br-icon-field input { text-align: center; font-size: 17px; padding-left: 4px; padding-right: 4px; }
 .br-result-row .field label { line-height: 1.2; }
-.br-result-row .field input { display: block; }
 .edit-fields-row { display: flex; gap: 10px; align-items: flex-end; }
 .edit-fields-row .field { flex: 1; margin: 0; min-width: 0; }
 .edit-fields-row .field.br-icon-field { flex: 0 0 64px; }

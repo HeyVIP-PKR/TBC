@@ -103,8 +103,21 @@ export function rankOf(role) { return ROLE_RANK[role] ?? ROLE_RANK.agent; }
 // sidebar-visibility + Agent Profile checkbox UI this controls (which
 // mirrors this same rank-tiered default logic client-side for rendering
 // only — the server here is what's actually enforced).
-export const ADMIN_SECTIONS = ["createAccount", "whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements"];
-export const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements"];
+// "bettingLinks" (2026-08) gates the HeyVIP Betting Rules hub card's
+// admin panel (Account Management → Betting Resources Links — edits the
+// link list at /betting-resources.html; see functions/api/admin/
+// betting-resources.js). Deliberately NOT added to any bucket in
+// defaultSectionsForRank()/defaultEditForRank() below, same treatment as
+// every other section that only became SuperAdmin's-by-default when it
+// was introduced — falling through to "rank >= superadmin -> all" is
+// what makes it superadmin-and-above only out of the box, with Owner
+// able to hand it to a specific lower-ranked account same as any other
+// section. Browsing the resulting page itself is NOT gated by this at
+// all — every logged-in agent can see it, this only controls who can
+// edit the link list (see functions/api/betting-resources.js's plain
+// verifyRequest() check vs this section's canSeeAdminSection() gate).
+export const ADMIN_SECTIONS = ["createAccount", "whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements", "bettingLinks"];
+export const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements", "bettingLinks"];
 
 function defaultSectionsForRank(rank) {
   if (rank >= ROLE_RANK.superadmin) return "all";

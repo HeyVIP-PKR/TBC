@@ -1243,7 +1243,18 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
   justify-content: center;
   text-align: center;
 }
-.hub-main .inner { max-width: 480px; }
+/* Was max-width: 480px — the actual root cause of a long-running "cards
+   won't get wider no matter what I set .tool-cards to" bug (2026-08).
+   .tool-cards' own max-width was raised to 780px, then 960px, and NEITHER
+   ever took effect, because this outer wrapper — NOT .tool-cards — was
+   the real bottleneck the whole time: 3 columns squeezed into 480px
+   meant each card rendered at ~152px regardless of what the grid itself
+   was told. Confirmed `.inner` under `.hub-main` is used by exactly two
+   pages (this hub's #viewHome and betting-resources.html), so widening
+   it here is safe project-wide. If a card grid ever looks stuck at a
+   tiny width again, check HERE first, not the grid's own rules — that's
+   the lesson this bug cost a few rounds of guessing to learn. */
+.hub-main .inner { max-width: 980px; }
 .status-badge-corner {
   display: inline-flex;
   margin-top: 10px;
@@ -1284,12 +1295,18 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
   letter-spacing: 0.06em;
 }
 
+/* 3-column home grid (2026-08 redesign) — order in the markup follows
+   the owner's requested reading order (row 1: TG Reply Threads / Deposit
+   Issue / Deposit Backup, row 2: Promo Code Search / Announcement /
+   HeyVIP Betting Rules, row 3: Active Agents alone). max-width raised
+   from 520px to 900px alongside the .inner fix above — with 3 columns,
+   520px would have meant ~160px cards even with .inner fixed. */
 .tool-cards {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 14px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
   margin-top: 20px;
-  max-width: 520px;
+  max-width: 900px;
 }
 .tool-card {
   display: block;
@@ -1300,6 +1317,8 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
   border-radius: 16px;
   padding: 18px 18px 16px;
   padding-bottom: 34px;
+  min-height: 108px; /* fixed floor instead of aspect-ratio — see note
+                         below on why aspect-ratio was tried and dropped */
   box-shadow: var(--shadow);
   transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -1308,12 +1327,83 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
   border-color: var(--tool-accent, var(--accent-gold));
   box-shadow: var(--shadow), 0 0 32px -8px var(--tool-accent, transparent);
 }
+
+/* Rotating gradient ring, hover-only. NOTE: aspect-ratio was tried
+   earlier in this same redesign to keep the 3-col cards from squashing
+   into squares, and briefly got blamed for a "some cards render blank,
+   others overlap" regression — that turned out to be a red herring (the
+   .inner 480px bug above was the real cause), but aspect-ratio's
+   interaction with `display:flex` + CSS Grid 1fr tracks is a genuine
+   cross-browser rough edge, and this project has no real browser in its
+   dev loop to verify against (only owner screenshots) — so it was left
+   OUT in favor of the plain min-height above. This ring (conic-gradient
+   + mask-composite) is a comparably risk-bearing feature, but the owner
+   asked for it back explicitly once the real bug was found, so it's
+   back in — just flagged here in case a future report of "cards look
+   wrong" turns out to trace back to this instead. */
+.tool-card::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(from 0deg, transparent 0%, var(--tool-accent, var(--accent-gold)) 12%, transparent 26%, transparent 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  animation: tool-card-spin 3.4s linear infinite;
+  animation-play-state: paused;
+}
+.tool-card:hover::before {
+  opacity: 1;
+  animation-play-state: running;
+}
+@keyframes tool-card-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* One-shot diagonal sweep of light across the card face, hover-triggered. */
+.tool-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg, transparent 25%, rgba(255, 255, 255, 0.16) 42%, rgba(255, 255, 255, 0.16) 46%, transparent 62%);
+  background-size: 220% 100%;
+  background-position: 160% 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.tool-card:hover::after {
+  opacity: 1;
+  animation: tool-card-sweep 0.85s ease forwards;
+}
+@keyframes tool-card-sweep {
+  0% { background-position: 160% 0; opacity: 1; }
+  100% { background-position: -60% 0; opacity: 0; }
+}
+
 .tool-card .t-arrow {
   position: absolute; right: 18px; bottom: 16px;
   color: var(--ink-soft); font-size: 15px;
   transition: transform 0.15s ease, color 0.15s ease;
 }
 .tool-card:hover .t-arrow { transform: translateX(3px); color: var(--tool-accent, var(--ink)); }
+/* "Open →" label, hover-only — generated content so the 7 card markups
+   didn't each need a new span added just for this. Reads as "Open →"
+   because it's inserted immediately before the existing arrow glyph,
+   only under :hover, so at rest every card still shows just the bare
+   arrow it always has. */
+.tool-card:hover .t-arrow::before {
+  content: "Open ";
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--tool-accent, var(--ink));
+}
 .tool-card .t-icon {
   position: relative;
   width: 36px; height: 36px; border-radius: 10px;
@@ -1359,14 +1449,154 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
 .t-sub-stat.breathing { animation: breathe 1.8s ease-in-out infinite; }
 @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 .tool-card .t-icon.breathing { animation: breathe 1.8s ease-in-out infinite; }
+/* Steps down 3 -> 2 -> 1 columns as the viewport (not just .tool-cards'
+   own max-width) shrinks — matches the existing 720px breakpoint below
+   where the sidebar itself collapses. */
+@media (max-width: 900px) {
+  .tool-cards { grid-template-columns: repeat(2, 1fr); max-width: 600px; }
+}
 @media (max-width: 560px) {
-  .tool-cards { grid-template-columns: 1fr; }
+  .tool-cards { grid-template-columns: 1fr; max-width: 360px; }
 }
 
 @media (max-width: 720px) {
   .hub-layout { flex-direction: column; min-height: auto; }
   .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--panel-border); max-height: 60vh; }
 }
+
+/* ---- betting-resources.html — the HeyVIP Betting Rules page itself ---- */
+.br-inner { max-width: 820px; text-align: left; }
+.br-panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 720px) {
+  .br-panels { grid-template-columns: 1fr; }
+}
+.br-panel {
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+.br-panel-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+.br-links-list { display: flex; flex-direction: column; gap: 10px; }
+.br-link-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--field-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  text-decoration: none;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.br-link-card:hover { border-color: var(--accent-gold); transform: translateX(2px); }
+.br-link-icon { font-size: 18px; flex: none; }
+.br-link-body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.br-link-name { font-weight: 700; font-size: 13px; color: var(--ink); }
+.br-link-url { font-size: 11px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.br-link-arrow { color: var(--ink-soft); font-size: 14px; flex: none; }
+
+/* ---- Betting Resources Links admin panel (Account Management) ----
+   Reuses the same edit-modal/field vocabulary as every other Account
+   Management section rather than inventing new ones. Icon/Name/URL
+   side-by-side in ONE row per the reference design (owner-provided
+   mockup, 2026-08) — originally this was icon+name on one row and url
+   on its own row below; the mockup put all three in a single row with
+   a small card wrapper + header line explaining what the fields feed,
+   so that's what this now matches. Collapses to stacked under 480px
+   same as before. */
+.br-category-list { display: flex; flex-direction: column; gap: 8px; }
+.br-category-item {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--field-bg);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.br-category-item:hover { color: var(--ink); }
+.br-category-item.selected {
+  color: var(--ink);
+  border-color: var(--accent-gold);
+  background: color-mix(in srgb, var(--accent-gold) 12%, var(--field-bg));
+}
+/* One card per link (the single "rules" link, or each "results" link) —
+   a small header (icon preview + one-line description of what this
+   field group feeds) sits above the Icon/Name/URL row so it's clear
+   which home-card panel each form is editing without needing to leave
+   the modal to check. */
+.br-form-card {
+  border: 1px solid var(--border);
+  background: var(--field-bg);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.br-form-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.br-form-card-icon {
+  width: 30px; height: 30px; flex: none;
+  border-radius: 8px;
+  background: var(--card-bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px;
+}
+.br-form-card-desc { font-size: 12.5px; font-weight: 700; color: var(--ink); flex: 1; }
+.edit-fields-row { display: flex; gap: 10px; align-items: flex-end; }
+.edit-fields-row .field { flex: 1; margin: 0; min-width: 0; }
+.edit-fields-row .field.br-icon-field { flex: 0 0 64px; }
+.edit-fields-row .field.br-icon-field input { text-align: center; font-size: 18px; padding-left: 4px; padding-right: 4px; }
+@media (max-width: 480px) {
+  .edit-fields-row { flex-direction: column; align-items: stretch; }
+  .edit-fields-row .field.br-icon-field { flex: none; }
+}
+.br-result-remove {
+  flex: none;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.br-result-remove:hover { color: #ef4a72; border-color: #ef4a72; }
+.br-add-link-btn {
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.br-add-link-btn:hover { border-color: var(--accent-gold); color: var(--ink); }
 
 /* ---- Announcements sidebar (New button / search / status dots) ---- */
 .announce-new-btn {

@@ -44,6 +44,12 @@ export const FEATURE_STATUS_ITEMS = [
   { id: "tg_reply_threads", emoji: "💭", name: "TG Reply Threads" },
   { id: "promo_code_search", emoji: "🎟️", name: "Promo Code Search" },
   { id: "announcements", emoji: "📢", name: "Announcement" },
+  // Registered 2026-08 alongside the HeyVIP Betting Rules hub card.
+  // UNLIKE its first pass, /api/betting-resources.js's handleGet DOES
+  // check this status now (mirrors announcements.js's own check right
+  // above it) — a status set here actually blocks the page/API, not
+  // just a label sitting unused in the Settings list.
+  { id: "betting_resources", emoji: "🎰", name: "HeyVIP Betting Rules" },
 ];
 const VALID_ITEM_IDS = new Set(FEATURE_STATUS_ITEMS.map((i) => i.id));
 const VALID_STATUSES = new Set(["maintenance", "coming_soon"]);

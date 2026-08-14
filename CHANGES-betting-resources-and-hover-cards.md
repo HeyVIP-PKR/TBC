@@ -192,3 +192,30 @@ more polished treatment than the first pass:
   the markup render as "ICON"/"NAME"/"URL" automatically — no separate
   CSS needed for that part, it was already project-wide.
 
+## Second follow-up: dropped the per-row header banner in Results (2026-08-14)
+
+Two more reference screenshots — the live panel with a real, longer
+Results list, and a second mockup of that same list — showed the
+per-link header line added in the previous pass ("Link #N — shown in
+the right panel", boxed icon + border-bottom divider) didn't hold up
+once there were more than a couple of links: with a dozen+ results
+rows it's a lot of repeated boilerplate text eating vertical space in
+an already-scrolling list, and the second mockup dropped it entirely.
+
+- Results rows (`.br-result-row`) are now a single flex line — ICON /
+  NAME / URL fields (each still with its own label, unchanged) plus a
+  remove button, no header banner and no `.br-form-card` wrapper/divider
+  around each one.
+- The remove button changed from a plain "✕" in a bordered circle to a
+  filled reddish-pink 🗑 square (`.br-result-remove`), inline at the end
+  of the row instead of floated in a header — matches the second
+  mockup's trash-icon treatment.
+- The "HeyVIP Betting Resources" (single link) category is UNCHANGED —
+  it still uses `.br-form-card` with the header line, per the first
+  mockup, since that one's only ever a single card and the extra
+  context line isn't a density problem there.
+- `renderBettingLinks()`'s results branch, `syncBettingLinksFormIntoData()`,
+  and the remove-button click handler all updated together (class rename
+  `.br-result-card` → `.br-result-row`) — there's no leftover reference
+  to the old header-card markup for this category.
+

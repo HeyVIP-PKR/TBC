@@ -42,6 +42,7 @@ export const BRANDS = {
       promotion_request: { chatId: "", topicId: null },
       daily_report: { chatId: "", topicId: null },
       genie_issue: { chatId: "", topicId: null },
+      withdraw_issue: { chatId: "", topicId: null },
     },
   },
   betjili: {
@@ -55,6 +56,7 @@ export const BRANDS = {
       promotion_request: { chatId: "", topicId: null },
       daily_report: { chatId: "", topicId: null },
       genie_issue: { chatId: "", topicId: null },
+      withdraw_issue: { chatId: "", topicId: null },
     },
   },
   mostplay: {
@@ -68,6 +70,7 @@ export const BRANDS = {
       promotion_request: { chatId: "", topicId: null },
       daily_report: { chatId: "", topicId: null },
       genie_issue: { chatId: "", topicId: null },
+      withdraw_issue: { chatId: "", topicId: null },
     },
   },
   jeetwin: {
@@ -81,6 +84,7 @@ export const BRANDS = {
       promotion_request: { chatId: "", topicId: null },
       daily_report: { chatId: "", topicId: null },
       genie_issue: { chatId: "", topicId: null },
+      withdraw_issue: { chatId: "", topicId: null },
     },
   },
   sbj66: {
@@ -94,6 +98,7 @@ export const BRANDS = {
       promotion_request: { chatId: "", topicId: null },
       daily_report: { chatId: "", topicId: null },
       genie_issue: { chatId: "", topicId: null },
+      withdraw_issue: { chatId: "", topicId: null },
     },
   },
   heybaji: {
@@ -107,6 +112,7 @@ export const BRANDS = {
       promotion_request: { chatId: "", topicId: null },
       daily_report: { chatId: "", topicId: null },
       genie_issue: { chatId: "", topicId: null },
+      withdraw_issue: { chatId: "", topicId: null },
     },
   },
   superbaji: {
@@ -120,6 +126,7 @@ export const BRANDS = {
       promotion_request: { chatId: "", topicId: null },
       daily_report: { chatId: "", topicId: null },
       genie_issue: { chatId: "", topicId: null },
+      withdraw_issue: { chatId: "", topicId: null },
     },
   },
   kv8: {
@@ -133,6 +140,7 @@ export const BRANDS = {
       promotion_request: { chatId: "", topicId: null },
       daily_report: { chatId: "", topicId: null },
       genie_issue: { chatId: "", topicId: null },
+      withdraw_issue: { chatId: "", topicId: null },
     },
   },
   darazplay: {
@@ -146,6 +154,7 @@ export const BRANDS = {
       promotion_request: { chatId: "", topicId: null },
       daily_report: { chatId: "", topicId: null },
       genie_issue: { chatId: "", topicId: null },
+      withdraw_issue: { chatId: "", topicId: null },
     },
   },
 };
@@ -159,6 +168,9 @@ export const RECORD_TO_SHEET = {
   promotion_request: true,
   daily_report: true,
   genie_issue: true,
+  // Sheet structure confirmed (see SHEET_LAYOUT.withdraw_issue below) —
+  // no more guessing needed, safe to turn on.
+  withdraw_issue: true,
 };
 
 // Emoji + display name per module, used to build the Telegram message header.
@@ -169,31 +181,7 @@ export const MODULE_META = {
   promotion_request: { emoji: "🎟️", name: "Promotion Request", accent: "#F472B6" },
   daily_report: { emoji: "📊", name: "Daily Report", accent: "#34D399" },
   genie_issue: { emoji: "🤖", name: "Genie Issue", accent: "#A78BFA" },
-};
-
-/**
- * Risk Issue only: certain selections auto-fill the Remark with fixed,
- * pre-approved wording instead of whatever the agent typed — keeps phrasing
- * to the Risk team consistent. Checked in this field order (issueType first,
- * then accountStatus, then cancelType); first match wins. A selection not
- * listed here just falls through to whatever the agent typed in Remark.
- */
-export const RISK_ISSUE_AUTO_REMARKS = {
-  issueType: {
-    "Bonus Auto Force": "The player claimed the bonus, but it was automatically force-served.",
-  },
-  accountStatus: {
-    "Suspended -- player wants to deposit":
-      "𝗛𝗶 𝘁𝗲𝗮𝗺, Account showing 𝘀𝘂𝘀𝗽𝗲𝗻𝗱𝗲𝗱, Is it possible to Activate? The player want to make a 𝗱𝗲𝗽𝗼𝘀𝗶𝘁.",
-    "Account Inactive": "𝗛𝗶 𝘁𝗲𝗮𝗺, 𝗔𝗰𝗰𝗼𝘂𝗻𝘁 𝘀𝗵𝗼𝘄𝗶𝗻𝗴 𝗶𝗻𝗮𝗰𝘁𝗶𝘃𝗲, 𝗜𝘀 𝗶𝘁 𝗽𝗼𝘀𝘀𝗶𝗯𝗹𝗲 𝘁𝗼 𝗮𝗰𝘁𝗶𝘃𝗮𝘁𝗲?",
-    "Suspended -- Player has been warned":
-      "𝗛𝗶 𝘁𝗲𝗮𝗺, We have warned the player. 𝗜𝘀 𝗶𝘁 𝗽𝗼𝘀𝘀𝗶𝗯𝗹𝗲 𝘁𝗼 𝗮𝗰𝘁𝗶𝘃𝗮𝘁𝗲 𝘁𝗵𝗶𝘀 𝗮𝗰𝗰𝗼𝘂𝗻𝘁?",
-  },
-  cancelType: {
-    "Cancel with 10% Penalty":
-      "𝗛𝗶 𝘁𝗲𝗮𝗺, Please help cancel this bonus with a 10% penalty as per the player's request, Thanks.",
-    "Cancel without Penalty": "𝗛𝗶 𝘁𝗲𝗮𝗺,\nPlease help to cancel this bonus as per player request. Thanks.",
-  },
+  withdraw_issue: { emoji: "💸", name: "Withdraw Issue", accent: "#4ADE80" },
 };
 
 /**
@@ -241,6 +229,28 @@ export const ACCOUNT_ISSUE_FIELD_STYLE = {
   updateRequest: { emoji: "✏️" },
   fullName: { emoji: "🧾" },
   aadharPan: { emoji: "🆔" },
+  // -- Update Information (issueType = "Update Information") --
+  updateInfoType: { emoji: "📋" },
+  previousName: { emoji: "📤" },
+  newName: { emoji: "📥" },
+  previousBirthDate: { emoji: "📤" },
+  newBirthDate: { emoji: "📥" },
+  realName: { emoji: "🧾" },
+  birthDate: { emoji: "🎂" },
+};
+
+/**
+ * Emoji (and optional label override) per field, for the Telegram
+ * message Withdraw Issue's submissions produce. See
+ * buildWithdrawIssueDynamicMessage() (_shared/messageBuilders.js) for
+ * how this gets used — "issueType"/"username"/"remark" are handled
+ * separately by that function (they get their own fixed header/footer
+ * lines) and deliberately don't need an entry here.
+ */
+export const WITHDRAW_ISSUE_FIELD_STYLE = {
+  tid: { emoji: "🆔" },
+  submittedAmount: { emoji: "💵" },
+  receivedAmount: { emoji: "💰" },
 };
 
 /**
@@ -350,7 +360,7 @@ export const PROMOTION_SHEET_CONFIG = {
     tidColumn: "A",
     columns: ["tid", "date", "username", "amount", "promotion", "brandCurrency", "pic"],
   },
-  "superbaji|Download SuberBaji APP & Claim Cash": {
+  "superbaji|Download SuperBaji APP & Claim Cash": {
     sheetId: "1k_Nn-NPLHVogFZjDdMuAVCRJFDM6wsAplrpYfNfidEc",
     tab: "Download & Claim",
     startColumn: "A",
@@ -472,7 +482,7 @@ export const PROMOTION_MESSAGE_TEMPLATE = {
   "heybaji|Birthday Bonus": PROMOTION_ROWS_PKR,
   "heybaji|Download HeyBaji APP & Claim Cash": PROMOTION_ROWS_PKR,
   "superbaji|Birthday Bonus": PROMOTION_ROWS_PKR,
-  "superbaji|Download SuberBaji APP & Claim Cash": PROMOTION_ROWS_PKR,
+  "superbaji|Download SuperBaji APP & Claim Cash": PROMOTION_ROWS_PKR,
   "sbj66|Birthday Bonus": PROMOTION_ROWS_PKR,
   "sbj66|Download SBJ66 APP & Claim Cash": PROMOTION_ROWS_PKR,
   "kv8|Birthday Bonus": PROMOTION_ROWS_PKR,
@@ -534,7 +544,6 @@ export const MESSAGE_TEMPLATE = {
           { emoji: "🎁", label: "Bonus Code", key: "bonusCode", tight: true },
           { emoji: "📌", label: "Cancel Type", key: "cancelType" },
           { emoji: "📝", label: "Remark", key: "remark", skipIfEmpty: true },
-          { emoji: "💬", key: "autoRemark", raw: true },
           { emoji: "👷", label: "PIC", key: "pic" },
         ],
       },
@@ -604,6 +613,12 @@ export const SHEET_LAYOUT = {
   account_issue: {
     tab: "Account Issue",
     startColumn: "B",
+    // "Update Information" issue type's fields (updateInfoType/previousName/
+    // newName/previousBirthDate/newBirthDate/realName/birthDate) are
+    // deliberately NOT listed below — the reference Sheet has no columns
+    // for them, so they only show up in the Telegram message, never
+    // written to the Sheet. Nothing to break if that changes later: just
+    // add the relevant key(s) to this array once a column exists.
     columns: [
       "brand",
       "uid",
@@ -644,6 +659,18 @@ export const SHEET_LAYOUT = {
     leftBlock: { startColumn: "B", width: 12, shiftValue: "Day Shift" },
     rightBlock: { startColumn: "O", width: 12, shiftValue: "Night Shift" },
     columns: dailyReportColumns(),
+  },
+  // Unlike every other module's sheet, this one's Date column is A (not
+  // B) and there's deliberately NO Screenshot Link column at all —
+  // matched against the real "Withdraw Issue" tab, confirmed column by
+  // column, not guessed. submittedAmount/receivedAmount both write "-"
+  // for any Issue Type except "Withdraw Amount Received Less" (the only
+  // one that actually collects them) via the plain-string column
+  // lookup's fieldMap[col]-is-empty fallback in resolveColumnValues().
+  withdraw_issue: {
+    tab: "Withdraw Issue",
+    startColumn: "A",
+    columns: ["autoDate", "brand", "username", "issueType", "tid", "submittedAmount", "receivedAmount", "remark", "pic"],
   },
 };
 

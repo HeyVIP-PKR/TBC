@@ -3,8 +3,8 @@
  * announcements.html, promo.html, deposit-issue.html, deposit-backup.html)
  *
  * Renders the same "ISSUE SUBMISSION" navigation column that lives on
- * index.html (Home + module links + Account Management group) into a
- * mount point on any page, so agents don't have to bounce back to the
+ * index.html (Home + module links + Integration Portal group + Account
+ * Management group) into a mount point on any page, so agents don't have to bounce back to the
  * hub just to get somewhere else — matches the persistent-nav pattern
  * used across php-issue-hub (see CHANGES-batch1-modal-cache-layout.md).
  * Replaces the old standalone "← Back to Home" pill, which is removed
@@ -47,13 +47,23 @@
   const ADMIN_SUBITEMS = [
     { sectionId: "createAccount", mode: "create", label: "Create Account", icon: "➕", accent: "#a78bfa33" },
     { sectionId: "whitelistIp", mode: "whitelist", label: "Whitelist IP", icon: "🌐", accent: "#60a5fa33" },
-    { sectionId: "tgRoutes", mode: "tgroutes", label: "TG Group / Channel", icon: "📡", accent: "#38bdf833" },
-    { sectionId: "depositSheets", mode: "depositsheets", label: "Deposit Sheet Link", icon: "📊", accent: "#4fa6f533" },
     { sectionId: "settings", mode: "settings", label: "Settings", icon: "⚙️", accent: "#f59e0b33" },
     // Reset Password has no permission gate in index.html either — every
     // logged-in agent can reset their own password.
     { sectionId: null, mode: "reset", label: "Reset Password", icon: "🔑", accent: "#f3c46333" },
     { sectionId: "agentProfile", mode: "profile", label: "Agent Profile", icon: "🪪", accent: "#34d39933" },
+  ];
+
+  // Integration Portal (2026-08) — same shape/contract as ADMIN_SUBITEMS
+  // above, rendered as its own separate expandable group positioned
+  // above Account Management (matches index.html's own sidebar). These
+  // 4 used to live inside ADMIN_SUBITEMS (tgRoutes/depositSheets/
+  // bettingLinks moved out here) plus the new "Web Link" (webLink).
+  const INTEGRATION_PORTAL_SUBITEMS = [
+    { sectionId: "tgRoutes", mode: "tgroutes", label: "TG Group / Channel", icon: "📡", accent: "#38bdf833" },
+    { sectionId: "depositSheets", mode: "depositsheets", label: "Deposit Sheet Link", icon: "📊", accent: "#4fa6f533" },
+    { sectionId: "bettingLinks", mode: "bettinglinks", label: "Betting Resources Links", icon: "🔗", accent: "#c8912f33" },
+    { sectionId: "webLink", mode: "weblink", label: "Web Link", icon: "🌐", accent: "#f3c46333" },
   ];
 
   function escapeAttr(s) {
@@ -108,6 +118,36 @@
 
       const rank = ROLE_RANK[authInfo?.role] ?? 0;
       const isOwner = authInfo?.role === "owner";
+
+      // Integration Portal group — positioned above Account Management,
+      // hidden outright unless this account can see "integrationPortal"
+      // at all (mirrors the same gate in index.html's own sidebar), on
+      // top of (not instead of) each subitem's own individual section
+      // gate below.
+      const canSeeIntegrationPortal = isOwner || accountCanSeeAdminSection(authInfo, "integrationPortal");
+      const visibleIntegrationPortal = canSeeIntegrationPortal
+        ? INTEGRATION_PORTAL_SUBITEMS.filter((it) => isOwner || accountCanSeeAdminSection(authInfo, it.sectionId))
+        : [];
+      if (visibleIntegrationPortal.length) {
+        html += `
+          <div class="am-group" id="hubNavIpGroup">
+            <div class="sidebar-item am-toggle expandable" id="hubNavIpToggle">
+              <div class="icon" style="background:#38bdf833;">🔗</div>
+              <div class="text"><div class="name">Integration Portal</div><div class="desc">TG routes, sheets &amp; external links</div></div>
+              <span class="arrow">&rarr;</span>
+            </div>
+            <div class="sidebar-subitems" id="hubNavIpSubitems">
+              ${visibleIntegrationPortal
+                .map(
+                  (it) =>
+                    `<div class="sidebar-subitem" data-admin-mode="${escapeAttr(it.mode)}" style="--sub-accent:${it.accent};"><span class="sub-icon">${it.icon}</span> ${it.label}</div>`
+                )
+                .join("")}
+            </div>
+          </div>
+        `;
+      }
+
       const visibleAdmin = ADMIN_SUBITEMS.filter((it) => it.sectionId === null || isOwner || accountCanSeeAdminSection(authInfo, it.sectionId));
       if (visibleAdmin.length) {
         html += `
@@ -130,6 +170,15 @@
       }
 
       mountEl.innerHTML = html;
+
+      const ipToggle = document.getElementById("hubNavIpToggle");
+      const ipSubitems = document.getElementById("hubNavIpSubitems");
+      if (ipToggle && ipSubitems) {
+        ipToggle.addEventListener("click", () => {
+          ipToggle.classList.toggle("open");
+          ipSubitems.classList.toggle("open");
+        });
+      }
 
       const toggle = document.getElementById("hubNavAcctToggle");
       const subitems = document.getElementById("hubNavAcctSubitems");

@@ -70,20 +70,10 @@ html[data-theme="light"] {
        normal widths, same as the toggle button above. -->
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
-  <div class="edit-modal-backdrop" id="editModalBackdrop">
-    <div class="edit-modal">
-      <button type="button" class="modal-close-btn" id="editModalClose" title="Close" aria-label="Close">✕</button>
-      <p class="edit-modal-title" id="editModalTitle">Edit brand</p>
-      <div class="field">
-        <label>Link (opens when the pill is clicked)</label>
-        <input type="text" id="editLink" placeholder="https://..." autocomplete="off" />
-      </div>
-      <p class="edit-modal-note" id="editModalNote"></p>
-      <div class="edit-modal-actions">
-        <button type="button" class="btn-submit" id="editSave">Save</button>
-      </div>
-    </div>
-  </div>
+  <!-- Old per-pill "Edit brand" popup (editModalBackdrop) removed 2026-08 —
+       the pill's link is now only editable from Integration Portal → Web
+       Link (see the "weblink" mode in openAcctModal below), so there's a
+       single place this gets changed instead of two. -->
   <!-- Logo image editing removed for now (file upload wasn't working) — being
        revisited later; brand pills just show colored initials until then. -->
 
@@ -166,6 +156,36 @@ html[data-theme="light"] {
       </a>
       <div id="sidebarList"></div>
 
+      <!-- Integration Portal (2026-08) — positioned above Account Management
+           per direct business-owner request. Holds the 4 items that used to
+           live inside Account Management's own subitems (TG Group/Channel,
+           Deposit Sheet Link, Betting Resources Links — moved out) plus the
+           new Web Link panel. Same expandable-group markup/behavior as
+           acctMgmtGroup below (am-toggle/am-group classes reused so it picks
+           up the exact same CSS), each subitem opens the SAME Account
+           Management modal (openAcctModal) at a different `mode` — this is
+           purely a sidebar re-grouping, not a second modal system. Whole
+           group is hidden outright when the account can't see
+           "integrationPortal" at all (see canSeeAdminSection("integrationPortal")
+           below) — on top of, not instead of, each subitem's own individual
+           section gate. -->
+      <div class="am-group" id="integrationPortalGroup">
+        <div class="sidebar-item am-toggle expandable" id="integrationPortalToggle">
+          <div class="icon" style="background:#38bdf833;">🔗</div>
+          <div class="text">
+            <div class="name">Integration Portal</div>
+            <div class="desc">TG routes, sheets &amp; external links</div>
+          </div>
+          <span class="arrow">&rarr;</span>
+        </div>
+        <div class="sidebar-subitems" id="integrationPortalSubitems">
+          <div class="sidebar-subitem" id="subIpTgRoutes" style="--sub-accent:#38bdf833; display:none;"><span class="sub-icon">📡</span> TG Group / Channel</div>
+          <div class="sidebar-subitem" id="subIpDepositSheets" style="--sub-accent:#4fa6f533; display:none;"><span class="sub-icon">📊</span> Deposit Sheet Link</div>
+          <div class="sidebar-subitem" id="subIpBettingLinks" style="--sub-accent:#c8912f33; display:none;"><span class="sub-icon">🔗</span> Betting Resources Links</div>
+          <div class="sidebar-subitem" id="subIpWebLink" style="--sub-accent:#f3c46333; display:none;"><span class="sub-icon">🌐</span> Web Link</div>
+        </div>
+      </div>
+
       <div class="am-group" id="acctMgmtGroup">
         <div class="sidebar-item am-toggle expandable" id="acctMgmtToggle">
           <div class="icon" style="background:#a78bfa33;">🛡️</div>
@@ -178,9 +198,6 @@ html[data-theme="light"] {
         <div class="sidebar-subitems" id="acctMgmtSubitems">
           <div class="sidebar-subitem" id="subCreateAccount" style="--sub-accent:#a78bfa33; display:none;"><span class="sub-icon">➕</span> Create Account</div>
           <div class="sidebar-subitem" id="subWhitelistIp" style="--sub-accent:#60a5fa33; display:none;"><span class="sub-icon">🌐</span> IP Access</div>
-          <div class="sidebar-subitem" id="subTgRoutes" style="--sub-accent:#38bdf833; display:none;"><span class="sub-icon">📡</span> TG Group / Channel</div>
-          <div class="sidebar-subitem" id="subDepositSheets" style="--sub-accent:#4fa6f533; display:none;"><span class="sub-icon">📊</span> Deposit Sheet Link</div>
-          <div class="sidebar-subitem" id="subBettingLinks" style="--sub-accent:#c8912f33; display:none;"><span class="sub-icon">🔗</span> Betting Resources Links</div>
           <div class="sidebar-subitem" id="subSettings" style="--sub-accent:#f59e0b33; display:none;"><span class="sub-icon">⚙️</span> Settings</div>
           <div class="sidebar-subitem" id="subResetPassword" style="--sub-accent:#f3c46333;"><span class="sub-icon">🔑</span> Reset Password</div>
           <div class="sidebar-subitem" id="subAgentProfile" style="--sub-accent:#34d39933; display:none;"><span class="sub-icon">🪪</span> Agent Profile</div>
@@ -301,7 +318,6 @@ html[data-theme="light"] {
     const brandRowTrack = document.getElementById("brandRowTrack");
     const brandRowEl = document.getElementById("brandRow");
     let brandConfig = {};
-    let editingBrand = null;
 
     function buildBrandPill(b, i) {
       const entry = brandConfig[b.id] || {};
@@ -311,13 +327,14 @@ html[data-theme="light"] {
       const avatar = entry.logoUrl
         ? `<img class="avatar" src="${entry.logoUrl}" alt="${b.name}" />`
         : `<span class="avatar" style="background:${BRAND_COLORS[i % BRAND_COLORS.length]};">${initials}</span>`;
-      el.innerHTML = `${avatar}<span class="pill-name">${b.name}</span><button type="button" class="pill-edit" title="Edit ${b.name}" data-brand="${b.id}">✏️</button>`;
+      // No more inline pencil-edit button (2026-08) — a pill's link is
+      // now only editable from Integration Portal → Web Link (see the
+      // "weblink" mode in openAcctModal), which is properly section-
+      // gated (canEditAdminSection("webLink")) instead of open to any
+      // logged-in agent the way this shortcut used to be.
+      el.innerHTML = `${avatar}<span class="pill-name">${b.name}</span>`;
       el.querySelector(".pill-name").addEventListener("click", () => {
         if (entry.link) window.open(entry.link, "_blank", "noopener");
-      });
-      el.querySelector(".pill-edit").addEventListener("click", (e) => {
-        e.stopPropagation();
-        openEditModal(b);
       });
       return el;
     }
@@ -434,55 +451,11 @@ html[data-theme="light"] {
     loadThreadsSummary();
     setInterval(loadThreadsSummary, 15000);
 
-    // ---- Edit modal ----
-    const backdrop = document.getElementById("editModalBackdrop");
-    const modalTitle = document.getElementById("editModalTitle");
-    const modalNote = document.getElementById("editModalNote");
-    const linkInput = document.getElementById("editLink");
-
-    function openEditModal(brand) {
-      editingBrand = brand;
-      modalTitle.textContent = `Edit ${brand.name}`;
-      modalNote.textContent = "";
-      modalNote.className = "edit-modal-note";
-      linkInput.value = (brandConfig[brand.id] && brandConfig[brand.id].link) || "";
-      backdrop.classList.add("is-open");
-    }
-    function closeEditModal() {
-      backdrop.classList.remove("is-open");
-      editingBrand = null;
-    }
-    document.getElementById("editModalClose").addEventListener("click", closeEditModal);
-    backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeEditModal(); });
-
-    document.getElementById("editSave").addEventListener("click", async () => {
-      if (!editingBrand) return;
-      modalNote.textContent = "Saving…";
-      modalNote.className = "edit-modal-note";
-
-      try {
-        // Logged-in-agent + this account's own credentials IS the
-        // authorization now — no separate shared edit password anymore
-        // (see functions/api/brand-config.js).
-        const res = await window.AgentAuth.authFetch("/api/brand-config", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ brand: editingBrand.id, link: linkInput.value || "" }),
-        });
-        const data = await res.json();
-        if (!res.ok || !data.ok) throw new Error(data.error || "Save failed.");
-        brandConfig = data.config;
-        renderBrandRow();
-        modalNote.textContent = "";
-        modalNote.className = "edit-modal-note";
-        if (window.showToast) window.showToast("Save success.", "ok");
-        setTimeout(closeEditModal, 600);
-      } catch (err) {
-        modalNote.textContent = err.message || "Save failed.";
-        modalNote.className = "edit-modal-note err";
-        if (window.showToast) window.showToast(err.message || "Save failed.", "err");
-      }
-    });
+    // Old per-pill "Edit modal" (openEditModal/closeEditModal/#editSave)
+    // removed 2026-08 — editing a brand's pill link now only happens via
+    // Integration Portal → Web Link (see loadWebLinks()/renderWebLinks()
+    // further down), which is properly section-gated instead of open to
+    // any logged-in agent.
 
     const hubStats = document.getElementById("hubStats");
     const visibleBrandCount = (window.AgentAuth ? window.AgentAuth.filterAllowedBrands(window.BRANDS) : window.BRANDS).length;
@@ -637,16 +610,28 @@ html[data-theme="light"] {
     // `announcementsEdit` handling — it's now gated by the same rank
     // rule as Topic Access itself, not full Account Management Access
     // delegation.
-    const ADMIN_SECTIONS_LIST = [
+    // Split (2026-08) into two lists rendered as two separate collapsible
+    // boxes in the Agent Profile modal — ACCOUNT_MGMT_SECTIONS_LIST backs
+    // "Account Management Access" (unchanged gate: canManageOthersAdminAccess()),
+    // INTEGRATION_PORTAL_SECTIONS_LIST backs the new "Integration Portal
+    // Access" box (tgRoutes/depositSheets/bettingLinks moved out of the
+    // first list into this one, plus the new webLink). Both boxes share
+    // the exact same render/gate/save code (see adminSectionChecksHtml()
+    // and saveAgentProfileModal() below) — this is purely which items
+    // land in which box, not a second permission mechanism.
+    const ACCOUNT_MGMT_SECTIONS_LIST = [
       { id: "createAccount", name: "Create Account", icon: "➕" },
       { id: "whitelistIp", name: "IP Access", icon: "🌐" },
-      { id: "tgRoutes", name: "TG Group / Channel", icon: "📡" },
-      { id: "depositSheets", name: "Deposit Sheet Link", icon: "📊" },
       { id: "settings", name: "Settings", icon: "⚙️" },
       { id: "agentProfile", name: "Agent Profile", icon: "🪪" },
-      { id: "bettingLinks", name: "Betting Resources Links", icon: "🔗" },
     ];
-    const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "bettingLinks"];
+    const INTEGRATION_PORTAL_SECTIONS_LIST = [
+      { id: "tgRoutes", name: "TG Group / Channel", icon: "📡" },
+      { id: "depositSheets", name: "Deposit Sheet Link", icon: "📊" },
+      { id: "bettingLinks", name: "Betting Resources Links", icon: "🔗" },
+      { id: "webLink", name: "Web Link", icon: "🌐" },
+    ];
+    const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "bettingLinks", "webLink"];
     // Must match defaultSectionsForRank()/defaultEditForRank() in
     // functions/_shared/accounts.js exactly:
     //   agent -> nothing, senior -> createAccount,
@@ -689,9 +674,6 @@ html[data-theme="light"] {
 
     document.getElementById("subCreateAccount").style.display = canSeeAdminSection("createAccount") ? "flex" : "none";
     document.getElementById("subWhitelistIp").style.display = canSeeAdminSection("whitelistIp") ? "flex" : "none";
-    document.getElementById("subTgRoutes").style.display = canSeeAdminSection("tgRoutes") ? "flex" : "none";
-    document.getElementById("subDepositSheets").style.display = canSeeAdminSection("depositSheets") ? "flex" : "none";
-    document.getElementById("subBettingLinks").style.display = canSeeAdminSection("bettingLinks") ? "flex" : "none";
     document.getElementById("subSettings").style.display = canSeeAdminSection("settings") ? "flex" : "none";
     document.getElementById("subAgentProfile").style.display = canSeeAdminSection("agentProfile") ? "flex" : "none";
 
@@ -704,12 +686,37 @@ html[data-theme="light"] {
 
     document.getElementById("subCreateAccount").addEventListener("click", () => openAcctModal("create"));
     document.getElementById("subWhitelistIp").addEventListener("click", () => openAcctModal("whitelist"));
-    document.getElementById("subTgRoutes").addEventListener("click", () => openAcctModal("tgroutes"));
-    document.getElementById("subDepositSheets").addEventListener("click", () => openAcctModal("depositsheets"));
-    document.getElementById("subBettingLinks").addEventListener("click", () => openAcctModal("bettinglinks"));
     document.getElementById("subSettings").addEventListener("click", () => openAcctModal("settings"));
     document.getElementById("subResetPassword").addEventListener("click", () => openAcctModal("reset"));
     document.getElementById("subAgentProfile").addEventListener("click", () => openAcctModal("profile"));
+
+    // ---- Integration Portal group (2026-08) — same expandable-group
+    // pattern as Account Management above, positioned above it in the
+    // sidebar. Whole group hidden when this account can't see
+    // "integrationPortal" at all (independent of, and checked in
+    // addition to, each subitem's own section gate below) — see the
+    // "integrationPortal" section note in functions/_shared/accounts.js.
+    const canSeeIntegrationPortal = canSeeAdminSection("integrationPortal");
+    const integrationPortalGroup = document.getElementById("integrationPortalGroup");
+    if (integrationPortalGroup) integrationPortalGroup.style.display = canSeeIntegrationPortal ? "" : "none";
+    if (canSeeIntegrationPortal) {
+      document.getElementById("subIpTgRoutes").style.display = canSeeAdminSection("tgRoutes") ? "flex" : "none";
+      document.getElementById("subIpDepositSheets").style.display = canSeeAdminSection("depositSheets") ? "flex" : "none";
+      document.getElementById("subIpBettingLinks").style.display = canSeeAdminSection("bettingLinks") ? "flex" : "none";
+      document.getElementById("subIpWebLink").style.display = canSeeAdminSection("webLink") ? "flex" : "none";
+
+      const ipToggle = document.getElementById("integrationPortalToggle");
+      const ipSubitems = document.getElementById("integrationPortalSubitems");
+      ipToggle.addEventListener("click", () => {
+        ipToggle.classList.toggle("open");
+        ipSubitems.classList.toggle("open");
+      });
+
+      document.getElementById("subIpTgRoutes").addEventListener("click", () => openAcctModal("tgroutes"));
+      document.getElementById("subIpDepositSheets").addEventListener("click", () => openAcctModal("depositsheets"));
+      document.getElementById("subIpBettingLinks").addEventListener("click", () => openAcctModal("bettinglinks"));
+      document.getElementById("subIpWebLink").addEventListener("click", () => openAcctModal("weblink"));
+    }
     document.getElementById("acctProfileRoleFilter").addEventListener("change", () => renderAgentProfileTable());
     document.getElementById("acctProfileSearch").addEventListener("input", () => renderAgentProfileTable());
 
@@ -782,7 +789,7 @@ html[data-theme="light"] {
       acctBody.innerHTML = '<p class="edit-modal-note">Loading…</p>';
       acctBackdrop.classList.add("is-open");
       const modalEl = acctBackdrop.querySelector(".edit-modal");
-      modalEl.classList.toggle("wide", mode === "profile" || mode === "tgroutes" || mode === "depositsheets" || mode === "settings" || mode === "whitelist" || mode === "bettinglinks");
+      modalEl.classList.toggle("wide", mode === "profile" || mode === "tgroutes" || mode === "depositsheets" || mode === "settings" || mode === "whitelist" || mode === "bettinglinks" || mode === "weblink");
       // "profile", "tgroutes", "depositsheets", "settings", and
       // "whitelist" (IP Access) all use per-row/per-action inline
       // buttons instead of one global footer Save — too many
@@ -796,7 +803,7 @@ html[data-theme="light"] {
       // in acctBettingLinksData for the whole time the modal is open
       // (see syncBettingLinksFormIntoData() below) so switching the left
       // category list doesn't discard whichever side wasn't visible.
-      const showFooterSave = mode !== "profile" && mode !== "tgroutes" && mode !== "depositsheets" && mode !== "settings" && mode !== "whitelist";
+      const showFooterSave = mode !== "profile" && mode !== "tgroutes" && mode !== "depositsheets" && mode !== "settings" && mode !== "whitelist" && mode !== "weblink";
       document.getElementById("acctModalSave").style.display = showFooterSave ? "" : "none";
       document.getElementById("acctModalActions").style.display = showFooterSave ? "" : "none";
       const roleFilterEl = document.getElementById("acctProfileRoleFilter");
@@ -897,6 +904,11 @@ html[data-theme="light"] {
       if (mode === "bettinglinks") {
         acctTitle.textContent = "Betting Resources Links";
         await loadBettingLinks();
+      }
+
+      if (mode === "weblink") {
+        acctTitle.textContent = "Web Link";
+        await loadWebLinks();
       }
     }
 
@@ -1260,6 +1272,102 @@ html[data-theme="light"] {
       acctDepositSheetsData.backup[brandId] = data.backup;
       setAcctNote("Rolled over — paste the new month's link and Save.", "ok");
       renderDepositSheets();
+    }
+
+    // ---- Web Link (2026-08) — the URL each brand's pill on the Home
+    // page's marquee row (#brandRow) opens when clicked. This USED TO
+    // also be editable inline via a pencil-icon button right on each
+    // pill (open to any logged-in agent, no section gate) — that
+    // shortcut was removed per direct business-owner request so there's
+    // exactly one place this gets edited from now on: here, gated by
+    // canEditAdminSection("webLink") same as its Integration Portal
+    // siblings. Backed by GET/POST /api/brand-config — brandConfig
+    // (loaded near the top of this script for the pill row itself) is
+    // re-synced from every response here so the marquee reflects a save
+    // immediately without a page reload.
+    let acctWebLinkSelectedBrand = null;
+
+    async function loadWebLinks() {
+      acctBody.innerHTML = '<p class="edit-modal-note">Loading…</p>';
+      try {
+        const res = await fetch("/api/brand-config");
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || "Failed to load.");
+        brandConfig = data.config || {};
+      } catch (e) {
+        acctBody.innerHTML = `<p class="edit-modal-note err">${acctEsc(e.message || "Failed to load.")}</p>`;
+        return;
+      }
+      if (!acctWebLinkSelectedBrand || !(window.BRANDS || []).some((b) => b.id === acctWebLinkSelectedBrand)) {
+        acctWebLinkSelectedBrand = (window.BRANDS || [])[0]?.id || null;
+      }
+      renderWebLinks();
+    }
+
+    function renderWebLinks() {
+      const brands = window.BRANDS || [];
+      const canEdit = canEditAdminSection("webLink");
+      const roAttr = canEdit ? "" : "disabled";
+
+      const brandListHtml = brands.map((b) => `
+        <div class="tgroute-brand${b.id === acctWebLinkSelectedBrand ? " selected" : ""}" data-brand="${acctEsc(b.id)}">${acctEsc(b.name)}</div>
+      `).join("");
+
+      const entry = brandConfig[acctWebLinkSelectedBrand] || {};
+      const hasLink = !!entry.link;
+      const brandName = (brands.find((b) => b.id === acctWebLinkSelectedBrand) || {}).name || acctWebLinkSelectedBrand;
+
+      acctBody.innerHTML = `
+        <div class="tgroute-layout">
+          <div class="tgroute-brands">${brandListHtml}</div>
+          <div class="tgroute-modules">
+            <div class="tgroute-row" data-brand="${acctEsc(acctWebLinkSelectedBrand)}">
+              <div class="tgroute-mod-name">🔗 Pill Link
+                <span class="route-tag${hasLink ? " custom" : ""}">${hasLink ? "SET" : "not set"}</span>
+              </div>
+              <div class="tgroute-fields">
+                <input type="text" class="weblink-url" placeholder="https://..." value="${acctEsc(entry.link || "")}" ${roAttr} autocomplete="off" />
+                ${canEdit ? `<div class="tgroute-row-actions">
+                  <button type="button" class="tgroute-action-btn weblink-save">Save</button>
+                  ${hasLink ? '<button type="button" class="tgroute-action-btn tgroute-action-secondary weblink-reset">Reset</button>' : ""}
+                </div>` : ""}
+              </div>
+            </div>
+          </div>
+        </div>
+        <hr class="tgroute-divider" />
+        ${canEdit ? "" : '<p class="edit-modal-note">View only.</p>'}
+        <p class="edit-modal-note tgroute-footnote">This is the link ${acctEsc(brandName)}'s pill opens on the Home page's marquee row. Changes apply immediately — no redeploy needed.</p>`;
+
+      acctBody.querySelectorAll(".tgroute-brand").forEach((el) => {
+        el.addEventListener("click", () => {
+          acctWebLinkSelectedBrand = el.dataset.brand;
+          setAcctNote("");
+          renderWebLinks();
+        });
+      });
+      acctBody.querySelectorAll(".weblink-save").forEach((btn) => {
+        btn.addEventListener("click", () => saveWebLinkRow(btn.closest(".tgroute-row")));
+      });
+      acctBody.querySelectorAll(".weblink-reset").forEach((btn) => {
+        btn.addEventListener("click", () => saveWebLinkRow(btn.closest(".tgroute-row"), true));
+      });
+    }
+
+    async function saveWebLinkRow(row, clear) {
+      const brandId = row.dataset.brand;
+      const link = clear ? "" : row.querySelector(".weblink-url").value.trim();
+      setAcctNote(clear ? "Resetting…" : "Saving…");
+      const res = await window.AgentAuth.authFetch("/api/brand-config", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brand: brandId, link }),
+      });
+      const data = await res.json();
+      if (!data.ok) return setAcctNote(data.error || (clear ? "Reset failed." : "Save failed."), "err");
+      brandConfig = data.config || {};
+      setAcctNote(clear ? "Cleared." : "Saved.", "ok");
+      renderBrandRow();
+      renderWebLinks();
     }
 
     // ---- Settings (Maintenance / Coming soon toggle) ----
@@ -1736,26 +1844,52 @@ html[data-theme="light"] {
           👥 Active Agents
         </label>` : "";
 
-      // ---- Account Management Access (2026-07) — only rendered for
-      // whoever is allowed to manage OTHER accounts' admin-section access
-      // (Owner, or a delegate granted canManageAdminAccess) AND who
-      // outranks this target. Everyone else never sees this block at
-      // all — it's not just disabled, it doesn't exist in their DOM.
-      const adminSectionChecks = ADMIN_SECTIONS_LIST.map((s) => {
-        const isChecked = accountCanSeeAdminSection(a, s.id);
-        const checkboxHtml = `
+      // Integration Portal (2026-08) — same single-checkbox-grants-both
+      // treatment as Announcement above (storage: the "integrationPortal"
+      // entry in allowedAdminSections/adminSectionEditAccess, gated by the
+      // same rank rule, see functions/api/admin/accounts.js). This ONLY
+      // controls whether the "Integration Portal" sidebar group shows up
+      // at all for this account — which of the 4 items inside it
+      // (TG Group/Channel, Deposit Sheet Link, Betting Resources Links,
+      // Web Link) are actually visible/editable is the separate
+      // "Integration Portal Access" box further down, Owner/delegate-only.
+      const integrationPortalChecked = accountCanSeeAdminSection(a, "integrationPortal");
+      const integrationPortalCheck = `
         <label class="agent-profile-module-check">
-          <input type="checkbox" class="ap-admin-section-checkbox" value="${acctEsc(s.id)}" ${isChecked ? "checked" : ""} />
-          ${s.icon} ${acctEsc(s.name)}
+          <input type="checkbox" id="ap_integrationPortalSee" ${integrationPortalChecked ? "checked" : ""} ${canManageAccess ? "" : "disabled"} />
+          🔗 Integration Portal
         </label>`;
-        if (!EDITABLE_ADMIN_SECTIONS.includes(s.id)) return checkboxHtml;
-        const isEditChecked = accountCanEditAdminSection(a, s.id);
-        return checkboxHtml + `
-        <div class="agent-profile-edit-level-row" data-for-section="${acctEsc(s.id)}" style="${isChecked ? "" : "display:none;"}">
-          <label><input type="radio" name="apEditLevel_${acctEsc(s.id)}" value="view" ${isEditChecked ? "" : "checked"} /> View only</label>
-          <label><input type="radio" name="apEditLevel_${acctEsc(s.id)}" value="edit" ${isEditChecked ? "checked" : ""} /> Can Edit</label>
-        </div>`;
-      }).join("");
+
+      // ---- Account Management Access / Integration Portal Access
+      // (2026-07, split 2026-08) — both boxes only rendered for whoever
+      // is allowed to manage OTHER accounts' admin-section access
+      // (Owner, or a delegate granted canManageAdminAccess) AND who
+      // outranks this target. Everyone else never sees either block at
+      // all — it's not just disabled, it doesn't exist in their DOM.
+      // Shared render helper — ACCOUNT_MGMT_SECTIONS_LIST and
+      // INTEGRATION_PORTAL_SECTIONS_LIST are just two different subsets
+      // of the exact same ADMIN_SECTIONS_LIST this used to render as one
+      // box; the checkbox/radio markup and underlying storage are
+      // untouched, only which items land in which visual box changed.
+      function adminSectionChecksHtml(list) {
+        return list.map((s) => {
+          const isChecked = accountCanSeeAdminSection(a, s.id);
+          const checkboxHtml = `
+          <label class="agent-profile-module-check">
+            <input type="checkbox" class="ap-admin-section-checkbox" value="${acctEsc(s.id)}" ${isChecked ? "checked" : ""} />
+            ${s.icon} ${acctEsc(s.name)}
+          </label>`;
+          if (!EDITABLE_ADMIN_SECTIONS.includes(s.id)) return checkboxHtml;
+          const isEditChecked = accountCanEditAdminSection(a, s.id);
+          return checkboxHtml + `
+          <div class="agent-profile-edit-level-row" data-for-section="${acctEsc(s.id)}" style="${isChecked ? "" : "display:none;"}">
+            <label><input type="radio" name="apEditLevel_${acctEsc(s.id)}" value="view" ${isEditChecked ? "" : "checked"} /> View only</label>
+            <label><input type="radio" name="apEditLevel_${acctEsc(s.id)}" value="edit" ${isEditChecked ? "checked" : ""} /> Can Edit</label>
+          </div>`;
+        }).join("");
+      }
+      const adminSectionChecks = adminSectionChecksHtml(ACCOUNT_MGMT_SECTIONS_LIST);
+      const integrationPortalSectionChecks = adminSectionChecksHtml(INTEGRATION_PORTAL_SECTIONS_LIST);
       // The delegation flag itself — can ONLY be set by an Owner, never
       // by a delegate (no re-delegation chains).
       const showDelegationToggle = authInfo?.role === "owner" && !isSelfProfile;
@@ -1801,7 +1935,7 @@ html[data-theme="light"] {
               </button>
               <div class="agent-profile-collapsible-body" style="display:none;">
                 ${!canManageAccess ? '<p class="agent-profile-locked-note" style="margin:-4px 0 8px;">(requires outranking this account)</p>' : ""}
-                <div class="agent-profile-module-list">${moduleChecks}${announcementCheck}${activeAgentsCheck}</div>
+                <div class="agent-profile-module-list">${moduleChecks}${announcementCheck}${activeAgentsCheck}${integrationPortalCheck}</div>
               </div>
             </div>
 
@@ -1819,6 +1953,15 @@ html[data-theme="light"] {
                   <input type="checkbox" id="ap_canManageAdminAccess" ${a.canManageAdminAccess ? "checked" : ""} />
                   Can manage Account Management Access for other accounts
                 </label>` : ""}
+              </div>
+            </div>
+            <div class="agent-profile-collapsible" data-section="integrationPortalAccess">
+              <button type="button" class="agent-profile-collapsible-header" data-collapse-toggle>
+                <span class="agent-profile-section-label agent-profile-section-label-lg">🔗 Integration Portal Access <span class="agent-profile-section-hint">(TG routes, sheets &amp; external links — view/edit per item)</span></span>
+                <span class="agent-profile-chev">→</span>
+              </button>
+              <div class="agent-profile-collapsible-body" style="display:none;">
+                <div class="agent-profile-admin-section-list">${integrationPortalSectionChecks}</div>
               </div>
             </div>` : ""}
           </div>
@@ -1943,22 +2086,35 @@ html[data-theme="light"] {
           payload.announcementsView = announceSee.checked;
           payload.announcementsEdit = announceSee.checked;
         }
+        // Same single-checkbox-grants-both treatment, for the
+        // "Integration Portal" Topic Access row (2026-08) — see the
+        // integrationPortalCheck comment in openAgentProfileModal().
+        const integrationPortalSee = document.getElementById("ap_integrationPortalSee");
+        if (integrationPortalSee) {
+          payload.integrationPortalView = integrationPortalSee.checked;
+          payload.integrationPortalEdit = integrationPortalSee.checked;
+        }
       }
-      // Account Management Access — only present in the DOM at all when
-      // openAgentProfileModal() computed canManageThisAccountsAdminAccess
-      // for this target. Use the dedicated .ap-admin-section-checkbox
-      // class, NOT "input[type=checkbox]" — this block sits alongside an
+      // Account Management Access + Integration Portal Access — both
+      // only present in the DOM at all when openAgentProfileModal()
+      // computed canManageThisAccountsAdminAccess for this target, and
+      // (2026-08) now rendered as TWO separate boxes that both share the
+      // ".agent-profile-admin-section-list" class — querySelectorAll,
+      // not querySelector, so a save picks up sections from BOTH boxes
+      // instead of silently dropping whichever one isn't first in the
+      // DOM. Use the dedicated .ap-admin-section-checkbox class, NOT
+      // "input[type=checkbox]" — this block sits alongside an
       // Owner-only delegation toggle (#ap_canManageAdminAccess) that a
       // generic checkbox selector would wrongly sweep into the count.
-      const adminSectionList = document.querySelector(".agent-profile-admin-section-list");
-      if (adminSectionList) {
-        const adminChecks = Array.from(adminSectionList.querySelectorAll(".ap-admin-section-checkbox"));
+      const adminSectionLists = Array.from(document.querySelectorAll(".agent-profile-admin-section-list"));
+      if (adminSectionLists.length) {
+        const adminChecks = adminSectionLists.flatMap((list) => Array.from(list.querySelectorAll(".ap-admin-section-checkbox")));
         const selectedSections = adminChecks.filter((c) => c.checked).map((c) => c.value);
         payload.allowedAdminSections = selectedSections.length === adminChecks.length ? "all" : selectedSections;
 
         const editSections = EDITABLE_ADMIN_SECTIONS.filter((id) => {
           if (!selectedSections.includes(id)) return false;
-          const radio = adminSectionList.querySelector(`input[name="apEditLevel_${id}"]:checked`);
+          const radio = document.querySelector(`input[name="apEditLevel_${id}"]:checked`);
           return radio && radio.value === "edit";
         });
         payload.adminSectionEditAccess = editSections.length === EDITABLE_ADMIN_SECTIONS.length ? "all" : editSections;
@@ -2808,6 +2964,13 @@ html[data-theme="light"] {
       const modeToSection = {
         create: "createAccount", whitelist: "whitelistIp", tgroutes: "tgRoutes",
         depositsheets: "depositSheets", settings: "settings", profile: "agentProfile",
+        // "bettinglinks" was missing from this map entirely before this
+        // session — hub-nav.js's Betting Resources Links sub-item has
+        // always sent agents to "/?admin=bettinglinks", but this
+        // function silently ignored it (fell through the `!(mode in
+        // modeToSection)` guard below) instead of opening the modal.
+        // Fixed alongside adding "weblink" for the new Web Link panel.
+        bettinglinks: "bettingLinks", weblink: "webLink",
         reset: null, // no permission gate, same as the Reset Password sidebar item
       };
       if (!(mode in modeToSection)) return;

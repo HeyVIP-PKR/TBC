@@ -160,6 +160,11 @@ async function handlePost({ request, env }) {
     // inside that branch.
     let announcementsAllowedAdminSections;
     let announcementsAdminSectionEditAccess;
+    // Same pattern as the announcements pair above, for the
+    // "Integration Portal" Topic Access checkbox (2026-08) — see the
+    // "integrationPortal" section note in _shared/accounts.js.
+    let integrationPortalAllowedAdminSections;
+    let integrationPortalAdminSectionEditAccess;
 
     // An owner account, targeted by anyone who doesn't outrank it (i.e.
     // everyone but another owner) — respond exactly as if it didn't
@@ -241,6 +246,30 @@ async function handlePost({ request, env }) {
         announcementsAdminSectionEditAccess = withSectionToggled(baseEdit, "announcements", editOn, EDITABLE_ADMIN_SECTIONS);
       }
 
+      // Integration Portal visibility (2026-08) — same single add/remove
+      // pattern and same authority rule as Announcement directly above
+      // (Can-Edit(agentProfile) + strictly outrank the target, or
+      // Owner), NOT the stricter canManageOthersAdminAccess() the
+      // Integration Portal ACCESS sub-items (tgRoutes/depositSheets/
+      // bettingLinks/webLink) require — this only toggles whether the
+      // group shows up at all, not what's inside it. If this request
+      // ALSO carries the full array (Owner editing with both boxes
+      // visible, possibly alongside an announcements toggle in the same
+      // request), chain off whatever the announcements block already
+      // computed so none of the three ever clobber each other.
+      if (body.integrationPortalView !== undefined || body.integrationPortalEdit !== undefined) {
+        const hasIntegrationPortalAuthority = auth.account?.role === "owner" || (canEditAdminSection(auth.account, "agentProfile") && canManage(actorRank, targetRank));
+        if (!hasIntegrationPortalAuthority) {
+          return json({ ok: false, error: "You can only change Integration Portal access for accounts ranked below your own." }, 403);
+        }
+        const seeOn = !!body.integrationPortalView;
+        const editOn = seeOn && !!body.integrationPortalEdit;
+        const baseSee = announcementsAllowedAdminSections !== undefined ? announcementsAllowedAdminSections : (body.allowedAdminSections !== undefined ? body.allowedAdminSections : effectiveAllowedAdminSections(existingTarget));
+        const baseEdit = announcementsAdminSectionEditAccess !== undefined ? announcementsAdminSectionEditAccess : (body.adminSectionEditAccess !== undefined ? body.adminSectionEditAccess : effectiveAdminSectionEditAccess(existingTarget));
+        integrationPortalAllowedAdminSections = withSectionToggled(baseSee, "integrationPortal", seeOn, ADMIN_SECTIONS);
+        integrationPortalAdminSectionEditAccess = withSectionToggled(baseEdit, "integrationPortal", editOn, EDITABLE_ADMIN_SECTIONS);
+      }
+
       if (roleChanging || accessChanging) {
         const isSelfPromotionToSuperAdmin =
           isSelf &&
@@ -296,8 +325,8 @@ async function handlePost({ request, env }) {
         // adminSectionEditAccess already (see above), so this never loses
         // a same-request 7-item change, it just folds the single
         // announcements add/remove into it.
-        allowedAdminSections: announcementsAllowedAdminSections !== undefined ? announcementsAllowedAdminSections : (body.allowedAdminSections !== undefined ? body.allowedAdminSections : undefined),
-        adminSectionEditAccess: announcementsAdminSectionEditAccess !== undefined ? announcementsAdminSectionEditAccess : (body.adminSectionEditAccess !== undefined ? body.adminSectionEditAccess : undefined),
+        allowedAdminSections: integrationPortalAllowedAdminSections !== undefined ? integrationPortalAllowedAdminSections : (announcementsAllowedAdminSections !== undefined ? announcementsAllowedAdminSections : (body.allowedAdminSections !== undefined ? body.allowedAdminSections : undefined)),
+        adminSectionEditAccess: integrationPortalAdminSectionEditAccess !== undefined ? integrationPortalAdminSectionEditAccess : (announcementsAdminSectionEditAccess !== undefined ? announcementsAdminSectionEditAccess : (body.adminSectionEditAccess !== undefined ? body.adminSectionEditAccess : undefined)),
         canManageAdminAccess: body.canManageAdminAccess !== undefined ? body.canManageAdminAccess : undefined,
         canViewActiveAgents: body.canViewActiveAgents !== undefined ? body.canViewActiveAgents : undefined,
       });

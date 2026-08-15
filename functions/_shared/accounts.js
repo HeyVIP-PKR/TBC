@@ -116,8 +116,28 @@ export function rankOf(role) { return ROLE_RANK[role] ?? ROLE_RANK.agent; }
 // all — every logged-in agent can see it, this only controls who can
 // edit the link list (see functions/api/betting-resources.js's plain
 // verifyRequest() check vs this section's canSeeAdminSection() gate).
-export const ADMIN_SECTIONS = ["createAccount", "whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements", "bettingLinks"];
-export const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements", "bettingLinks"];
+// "webLink" (2026-08) gates the per-brand "Pill Link" editor — the URL
+// each brand's pill on the Home page's marquee row opens when clicked.
+// Previously this had NO section gate at all (any logged-in agent could
+// POST /api/brand-config — see that file's own history); it's now
+// EDITABLE_ADMIN_SECTIONS-gated same as its Integration Portal siblings
+// below. Falls through to "rank >= superadmin -> all" same as every
+// other section that's superadmin-and-above by default, same treatment
+// tgRoutes/depositSheets/bettingLinks already got.
+//
+// "integrationPortal" (2026-08) is a pure VISIBILITY gate, not tied to
+// any single piece of content — it controls whether the "Integration
+// Portal" sidebar group (public/index.html + hub-nav.js) shows up at
+// all for an account, on top of (not instead of) that account's
+// individual access to tgRoutes/depositSheets/bettingLinks/webLink
+// underneath it. Same single-checkbox-grants-both-View-and-Edit
+// treatment as "announcements" in Topic Access (see the ap_announceSee/
+// ap_integrationPortalSee handling in public/index.html and the
+// matching POST-body handling in functions/api/admin/accounts.js) —
+// NOT one of EDITABLE_ADMIN_SECTIONS since there's no separate content
+// to view-vs-edit here, just "can see this group or not."
+export const ADMIN_SECTIONS = ["createAccount", "whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements", "bettingLinks", "webLink", "integrationPortal"];
+export const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements", "bettingLinks", "webLink"];
 
 function defaultSectionsForRank(rank) {
   if (rank >= ROLE_RANK.superadmin) return "all";

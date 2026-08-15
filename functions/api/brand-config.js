@@ -1,9 +1,17 @@
 /**
  * GET  /api/brand-config  -> { ok, config } — public, used to render the hub's brand pills
- * POST /api/brand-config  -> JSON { brand, link } — requires a logged-in account
- *                             (see _shared/accounts.js). Being logged in as any
- *                             agent IS the authorization now — no separate shared
- *                             edit password anymore.
+ * POST /api/brand-config  -> JSON { brand, link } — this is the "Web Link" panel under
+ *                             Integration Portal (public/index.html's Account Management
+ *                             modal, mode "weblink") as well as the inline pencil-icon
+ *                             edit on each brand pill on the Home marquee row itself —
+ *                             both call this same endpoint. Requires
+ *                             canEditAdminSection(account, "webLink") (see
+ *                             _shared/accounts.js) — 2026-08: previously ANY logged-in
+ *                             account could POST here regardless of rank/section access
+ *                             (there was no separate shared edit password, but also no
+ *                             per-section gate at all); now gated the same way as every
+ *                             other Integration Portal item (tgRoutes/depositSheets/
+ *                             bettingLinks).
  *
  * Config is a small JSON blob stored in the R2 bucket (env.SCREENSHOTS_BUCKET)
  * at key "brand-config.json": { [brandId]: { logoUrl, link } }.
@@ -23,7 +31,7 @@
  * owner) — small source image (60×60), upscaled to match the others;
  * looks fine at the 24px pill size this actually renders at.
  */
-import { verifyRequest } from "../_shared/accounts.js";
+import { verifyRequest, canEditAdminSection } from "../_shared/accounts.js";
 
 // PKR market: 3 of the 9 brands (Crickex/Betjili/Mostplay) are the same
 // actual brand/logo as the INR build this was forked from — confirmed by
@@ -80,6 +88,9 @@ async function handlePost({ request, env }) {
 
   const account = await verifyRequest(request, env);
   if (!account) return json({ ok: false, error: "Login required." }, 401);
+  if (!canEditAdminSection(account, "webLink")) {
+    return json({ ok: false, error: "You don't have permission to edit Web Link." }, 403);
+  }
 
   let body;
   try {

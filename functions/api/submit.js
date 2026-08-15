@@ -4,6 +4,7 @@ import { uploadAttachmentToR2, screenshotUrl } from "../_shared/r2.js";
 import { createThread } from "../_shared/threads.js";
 import { verifyRequest, canSeeBrand, canSeeModule } from "../_shared/accounts.js";
 import { getRouteOverride } from "../_shared/routes.js";
+import { getIssueSheetOverride } from "../_shared/issueSubmissionSheets.js";
 import { resolveColumnValues, resolveSheetLayout, formatDateDDMMYYYY, buildTicketMessage, buildTitleAndSummary } from "../_shared/messageBuilders.js";
 import { compressImageForTelegram } from "../_shared/telegramImageCompress.js";
 
@@ -175,9 +176,21 @@ async function handleSubmit({ request, env }) {
   let sheetError = null;
   let sheetRef = null;
   const promoConfig = moduleId === "promotion_request" ? PROMOTION_SHEET_CONFIG[`${brandId}|${fieldMap.promotion}`] : null;
+  // "Issue Submission Gsheet" admin panel (Integration Portal) override —
+  // per brand+module Sheet ID/tab, live from THREADS_KV, falling back to
+  // the hardcoded BRANDS[brandId].sheetId + SHEET_LAYOUT[moduleId].tab
+  // exactly as before when nothing's been overridden. Promotion Request
+  // is deliberately excluded — its sheet is chosen per (brand, promotion
+  // type) via the separate, more granular PROMOTION_SHEET_CONFIG right
+  // above, not a single per-brand default like every other module here.
+  // See _shared/issueSubmissionSheets.js for the full reasoning.
+  const issueSheetOverride = moduleId !== "promotion_request" && RECORD_TO_SHEET[moduleId]
+    ? await getIssueSheetOverride(env, brandId, moduleId)
+    : null;
+  const effectiveSheetId = issueSheetOverride?.sheetId || brand.sheetId;
   const sheetAttempted = moduleId === "promotion_request"
     ? !!(RECORD_TO_SHEET[moduleId] && promoConfig)
-    : !!(RECORD_TO_SHEET[moduleId] && brand.sheetId);
+    : !!(RECORD_TO_SHEET[moduleId] && effectiveSheetId);
   if (sheetAttempted) {
     try {
       if (moduleId === "promotion_request") {
@@ -186,12 +199,18 @@ async function handleSubmit({ request, env }) {
         if (row) sheetRef = { sheetId: promoConfig.sheetId, tab: promoConfig.tab, startColumn: promoConfig.startColumn, columns: promoConfig.columns, row };
       } else {
         const layoutEntry = SHEET_LAYOUT[moduleId];
+        // Only the tab name is ever overridden — startColumn/columns/
+        // leftBlock/rightBlock stay exactly as coded, since a different
+        // spreadsheet is still expected to have the SAME column layout,
+        // just possibly a different tab name (or a whole different
+        // workbook) than the brand's usual one.
+        const effectiveTab = issueSheetOverride?.tabName || layoutEntry?.tab;
         if (layoutEntry && layoutEntry.pairByDate) {
           const values = resolveColumnValues(layoutEntry.columns, { fieldMap, brand, reporter, screenshotLink, attachmentLinks });
           const dateValue = formatDateDDMMYYYY(fieldMap.reportDate || fieldMap.date);
           const shiftValue = fieldMap[layoutEntry.selectorField];
           const activeSide = shiftValue === layoutEntry.rightBlock.shiftValue ? "right" : "left";
-          await writeRowForDate(env, brand.sheetId, layoutEntry.tab, {
+          await writeRowForDate(env, effectiveSheetId, effectiveTab, {
             leftBlock: layoutEntry.leftBlock,
             rightBlock: layoutEntry.rightBlock,
             activeSide,
@@ -208,8 +227,8 @@ async function handleSubmit({ request, env }) {
           const layout = resolveSheetLayout(layoutEntry, fieldMap);
           if (layout) {
             const values = resolveColumnValues(layout.columns, { fieldMap, brand, reporter, screenshotLink, attachmentLinks });
-            const { row } = await appendRowByColumns(env, brand.sheetId, layout.tab, layout.startColumn, values);
-            if (row) sheetRef = { sheetId: brand.sheetId, tab: layout.tab, startColumn: layout.startColumn, columns: layout.columns, row };
+            const { row } = await appendRowByColumns(env, effectiveSheetId, effectiveTab, layout.startColumn, values);
+            if (row) sheetRef = { sheetId: effectiveSheetId, tab: effectiveTab, startColumn: layout.startColumn, columns: layout.columns, row };
           } else {
             const row = {
               timestamp,
@@ -218,7 +237,7 @@ async function handleSubmit({ request, env }) {
               ...Object.fromEntries(fields.map((f) => [f.key, f.value])),
               attachments: (attachments || []).map((a) => a.name).join(", "),
             };
-            await appendRowToSheet(env, brand.sheetId, moduleId, row);
+            await appendRowToSheet(env, effectiveSheetId, moduleId, row);
           }
         }
       }

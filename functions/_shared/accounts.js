@@ -143,8 +143,15 @@ export function rankOf(role) { return ROLE_RANK[role] ?? ROLE_RANK.agent; }
 // (tgRoutes/depositSheets/bettingLinks/webLink) — not called out in
 // defaultSectionsForRank() below, so it only appears for admin/senior/
 // agent once explicitly granted.
-export const ADMIN_SECTIONS = ["createAccount", "whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements", "bettingLinks", "webLink", "integrationPortal", "promoCodeSheet"];
-export const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements", "bettingLinks", "webLink", "promoCodeSheet"];
+// "issueSubmissionSheet" (2026-08) gates the "Issue Submission Gsheet"
+// panel under Integration Portal — per (brand, module) Google Sheet/tab
+// overrides for the 6 core issue-submission modules (QA, Account Issue,
+// Withdraw Issue, Risk Issue, Daily Report, Genie Issue — Promotion
+// Request excluded, see _shared/issueSubmissionSheets.js). Same
+// superadmin-and-above default-fallthrough treatment as its Integration
+// Portal siblings.
+export const ADMIN_SECTIONS = ["createAccount", "whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements", "bettingLinks", "webLink", "integrationPortal", "promoCodeSheet", "issueSubmissionSheet"];
+export const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements", "bettingLinks", "webLink", "promoCodeSheet", "issueSubmissionSheet"];
 
 function defaultSectionsForRank(rank) {
   if (rank >= ROLE_RANK.superadmin) return "all";

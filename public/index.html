@@ -176,6 +176,7 @@ html[data-theme="light"] {
         </div>
         <div class="sidebar-subitems" id="integrationPortalSubitems">
           <div class="sidebar-subitem" id="subIpTgRoutes" style="--sub-accent:#38bdf833; display:none;"><span class="sub-icon">📡</span> TG Group / Channel</div>
+          <div class="sidebar-subitem" id="subIpIssueSheets" style="--sub-accent:#60a5fa33; display:none;"><span class="sub-icon">📑</span> Issue Submission Gsheet</div>
           <div class="sidebar-subitem" id="subIpDepositSheets" style="--sub-accent:#4fa6f533; display:none;"><span class="sub-icon">📊</span> Deposit Sheet Link</div>
           <div class="sidebar-subitem" id="subIpBettingLinks" style="--sub-accent:#c8912f33; display:none;"><span class="sub-icon">🔗</span> Betting Resources Links</div>
           <div class="sidebar-subitem" id="subIpWebLink" style="--sub-accent:#f3c46333; display:none;"><span class="sub-icon">🌐</span> Web Link</div>
@@ -619,12 +620,13 @@ html[data-theme="light"] {
     ];
     const INTEGRATION_PORTAL_SECTIONS_LIST = [
       { id: "tgRoutes", name: "TG Group / Channel", icon: "📡" },
+      { id: "issueSubmissionSheet", name: "Issue Submission Gsheet", icon: "📑" },
       { id: "depositSheets", name: "Deposit Sheet Link", icon: "📊" },
       { id: "bettingLinks", name: "Betting Resources Links", icon: "🔗" },
       { id: "webLink", name: "Web Link", icon: "🌐" },
       { id: "promoCodeSheet", name: "Promo Code Gsheet", icon: "📋" },
     ];
-    const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "bettingLinks", "webLink", "promoCodeSheet"];
+    const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "bettingLinks", "webLink", "promoCodeSheet", "issueSubmissionSheet"];
     // Must match defaultSectionsForRank()/defaultEditForRank() in
     // functions/_shared/accounts.js exactly:
     //   agent -> nothing, senior -> createAccount,
@@ -694,6 +696,7 @@ html[data-theme="light"] {
     if (integrationPortalGroup) integrationPortalGroup.style.display = canSeeIntegrationPortal ? "" : "none";
     if (canSeeIntegrationPortal) {
       document.getElementById("subIpTgRoutes").style.display = canSeeAdminSection("tgRoutes") ? "flex" : "none";
+      document.getElementById("subIpIssueSheets").style.display = canSeeAdminSection("issueSubmissionSheet") ? "flex" : "none";
       document.getElementById("subIpDepositSheets").style.display = canSeeAdminSection("depositSheets") ? "flex" : "none";
       document.getElementById("subIpBettingLinks").style.display = canSeeAdminSection("bettingLinks") ? "flex" : "none";
       document.getElementById("subIpWebLink").style.display = canSeeAdminSection("webLink") ? "flex" : "none";
@@ -707,6 +710,7 @@ html[data-theme="light"] {
       });
 
       document.getElementById("subIpTgRoutes").addEventListener("click", () => openAcctModal("tgroutes"));
+      document.getElementById("subIpIssueSheets").addEventListener("click", () => openAcctModal("issuesheets"));
       document.getElementById("subIpDepositSheets").addEventListener("click", () => openAcctModal("depositsheets"));
       document.getElementById("subIpBettingLinks").addEventListener("click", () => openAcctModal("bettinglinks"));
       document.getElementById("subIpWebLink").addEventListener("click", () => openAcctModal("weblink"));
@@ -784,7 +788,7 @@ html[data-theme="light"] {
       acctBody.innerHTML = '<p class="edit-modal-note">Loading…</p>';
       acctBackdrop.classList.add("is-open");
       const modalEl = acctBackdrop.querySelector(".edit-modal");
-      modalEl.classList.toggle("wide", mode === "profile" || mode === "tgroutes" || mode === "depositsheets" || mode === "settings" || mode === "whitelist" || mode === "bettinglinks" || mode === "weblink" || mode === "promosheet");
+      modalEl.classList.toggle("wide", mode === "profile" || mode === "tgroutes" || mode === "depositsheets" || mode === "settings" || mode === "whitelist" || mode === "bettinglinks" || mode === "weblink" || mode === "promosheet" || mode === "issuesheets");
       // "profile", "tgroutes", "depositsheets", "settings", and
       // "whitelist" (IP Access) all use per-row/per-action inline
       // buttons instead of one global footer Save — too many
@@ -798,7 +802,7 @@ html[data-theme="light"] {
       // in acctBettingLinksData for the whole time the modal is open
       // (see syncBettingLinksFormIntoData() below) so switching the left
       // category list doesn't discard whichever side wasn't visible.
-      const showFooterSave = mode !== "profile" && mode !== "tgroutes" && mode !== "depositsheets" && mode !== "settings" && mode !== "whitelist" && mode !== "weblink";
+      const showFooterSave = mode !== "profile" && mode !== "tgroutes" && mode !== "depositsheets" && mode !== "settings" && mode !== "whitelist" && mode !== "weblink" && mode !== "promosheet" && mode !== "issuesheets";
       document.getElementById("acctModalSave").style.display = showFooterSave ? "" : "none";
       document.getElementById("acctModalActions").style.display = showFooterSave ? "" : "none";
       const roleFilterEl = document.getElementById("acctProfileRoleFilter");
@@ -884,6 +888,11 @@ html[data-theme="light"] {
       if (mode === "tgroutes") {
         acctTitle.textContent = "TG Group / Channel";
         await loadTgRoutes();
+      }
+
+      if (mode === "issuesheets") {
+        acctTitle.textContent = "Issue Submission Gsheet";
+        await loadIssueSheets();
       }
 
       if (mode === "depositsheets") {
@@ -1078,6 +1087,117 @@ html[data-theme="light"] {
       }
       setAcctNote("Reset to default.", "ok");
       renderTgRoutes();
+    }
+
+    // ---- Issue Submission Gsheet (2026-08) — same brand-sidebar +
+    // per-module-row layout as TG Group/Channel above, but each row is a
+    // Sheet URL/ID + Tab name pair instead of Chat ID + Topic ID. Covers
+    // the 6 core issue-submission modules (QA, Account Issue, Withdraw
+    // Issue, Risk Issue, Daily Report, Genie Issue) — Promotion Request
+    // is NOT here, it already has its own separate per-(brand,promotion)
+    // sheet system (see _shared/issueSubmissionSheets.js's file header).
+    // Backed by /api/admin/issue-submission-sheets, same override-over-
+    // code-default layering as everywhere else on this page.
+    let acctIssueSheetsData = null;
+    let acctIssueSheetsSelectedBrand = null;
+
+    async function loadIssueSheets() {
+      const res = await window.AgentAuth.authFetch("/api/admin/issue-submission-sheets");
+      const data = await res.json();
+      if (!data.ok) {
+        acctBody.innerHTML = `<p class="edit-modal-note err">${acctEsc(data.error || "Failed to load.")}</p>`;
+        return;
+      }
+      acctIssueSheetsData = data;
+      if (!acctIssueSheetsSelectedBrand || !data.brands.some((b) => b.id === acctIssueSheetsSelectedBrand)) {
+        acctIssueSheetsSelectedBrand = data.brands[0]?.id || null;
+      }
+      renderIssueSheets();
+    }
+
+    function renderIssueSheets() {
+      if (!acctIssueSheetsData) return;
+      const { brands, modules, sheets } = acctIssueSheetsData;
+      const canEdit = canEditAdminSection("issueSubmissionSheet");
+      const roAttr = canEdit ? "" : "disabled";
+
+      const brandListHtml = brands.map((b) => `
+        <div class="tgroute-brand${b.id === acctIssueSheetsSelectedBrand ? " selected" : ""}" data-brand="${acctEsc(b.id)}">${acctEsc(b.name)}</div>
+      `).join("");
+
+      const moduleRowsHtml = modules.map((m) => {
+        const key = `${acctIssueSheetsSelectedBrand}|${m.id}`;
+        const s = sheets[key] || { sheetId: "", tabName: "", isOverride: false };
+        return `
+          <div class="tgroute-row" data-module="${acctEsc(m.id)}">
+            <div class="tgroute-mod-name">${m.emoji} ${acctEsc(m.name)}
+              <span class="route-tag${s.isOverride ? " custom" : ""}">${s.isOverride ? "custom" : "default"}</span>
+            </div>
+            <div class="tgroute-fields">
+              <input type="text" class="issuesheet-url" placeholder="Google Sheet URL or ID" value="${acctEsc(s.sheetId)}" ${roAttr} autocomplete="off" />
+              <input type="text" class="issuesheet-tab" placeholder="Tab name" value="${acctEsc(s.tabName)}" ${roAttr} autocomplete="off" />
+              ${canEdit ? `<div class="tgroute-row-actions">
+                <button type="button" class="tgroute-action-btn issuesheet-save">Save</button>
+                ${s.isOverride ? '<button type="button" class="tgroute-action-btn tgroute-action-secondary issuesheet-reset">Reset</button>' : ""}
+              </div>` : ""}
+            </div>
+          </div>`;
+      }).join("");
+
+      acctBody.innerHTML = `
+        <div class="tgroute-layout">
+          <div class="tgroute-brands">${brandListHtml}</div>
+          <div class="tgroute-modules">${moduleRowsHtml}</div>
+        </div>
+        <hr class="tgroute-divider" />
+        ${canEdit ? "" : '<p class="edit-modal-note">View only.</p>'}
+        <p class="edit-modal-note tgroute-footnote">Changes apply to the very next form submission — no redeploy needed. "default" rows are still using the brand's usual Sheet + that module's usual tab name; "custom" rows have been pointed at a different Sheet/tab here.</p>`;
+
+      acctBody.querySelectorAll(".tgroute-brand").forEach((el) => {
+        el.addEventListener("click", () => {
+          acctIssueSheetsSelectedBrand = el.dataset.brand;
+          setAcctNote("");
+          renderIssueSheets();
+        });
+      });
+      acctBody.querySelectorAll(".issuesheet-save").forEach((btn) => {
+        btn.addEventListener("click", () => saveIssueSheetRow(btn.closest(".tgroute-row")));
+      });
+      acctBody.querySelectorAll(".issuesheet-reset").forEach((btn) => {
+        btn.addEventListener("click", () => resetIssueSheetRow(btn.closest(".tgroute-row")));
+      });
+    }
+
+    async function saveIssueSheetRow(row) {
+      const moduleId = row.dataset.module;
+      const sheetUrlOrId = row.querySelector(".issuesheet-url").value.trim();
+      const tabName = row.querySelector(".issuesheet-tab").value.trim();
+      if (!sheetUrlOrId) return setAcctNote("Sheet URL or ID is required.", "err");
+      if (!tabName) return setAcctNote("Tab name is required.", "err");
+      setAcctNote("Saving…");
+      const res = await window.AgentAuth.authFetch("/api/admin/issue-submission-sheets", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "save", brandId: acctIssueSheetsSelectedBrand, moduleId, sheetUrlOrId, tabName }),
+      });
+      const data = await res.json();
+      if (!data.ok) return setAcctNote(data.error || "Save failed.", "err");
+      acctIssueSheetsData.sheets[`${acctIssueSheetsSelectedBrand}|${moduleId}`] = data.sheet;
+      setAcctNote("Saved — takes effect on the next submission.", "ok");
+      renderIssueSheets();
+    }
+
+    async function resetIssueSheetRow(row) {
+      const moduleId = row.dataset.module;
+      setAcctNote("Resetting…");
+      const res = await window.AgentAuth.authFetch("/api/admin/issue-submission-sheets", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset", brandId: acctIssueSheetsSelectedBrand, moduleId }),
+      });
+      const data = await res.json();
+      if (!data.ok) return setAcctNote(data.error || "Reset failed.", "err");
+      acctIssueSheetsData.sheets[`${acctIssueSheetsSelectedBrand}|${moduleId}`] = data.sheet;
+      setAcctNote("Reset to default.", "ok");
+      renderIssueSheets();
     }
 
     // ---- Deposit Sheet Link (live-editable Google Sheet source, per brand) ----
@@ -2908,6 +3028,7 @@ html[data-theme="light"] {
         // modeToSection)` guard below) instead of opening the modal.
         // Fixed alongside adding "weblink" for the new Web Link panel.
         bettinglinks: "bettingLinks", weblink: "webLink", promosheet: "promoCodeSheet",
+        issuesheets: "issueSubmissionSheet",
         reset: null, // no permission gate, same as the Reset Password sidebar item
       };
       if (!(mode in modeToSection)) return;

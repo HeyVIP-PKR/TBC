@@ -1222,7 +1222,14 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
 
 /* Account Management — "one continuous card" style: the toggle header
    and its sub-items live inside one rounded, bordered group instead of
-   an indented tree line, so it reads as a single self-contained panel. */
+   an indented tree line, so it reads as a single self-contained panel.
+   Carries its OWN copy of the ambient card-glow animation (below) —
+   `.am-toggle` still has the base `.sidebar-item` class too, but that
+   copy is disabled just underneath, since box-shadow bleeding outward
+   from a CHILD gets clipped by this element's own `overflow: hidden`.
+   An element's OWN box-shadow is NOT clipped by its OWN overflow:hidden
+   (only its children/content are) — so putting the glow here instead
+   lets it bleed and pulse exactly like every other sidebar card. */
 .am-group {
   border-radius: 14px;
   border: 1px solid transparent;
@@ -1230,6 +1237,7 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
   overflow: hidden;
   margin-bottom: 16px;
   transition: border-color 0.15s ease;
+  animation: card-glow 2.6s ease-in-out infinite;
 }
 .am-group:has(.am-toggle:hover),
 .am-group:has(.sidebar-subitems.open) { border-color: var(--panel-border); }
@@ -1239,6 +1247,9 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
   border-left: 3px solid transparent;
   border-radius: 0;
   background: transparent;
+  /* See the .am-group comment above — this would just be an invisible
+     (clipped) duplicate of the glow the group itself now carries. */
+  animation: none;
 }
 .am-group .am-toggle:hover { background: var(--sidebar-item-hover); transform: none; }
 .am-group .sidebar-subitems {

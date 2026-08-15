@@ -35,7 +35,7 @@ html[data-theme="light"] {
     linear-gradient(160deg, #dbe7fb 0%, #d9cef4 45%, #cdbdf2 75%, #c4b2ee 100%);
 }
 </style>
-<link rel="stylesheet" href="/assets/style.css?v=399612e7" />
+<link rel="stylesheet" href="/assets/style.css?v=50a3c4f3" />
 <link rel="stylesheet" href="/assets/toast.css?v=5779b14e" />
 <script src="/assets/toast.js?v=d9d84724"></script>
 <script src="/assets/starfield.js?v=b6e92821" defer></script>
@@ -97,18 +97,17 @@ html[data-theme="light"] {
             <button type="button" class="bulk-cancel" id="selectToggleBtn">Select</button>
           </div>
         </div>
-        <div class="bulk-action-bar" id="bulkActionBar" style="display:none;">
-          <label class="bulk-select-all"><input type="checkbox" id="tabSelectAll" />Select all</label>
-          <div class="bulk-action-row2">
-            <button type="button" class="bulk-action-btn" id="bulkReadBtn"></button>
-            <button type="button" class="bulk-action-btn" id="bulkSolveBtn"></button>
-          </div>
-        </div>
       </div>
 
       <div class="threads-search">
         <span>🔍</span>
         <input type="text" id="threadSearch" placeholder="Search username, TID, UID..." autocomplete="off" />
+      </div>
+
+      <div class="bulk-action-bar" id="bulkActionBar" style="display:none;">
+        <label class="bulk-select-all"><input type="checkbox" id="tabSelectAll" />Select all</label>
+        <button type="button" class="bulk-action-btn" id="bulkReadBtn"></button>
+        <button type="button" class="bulk-action-btn" id="bulkSolveBtn"></button>
       </div>
 
       <div class="threads-section" id="activeSection" data-tab-panel="active">
@@ -133,7 +132,7 @@ html[data-theme="light"] {
     </div>
   </div>
 
-  <script src="/assets/hub-nav.js?v=4911eb24"></script>
+  <script src="/assets/hub-nav.js?v=d86d0bdd"></script>
   <script src="/assets/brand-row.js?v=ea371f55"></script>
   <script>
     window.HubNav.mount("hubNavMount", {});

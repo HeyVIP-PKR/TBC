@@ -9,18 +9,12 @@
  */
 import { getBettingResources } from "../_shared/bettingResources.js";
 import { verifyRequest } from "../_shared/accounts.js";
-import { getFeatureStatus, accountCanBypass } from "../_shared/featureStatus.js";
 
 export async function onRequestGet({ request, env }) {
   try {
     if (!env.THREADS_KV) return json({ ok: true, rules: null, results: [], updatedAt: null });
     const account = await verifyRequest(request, env);
     if (!account) return json({ ok: false, error: "Login required." }, 401);
-
-    const featureStatus = await getFeatureStatus(env, "betting_resources");
-    if (featureStatus.status !== "active" && !accountCanBypass(account, featureStatus.bypassRoles)) {
-      return json({ ok: false, error: featureStatus.status === "coming_soon" ? "Coming soon." : "Under maintenance." }, 503);
-    }
 
     const config = await getBettingResources(env);
     return json({ ok: true, rules: config.rules, results: config.results, updatedAt: config.updatedAt });

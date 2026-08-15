@@ -84,7 +84,6 @@
   const SHELL_OWNED_SCRIPTS = new Set([
     "/assets/theme.js", "/assets/toast.js", "/assets/starfield.js",
     "/assets/authguard.js", "/assets/announcement-banner.js",
-    "/assets/apply-feature-status.js", "/assets/settings-dropdown.js",
     "/assets/schemas.js",
   ]);
   // NOTE: /assets/hub-nav.js is deliberately NOT in this set. index.html

@@ -4,7 +4,6 @@ import { uploadAttachmentToR2, screenshotUrl } from "../_shared/r2.js";
 import { createThread } from "../_shared/threads.js";
 import { verifyRequest, canSeeBrand, canSeeModule } from "../_shared/accounts.js";
 import { getRouteOverride } from "../_shared/routes.js";
-import { getFeatureStatus, accountCanBypass } from "../_shared/featureStatus.js";
 import { resolveColumnValues, resolveSheetLayout, formatDateDDMMYYYY, buildTicketMessage, buildTitleAndSummary } from "../_shared/messageBuilders.js";
 import { compressImageForTelegram } from "../_shared/telegramImageCompress.js";
 
@@ -50,13 +49,6 @@ async function handleSubmit({ request, env }) {
   // of what the sidebar/form on the client hid or let through.
   if (!canSeeModule(account, moduleId)) {
     return json({ ok: false, error: `You don't have access to submit ${MODULE_META[moduleId]?.name || moduleId} tickets.` }, 403);
-  }
-  // Settings / Maintenance toggle — separate from allowedModules above:
-  // this is a live on/off switch a SuperAdmin/Owner can flip regardless
-  // of who's normally allowed to see the module (see _shared/featureStatus.js).
-  const featureStatus = await getFeatureStatus(env, moduleId);
-  if (featureStatus.status !== "active" && !accountCanBypass(account, featureStatus.bypassRoles)) {
-    return json({ ok: false, error: featureStatus.status === "coming_soon" ? "This module isn't available yet." : "This module is currently under maintenance." }, 403);
   }
   const brand = BRANDS[brandId];
   if (!brand) {

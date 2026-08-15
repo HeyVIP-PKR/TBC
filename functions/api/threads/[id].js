@@ -57,23 +57,12 @@ import { verifyRequest, canSeeBrand } from "../../_shared/accounts.js";
 import { BRANDS, MODULE_META, MESSAGE_TEMPLATE, PROMOTION_MESSAGE_TEMPLATE } from "../../_shared/routing.js";
 import { updateRowByColumns } from "../../_shared/googleSheets.js";
 import { buildTicketMessage, buildTitleAndSummary, resolveColumnValues } from "../../_shared/messageBuilders.js";
-import { getFeatureStatus, accountCanBypass } from "../../_shared/featureStatus.js";
 import { compressImageForTelegram } from "../../_shared/telegramImageCompress.js";
-
-async function checkThreadsFeatureGate(env, account) {
-  const featureStatus = await getFeatureStatus(env, "tg_reply_threads");
-  if (featureStatus.status !== "active" && !accountCanBypass(account, featureStatus.bypassRoles)) {
-    return featureStatus.status === "coming_soon" ? "TG Reply Threads isn't available yet." : "TG Reply Threads is currently under maintenance.";
-  }
-  return null;
-}
 
 export async function onRequestGet({ request, env, params }) {
   if (!env.THREADS_KV) return json({ ok: false, error: "THREADS_KV is not bound yet." }, 500);
   const account = await verifyRequest(request, env);
   if (!account) return json({ ok: false, error: "Login required." }, 401);
-  const gateError = await checkThreadsFeatureGate(env, account);
-  if (gateError) return json({ ok: false, error: gateError }, 403);
   const thread = await getThread(env, params.id);
   if (!thread || thread.deleted || !canSeeBrand(account, thread.brand)) return json({ ok: false, error: "Not found." }, 404);
   return json({ ok: true, thread });
@@ -99,8 +88,6 @@ async function handleThreadAction({ request, env, params }) {
   if (!env.THREADS_KV) return json({ ok: false, error: "THREADS_KV is not bound yet." }, 500);
   const account = await verifyRequest(request, env);
   if (!account) return json({ ok: false, error: "Login required." }, 401);
-  const gateError = await checkThreadsFeatureGate(env, account);
-  if (gateError) return json({ ok: false, error: gateError }, 403);
 
   let body;
   try {

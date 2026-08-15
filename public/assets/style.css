@@ -945,14 +945,10 @@ html[data-theme="light"] .aa-online-badge { color: #16805c; }
   #aaRecordPopover table, #aaRecordPopover thead, #aaRecordPopover tbody, #aaRecordPopover th, #aaRecordPopover td { white-space: normal !important; }
 }
 
-/* ---- Settings (Maintenance / Coming soon toggle) — reuses .tgroute-row/
-   .route-tag/.tgroute-action-btn styling above; the status + role fields
-   themselves are .fs-dropdown instances (see settings-dropdown.css). */
-.fs-fields { flex-wrap: wrap; align-items: flex-start; }
-.fs-fields .fs-dropdown { min-width: 170px; }
-@media (max-width: 720px) {
-  .fs-fields .fs-dropdown { min-width: 100%; }
-}
+/* ---- Settings (Maintenance/Coming soon toggle) removed 2026-08 — this
+   used to size the .fs-fields/.fs-dropdown rows (settings-dropdown.css,
+   also removed) that lived here. See renderSettingsPanel() in
+   index.html for what's left in this modal. */
 
 
 /* ---- Theme toggle (legacy floating button, kept for old pages) ---- */

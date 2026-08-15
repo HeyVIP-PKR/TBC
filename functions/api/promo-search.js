@@ -23,7 +23,6 @@
  */
 import { batchGetValues, getSheetTabTitles } from "../_shared/googleSheets.js";
 import { verifyRequest } from "../_shared/accounts.js";
-import { getFeatureStatus, accountCanBypass } from "../_shared/featureStatus.js";
 
 const PROMO_CODE_SHEET = {
   sheetId: "1VYKwdGyoa5qxCScHWyKrYPQYvQPl8igrBzK1mk2RT98",
@@ -86,11 +85,6 @@ async function handleSearch({ request, env }) {
   // Whole hub requires login now — see submit.js for the same note.
   const account = await verifyRequest(request, env);
   if (!account) return json({ ok: false, error: "Login required." }, 401);
-
-  const featureStatus = await getFeatureStatus(env, "promo_code_search");
-  if (featureStatus.status !== "active" && !accountCanBypass(account, featureStatus.bypassRoles)) {
-    return json({ ok: false, error: featureStatus.status === "coming_soon" ? "Promo Code Search isn't available yet." : "Promo Code Search is currently under maintenance." }, 403);
-  }
 
   const codes = (new URL(request.url).searchParams.get("codes") || "")
     .split(",")

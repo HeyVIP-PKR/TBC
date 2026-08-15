@@ -12,7 +12,6 @@
  */
 import { listThreads } from "../_shared/threads.js";
 import { verifyRequest, canSeeBrand } from "../_shared/accounts.js";
-import { getFeatureStatus, accountCanBypass } from "../_shared/featureStatus.js";
 
 export async function onRequestGet(context) {
   try {
@@ -28,11 +27,6 @@ async function handleGet({ request, env }) {
   }
   const account = await verifyRequest(request, env);
   if (!account) return json({ ok: false, error: "Login required." }, 401);
-
-  const featureStatus = await getFeatureStatus(env, "tg_reply_threads");
-  if (featureStatus.status !== "active" && !accountCanBypass(account, featureStatus.bypassRoles)) {
-    return json({ ok: false, error: featureStatus.status === "coming_soon" ? "TG Reply Threads isn't available yet." : "TG Reply Threads is currently under maintenance." }, 403);
-  }
 
   const q = new URL(request.url).searchParams.get("q") || "";
   const all = (await listThreads(env, { q })).filter((t) => canSeeBrand(account, t.brand));

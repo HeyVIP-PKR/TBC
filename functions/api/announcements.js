@@ -10,18 +10,12 @@
  */
 import { getActiveAnnouncements, getAnnouncementSettings } from "../_shared/announcements.js";
 import { verifyRequest } from "../_shared/accounts.js";
-import { getFeatureStatus, accountCanBypass } from "../_shared/featureStatus.js";
 
 export async function onRequestGet({ request, env }) {
   try {
     if (!env.THREADS_KV) return json({ ok: true, announcements: [], rotateIntervalMs: 5000 });
     const account = await verifyRequest(request, env);
     if (!account) return json({ ok: false, error: "Login required." }, 401);
-
-    const featureStatus = await getFeatureStatus(env, "announcements");
-    if (featureStatus.status !== "active" && !accountCanBypass(account, featureStatus.bypassRoles)) {
-      return json({ ok: true, announcements: [], rotateIntervalMs: 5000 }); // maintenance/coming soon — banner just stays quiet, not an error
-    }
 
     const [active, settings] = await Promise.all([getActiveAnnouncements(env), getAnnouncementSettings(env)]);
     return json({

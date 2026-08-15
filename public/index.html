@@ -38,14 +38,10 @@ html[data-theme="light"] {
 <link rel="stylesheet" href="/assets/style.css?v=467b5a4c" />
 <link rel="stylesheet" href="/assets/toast.css?v=5779b14e" />
 <script src="/assets/toast.js?v=d9d84724"></script>
-<link rel="stylesheet" href="/assets/feature-status.css?v=0c3c3213" />
-<link rel="stylesheet" href="/assets/settings-dropdown.css?v=248916b3" />
 <script src="/assets/starfield.js?v=b6e92821" defer></script>
 <script src="/assets/authguard.js?v=19b1b251"></script>
 <script src="/assets/presence-heartbeat.js?v=a0820d9b"></script>
 <script src="/assets/announcement-banner.js?v=26c15118" defer></script>
-<script src="/assets/apply-feature-status.js?v=98e16085"></script>
-<script src="/assets/settings-dropdown.js?v=83379e28"></script>
 </head>
 <body class="hub-page">
   <header class="topbar">
@@ -213,40 +209,40 @@ html[data-theme="light"] {
       <div class="inner">
         <div class="tool-cards">
           <!-- Row 1 -->
-          <a href="/threads.html" class="tool-card" id="threadsCard" data-feature-item="tg_reply_threads" data-route="threads" style="--tool-accent:#38bdf8;">
+          <a href="/threads.html" class="tool-card" id="threadsCard" data-route="threads" style="--tool-accent:#38bdf8;">
             <div class="t-icon">💭<span class="t-badge" id="threadsUnreadBadge"></span></div>
             <div class="t-name">TG Reply Threads</div>
             <div class="t-desc">Track Telegram replies to your form submissions in real-time</div>
             <div class="t-sub-stat" id="threadsUnsolvedStat"></div>
             <span class="t-arrow">&rarr;</span>
           </a>
-          <a href="/deposit-issue.html" class="tool-card" data-feature-item="deposit_issue" data-route="deposit_issue" style="--tool-accent:#4fa6f5;">
+          <a href="/deposit-issue.html" class="tool-card" data-route="deposit_issue" style="--tool-accent:#4fa6f5;">
             <div class="t-icon">💳</div>
             <div class="t-name">Deposit Issue</div>
             <div class="t-desc">Search PKR Deposit Support records and update CS fields</div>
             <span class="t-arrow">&rarr;</span>
           </a>
-          <a href="/deposit-backup.html" class="tool-card" data-feature-item="deposit_backup" data-route="deposit_backup" style="--tool-accent:#8b93b8;">
+          <a href="/deposit-backup.html" class="tool-card" data-route="deposit_backup" style="--tool-accent:#8b93b8;">
             <div class="t-icon">💻</div>
             <div class="t-name">Deposit Backup</div>
             <div class="t-desc">Search across all backup sheets</div>
             <span class="t-arrow">&rarr;</span>
           </a>
           <!-- Row 2 -->
-          <a href="/promo.html" class="tool-card" data-feature-item="promo_code_search" data-route="promo" style="--tool-accent:#f472b6;">
+          <a href="/promo.html" class="tool-card" data-route="promo" style="--tool-accent:#f472b6;">
             <div class="t-icon">🎟️</div>
             <div class="t-name">Promo Code Search</div>
             <div class="t-desc">Search multiple promo codes at once</div>
             <span class="t-arrow">&rarr;</span>
           </a>
-          <a href="/announcements.html" class="tool-card" id="announceCard" data-feature-item="announcements" data-route="announcements" style="--tool-accent:#f3c463; display:none;">
+          <a href="/announcements.html" class="tool-card" id="announceCard" data-route="announcements" style="--tool-accent:#f3c463; display:none;">
             <div class="t-icon" id="announceIcon">📢</div>
             <div class="t-name">Announcement</div>
             <div class="t-desc">Set the site-wide reminder banner</div>
             <div class="t-sub-stat" id="announceStat"></div>
             <span class="t-arrow">&rarr;</span>
           </a>
-          <a href="/betting-resources.html" class="tool-card" data-feature-item="betting_resources" style="--tool-accent:#c8912f;">
+          <a href="/betting-resources.html" class="tool-card" style="--tool-accent:#c8912f;">
             <div class="t-icon">🎲</div>
             <div class="t-name">HeyVIP Betting Rules</div>
             <div class="t-desc">Betting guidance links + results-finding websites</div>
@@ -490,11 +486,6 @@ html[data-theme="light"] {
       `;
       list.appendChild(a);
     });
-
-    // Gray-out/badge any Home-card or sidebar-module link currently under
-    // Maintenance/Coming soon — see functions/_shared/featureStatus.js.
-    // UX only; the real block is server-side in submit.js/threads.js/etc.
-    applyFeatureStatuses();
 
     // ---- Account Management (sidebar dropdown + 4 focused modals) ----
     // Rank matches functions/_shared/accounts.js ROLE_RANK exactly — keep
@@ -898,7 +889,7 @@ html[data-theme="light"] {
 
       if (mode === "settings") {
         acctTitle.textContent = "Settings";
-        await loadFeatureStatus();
+        renderSettingsPanel();
       }
 
       if (mode === "bettinglinks") {
@@ -1114,7 +1105,6 @@ html[data-theme="light"] {
       const slot = sheets[acctDepositSheetsSelectedBrand] || { sheetId: "", tabNames: [], isOverride: false };
       const bkp = backup[acctDepositSheetsSelectedBrand] || { thisMonth: null, lastMonth: null };
       const thisMonth = bkp.thisMonth;
-      const lastMonth = bkp.lastMonth;
 
       acctBody.innerHTML = `
         <div class="tgroute-layout">
@@ -1147,25 +1137,11 @@ html[data-theme="light"] {
                 </div>` : ""}
               </div>
             </div>
-
-            <div class="tgroute-row" data-brand="${acctEsc(acctDepositSheetsSelectedBrand)}">
-              <div class="tgroute-mod-name">💻 Deposit Backup — Last month
-                <span class="route-tag">read-only</span>
-              </div>
-              <div class="tgroute-fields">
-                <input type="text" value="${lastMonth ? acctEsc(lastMonth.sheetId) : "(empty)"}" disabled />
-                <input type="text" value="${lastMonth ? acctEsc((lastMonth.tabNames || []).join(", ")) : ""}" disabled />
-                ${canEdit ? `<div class="tgroute-row-actions">
-                  <button type="button" class="tgroute-action-btn depbackup-roll" data-brand="${acctEsc(acctDepositSheetsSelectedBrand)}">Transfer</button>
-                </div>` : ""}
-              </div>
-            </div>
           </div>
         </div>
         <hr class="tgroute-divider" />
         ${canEdit ? "" : '<p class="edit-modal-note">View only.</p>'}
-        <p class="edit-modal-note tgroute-footnote">Changes apply to the very next search — no redeploy needed. Paste each brand's Sheet URL here as you get access to it; "default" means Crickex's hardcoded value (every other brand starts unconfigured until a link is saved), "custom" means it's been overridden here.</p>
-        <p class="edit-modal-note tgroute-footnote">At the start of a new month: <span style="color:#e5304a; font-weight:800;">Transfer from This Month</span> into Last Month (discarding old Last Month), then paste + Save the new month's link above.</p>`;
+        <p class="edit-modal-note tgroute-footnote">Changes apply to the very next search — no redeploy needed. Paste each brand's Sheet URL here as you get access to it; "default" means Crickex's hardcoded value (every other brand starts unconfigured until a link is saved), "custom" means it's been overridden here.</p>`;
 
       acctBody.querySelectorAll(".tgroute-brand").forEach((el) => {
         el.addEventListener("click", () => {
@@ -1185,9 +1161,6 @@ html[data-theme="light"] {
       });
       acctBody.querySelectorAll(".depbackup-tm-clear").forEach((btn) => {
         btn.addEventListener("click", () => clearDepositBackupThisMonth(btn.closest(".tgroute-row")));
-      });
-      acctBody.querySelectorAll(".depbackup-roll").forEach((btn) => {
-        btn.addEventListener("click", () => rollDepositBackup(btn.dataset.brand));
       });
     }
 
@@ -1256,23 +1229,13 @@ html[data-theme="light"] {
       renderDepositSheets();
     }
 
-    async function rollDepositBackup(brandId) {
-      const current = (acctDepositSheetsData.backup[brandId] || {}).thisMonth;
-      const msg = current
-        ? "This Month's sheet will become the new Last Month (replacing whatever's there now), and This Month will be cleared so you can paste in the new link. Continue?"
-        : "This Month is currently empty — rolling will just clear out the old Last Month. Continue?";
-      if (!confirm(msg)) return;
-      setAcctNote("Rolling over…");
-      const res = await window.AgentAuth.authFetch("/api/admin/deposit-sheets", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "rollBackup", brandId }),
-      });
-      const data = await res.json();
-      if (!data.ok) return setAcctNote(data.error || "Rollover failed.", "err");
-      acctDepositSheetsData.backup[brandId] = data.backup;
-      setAcctNote("Rolled over — paste the new month's link and Save.", "ok");
-      renderDepositSheets();
-    }
+    // rollDepositBackup() ("Transfer from This Month" -> Last Month)
+    // removed 2026-08 alongside the "Deposit Backup — Last month" row
+    // itself, per direct business-owner request. Last Month's data (if
+    // any brand had one configured) is untouched in KV/deposit-backup/
+    // search.js — it still gets searched alongside This Month on
+    // /deposit-backup.html exactly as before, it just can no longer be
+    // viewed, cleared, or refreshed from this admin panel going forward.
 
     // ---- Web Link (2026-08) — the URL each brand's pill on the Home
     // page's marquee row (#brandRow) opens when clicked. This USED TO
@@ -1370,87 +1333,23 @@ html[data-theme="light"] {
       renderWebLinks();
     }
 
-    // ---- Settings (Maintenance / Coming soon toggle) ----
-    // One row per controllable item — Active / Maintenance / Coming soon,
-    // plus which roles can bypass it while it's off. Backed by
-    // /api/admin/feature-status, same override-over-code-default layering
-    // as TG Group/Channel and Deposit Sheet Link above. Live — no redeploy
-    // needed; the "active" pages/APIs re-check this on every request.
-    let acctFeatureStatusData = null; // { items, statuses }
-    const FS_STATUS_OPTIONS = [
-      { value: "active", label: "✅ Active" },
-      { value: "maintenance", label: "🚧 Maintenance" },
-      { value: "coming_soon", label: "🔜 Coming soon" },
-    ];
-    const FS_ROLE_OPTIONS = [
-      { value: "agent", label: "Agent" },
-      { value: "senior", label: "Senior" },
-      { value: "admin", label: "Admin" },
-      { value: "superadmin", label: "SuperAdmin" },
-      { value: "owner", label: "Owner" },
-    ];
-    const FS_ROLE_LABEL = Object.fromEntries(FS_ROLE_OPTIONS.map((r) => [r.value, r.label]));
-
-    function fsRoleSummary(bypassRoles) {
-      if (!bypassRoles || !bypassRoles.length) return "No one";
-      return bypassRoles.map((r) => FS_ROLE_LABEL[r] || r).join(", ");
-    }
-
-    async function loadFeatureStatus() {
-      const res = await window.AgentAuth.authFetch("/api/admin/feature-status");
-      const data = await res.json();
-      if (!data.ok) {
-        acctBody.innerHTML = `<p class="edit-modal-note err">${acctEsc(data.error || "Failed to load.")}</p>`;
-        return;
-      }
-      acctFeatureStatusData = data;
-      renderFeatureStatus();
-    }
-
-    function renderFeatureStatus() {
-      if (!acctFeatureStatusData) return;
-      const { items, statuses } = acctFeatureStatusData;
+    // ---- Settings ----
+    // Used to also hold a Maintenance/Coming soon toggle per module
+    // (backed by /api/admin/feature-status) — removed 2026-08 per direct
+    // business-owner request ("already useless"). Removed thoroughly, not
+    // just hidden here: the admin/public feature-status endpoints,
+    // _shared/featureStatus.js, the per-request gate checks it added to
+    // submit.js/threads.js/threads/[id].js/promo-search.js/announcements.js/
+    // betting-resources.js/deposit-issue/deposit-backup, the Home-card
+    // gray-out script (apply-feature-status.js/feature-status.css), and
+    // the dropdown widget it was the only user of (settings-dropdown.js/
+    // css) are all gone too — see CHANGES-maintenance-removal.md. What's
+    // left here (@ Tag Username backfill, Announcement rotation speed)
+    // are unrelated features that just happened to live in the same
+    // modal.
+    function renderSettingsPanel() {
       const canEdit = canEditAdminSection("settings");
-      const roAttr = canEdit ? "" : "disabled";
-
-      const rowsHtml = items.map((item) => {
-        const s = statuses[item.id] || { status: "active", bypassRoles: ["superadmin", "owner"] };
-        const isActive = s.status === "active";
-        const currentStatusLabel = (FS_STATUS_OPTIONS.find((o) => o.value === s.status) || FS_STATUS_OPTIONS[0]).label;
-        const statusOptionsHtml = FS_STATUS_OPTIONS.map((o) => `
-          <div class="fs-dropdown-option${o.value === s.status ? " selected" : ""}" data-value="${o.value}"><span>${acctEsc(o.label)}</span><span class="fs-check">✓</span></div>
-        `).join("");
-        const roleOptionsHtml = FS_ROLE_OPTIONS.map((r) => `
-          <div class="fs-dropdown-option${s.bypassRoles.includes(r.value) ? " selected" : ""}" data-value="${r.value}"><span>${acctEsc(r.label)} can still use it</span><span class="fs-check">✓</span></div>
-        `).join("");
-        return `
-          <div class="tgroute-row" data-item="${acctEsc(item.id)}">
-            <div class="tgroute-mod-name">${item.emoji} ${acctEsc(item.name)}
-              <span class="route-tag${s.status !== "active" ? " custom" : ""}">${s.status === "active" ? "active" : s.status === "maintenance" ? "maintenance" : "coming soon"}</span>
-            </div>
-            <div class="tgroute-fields fs-fields">
-              <div class="fs-dropdown" data-field="status" data-value="${acctEsc(s.status)}">
-                <button type="button" class="fs-dropdown-trigger" ${roAttr}>${acctEsc(currentStatusLabel)}</button>
-                <div class="fs-dropdown-menu">${statusOptionsHtml}</div>
-              </div>
-              <div class="fs-dropdown${isActive ? " fs-dropdown-na" : ""}" data-field="roles" data-values="${acctEsc(s.bypassRoles.join(","))}">
-                <button type="button" class="fs-dropdown-trigger" ${isActive ? "disabled" : roAttr}>${isActive ? "Not applicable while Active" : acctEsc(fsRoleSummary(s.bypassRoles))}</button>
-                <div class="fs-dropdown-menu">${roleOptionsHtml}</div>
-              </div>
-              ${canEdit ? `<div class="tgroute-row-actions">
-                <button type="button" class="tgroute-action-btn fs-save">Save</button>
-              </div>` : ""}
-            </div>
-          </div>`;
-      }).join("");
-
       acctBody.innerHTML = `
-        <div class="tgroute-modules fs-scroll">${rowsHtml}</div>
-        <hr class="tgroute-divider" />
-        ${canEdit ? "" : '<p class="edit-modal-note">View only.</p>'}
-        <p class="edit-modal-note tgroute-footnote">Maintenance/Coming soon blocks everyone whose role isn't checked in the second dropdown — Home page, form page, and the API itself. Owner is always allowed through even if unchecked. Changes apply immediately, no redeploy needed.</p>
-
-        <hr class="tgroute-divider" />
         <div class="mention-backfill-row">
           <div class="mention-backfill-copy">
             <div class="mention-backfill-title">@ Tag Username — historical backfill</div>
@@ -1479,34 +1378,18 @@ html[data-theme="light"] {
             </div>
             <p class="edit-modal-note" id="rotateStatus"></p>
           </div>
-        </div>`;
+        </div>
+        ${canEdit ? "" : '<p class="edit-modal-note">View only.</p>'}`;
 
       wireMentionBackfill();
       loadAnnounceRotateSetting();
-      initFsDropdowns(acctBody, {
-        onStatusChange: (dd, newStatus) => {
-          const row = dd.closest(".tgroute-row");
-          const rolesDd = row.querySelector('.fs-dropdown[data-field="roles"]');
-          const rolesTrigger = rolesDd.querySelector(".fs-dropdown-trigger");
-          const isActiveNow = newStatus === "active";
-          rolesDd.classList.toggle("fs-dropdown-na", isActiveNow);
-          rolesTrigger.disabled = isActiveNow ? true : !canEdit;
-          rolesTrigger.textContent = isActiveNow ? "Not applicable while Active" : fsRoleSummary(rolesDd.dataset.values ? rolesDd.dataset.values.split(",").filter(Boolean) : []);
-        },
-        onRoleToggle: (dd, selectedRoles) => {
-          dd.querySelector(".fs-dropdown-trigger").textContent = fsRoleSummary(selectedRoles);
-        },
-      });
-      acctBody.querySelectorAll(".fs-save").forEach((btn) => {
-        btn.addEventListener("click", () => saveFeatureStatusRow(btn.closest(".tgroute-row")));
-      });
     }
 
     // @ Tag Username — historical backfill (see functions/api/admin/
     // mention-backfill.js). Paginates itself: each call scans up to 100
     // tickets and returns whether there's more, so this loop just keeps
     // calling until `done`, updating the running total on screen as it
-    // goes. Re-wired every renderFeatureStatus() call (fresh button
+    // goes. Re-wired every renderSettingsPanel() call (fresh button
     // element each time), but that only happens on load/save/reset —
     // never while a backfill is actually in flight — so there's no risk
     // of losing progress mid-scan.
@@ -1592,40 +1475,6 @@ html[data-theme="light"] {
       if (!data.ok) { showToast(data.error || "Save failed.", "err"); return; }
       showToast("Saved — takes effect instantly for this device, up to 60s for others.", "ok");
       window.refreshAnnouncementBanner?.();
-    }
-
-    async function saveFeatureStatusRow(row) {
-      const itemId = row.dataset.item;
-      const status = row.querySelector('.fs-dropdown[data-field="status"]').dataset.value;
-      const rolesDd = row.querySelector('.fs-dropdown[data-field="roles"]');
-      const bypassRoles = rolesDd.dataset.values ? rolesDd.dataset.values.split(",").filter(Boolean) : [];
-      // "Active" isn't a storable override — it's just the absence of one —
-      // so saving "Active" means deleting the override (what the old,
-      // separate "Reset to Active" button used to do), not POSTing
-      // status:"active" (the server rejects that value on purpose).
-      const isActive = status === "active";
-      const res = await window.AgentAuth.authFetch("/api/admin/feature-status", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(isActive ? { action: "reset", itemId } : { action: "save", itemId, status, bypassRoles }),
-      });
-      const data = await res.json();
-      if (!data.ok) return showToast(data.error || "Save failed.", "err");
-      acctFeatureStatusData.statuses[itemId] = data.status;
-      // Build the toast text off the actual selected status, not a fixed
-      // string — same fix as the Active/Inactive announcement toggle:
-      // "Save Active success." / "Save Maintenance success." / "Save
-      // Coming soon success." must each say what was actually saved.
-      const statusLabel = { active: "Active", maintenance: "Maintenance", coming_soon: "Coming soon" }[status] || status;
-      showToast(`Save ${statusLabel} success.`, "ok");
-      renderFeatureStatus();
-      // Update the Home card/sidebar link behind the modal from the data
-      // this Save call just returned — NOT a fresh /api/feature-status
-      // fetch, since Cloudflare KV is only eventually consistent and a
-      // re-read right after put() can still come back stale.
-      applyFeatureStatusItem(itemId, {
-        status: data.status.status,
-        blocked: data.status.status !== "active" && !data.status.bypassRoles.includes(authInfo?.role),
-      });
     }
 
     let acctOfficesById = {};
@@ -2291,7 +2140,6 @@ html[data-theme="light"] {
     function closeAcctModal() {
       acctBackdrop.classList.remove("is-open");
       acctMode = null;
-      cleanupOrphanedFsDropdownMenus();
       closeIpaPopovers();
     }
     document.getElementById("acctModalClose").addEventListener("click", closeAcctModal);

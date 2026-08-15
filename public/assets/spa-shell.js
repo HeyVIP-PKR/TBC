@@ -185,6 +185,7 @@
     if (view === "home") {
       mountEl.style.display = "none";
       mountEl.innerHTML = "";
+      mountEl.removeAttribute("data-view");
       homeEl.style.display = "";
       if (opts.pushUrl !== false) history.pushState({ view: "home" }, "", SHELL_PATH);
       document.title = "PKR CS Team - TBC";
@@ -195,6 +196,12 @@
     homeEl.style.display = "none";
     mountEl.style.display = "flex";
     mountEl.innerHTML = '<div class="spa-loading">Loading…</div>';
+    // Which exact view is mounted — needed so CSS can single out just
+    // Threads (auto-collapsing the persistent ISSUE SUBMISSION sidebar
+    // on narrower windows, see style.css's `body:has(#spaMount[data-view="threads"])`
+    // block) without also catching other routes that don't have the
+    // same "not enough width for a 3rd column" problem.
+    mountEl.setAttribute("data-view", view);
 
     const route = ROUTES[view];
 

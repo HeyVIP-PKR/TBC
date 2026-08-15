@@ -267,6 +267,28 @@ a { color: inherit; text-decoration: none; }
 }
 body.hubnav-open .hub-nav-backdrop { display: block; }
 
+/* ---- index.html's OWN sidebar drawer (2026-08 — ported from the INR
+   build's proven implementation, see spa-shell.js's mount()). Separate
+   mechanism from .hub-nav-toggle above: index.html has always kept its
+   own, independent sidebar-rendering code rather than hub-nav.js (see
+   that file's header comment), and — crucially — clicking a tool card
+   from the hub does NOT navigate to a new page at all, it's an in-place
+   SPA mount (see spa-shell.js) that keeps THIS sidebar on screen the
+   whole time. .hub-nav-toggle only ever runs on a standalone page
+   load (threads.html opened directly/bookmarked/refreshed), so it was
+   never reachable via the hub's own card-click flow — this is the
+   fix for that. Both start hidden/inert; only turned on inside the
+   @media blocks further below. */
+.sidebar-toggle-btn { display: none; }
+.sidebar-backdrop {
+  display: none;
+  position: fixed; inset: 0; z-index: 44;
+  background: rgba(10, 12, 25, 0.55);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
 .logo-badge {
   width: 34px; height: 34px; border-radius: 10px;
   background: linear-gradient(135deg, #6366f1, #38bdf8);
@@ -1521,9 +1543,63 @@ body.subpage-fixed .topbar { flex-shrink: 0; }
   .tool-cards { grid-template-columns: 1fr; max-width: 360px; }
 }
 
+/* Sidebar becomes an off-canvas drawer instead of stacking full-width
+   above the content (the old behavior this replaces) — matches the
+   INR build's proven pattern exactly. It's out of normal flow now
+   (position:fixed), so nothing about .hub-layout/.hub-main needs to
+   change to accommodate it, and the main content column never gets
+   squeezed or reflowed by the drawer opening/closing. */
 @media (max-width: 720px) {
-  .hub-layout { flex-direction: column; min-height: auto; }
-  .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--panel-border); max-height: 60vh; }
+  .sidebar-toggle-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    width: 34px; height: 34px; border: none; background: none; cursor: pointer; margin-right: 4px; padding: 0;
+  }
+  .sidebar-toggle-btn span { display: block; width: 19px; height: 2px; border-radius: 2px; background: var(--ink); }
+  .hub-layout { min-height: auto; }
+  .sidebar {
+    position: fixed; top: 61px; left: 0; bottom: 0; z-index: 45;
+    width: 290px; max-width: 82vw; max-height: none;
+    border-right: 1px solid var(--panel-border); border-bottom: none;
+    background: var(--card-bg); box-shadow: var(--shadow);
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-backdrop.open { display: block; opacity: 1; pointer-events: auto; }
+}
+
+/* Auto-hide the persistent ISSUE SUBMISSION nav sidebar while Threads is
+   open, but ONLY below this width — Threads already brings its own
+   340px thread-list sidebar; stacked with this one's 290px, a narrower/
+   half window leaves barely any room for the actual conversation pane.
+   At full window width there's plenty of room for all three columns, so
+   the nav stays put there — this is a width-triggered collapse, not
+   "always hide on Threads". Reuses the exact off-canvas drawer mechanics
+   the ≤720px breakpoint above already has (same fixed-position +
+   translateX slide + hamburger toggle) instead of a bare display:none —
+   a plain display:none has no way back in; this keeps the sidebar
+   reachable via the same toggle button. data-view="threads" (set in
+   spa-shell.js's mount()) scopes this to Threads specifically. Ported
+   from the INR build, which hit this exact "half-split window makes the
+   chat unreadably narrow" complaint first. */
+@media (max-width: 1300px) {
+  body:has(#spaMount[data-view="threads"]) .sidebar-toggle-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    width: 34px; height: 34px; border: none; background: none; cursor: pointer; margin-right: 4px; padding: 0;
+  }
+  body:has(#spaMount[data-view="threads"]) .sidebar-toggle-btn span {
+    display: block; width: 19px; height: 2px; border-radius: 2px; background: var(--ink);
+  }
+  body:has(#spaMount[data-view="threads"]) .sidebar {
+    position: fixed; top: 61px; left: 0; bottom: 0; z-index: 45;
+    width: 290px; max-width: 82vw; max-height: none;
+    border-right: 1px solid var(--panel-border); border-bottom: none;
+    background: var(--card-bg); box-shadow: var(--shadow);
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+  }
+  body:has(#spaMount[data-view="threads"]) .sidebar.open { transform: translateX(0); }
+  body:has(#spaMount[data-view="threads"]) .sidebar-backdrop.open { display: block; opacity: 1; pointer-events: auto; }
 }
 
 /* ---- betting-resources.html — the HeyVIP Betting Rules page itself ---- */

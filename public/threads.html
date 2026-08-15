@@ -71,34 +71,55 @@ html[data-theme="light"] {
       <div id="announcementBanner"></div>
       <div class="threads-body-row">
     <aside class="threads-sidebar">
+      <div class="threads-tabs" id="threadsTabs">
+        <button type="button" class="threads-tab tab-active" data-tab="active" id="tabActive">
+          <span class="threads-tab-label">Active</span>
+          <span class="threads-tab-count" id="activeCount">0</span>
+        </button>
+        <button type="button" class="threads-tab tab-solved" data-tab="solved" id="tabSolved">
+          <span class="threads-tab-label">Solved</span>
+          <span class="threads-tab-count" id="solvedCount">0</span>
+        </button>
+        <button type="button" class="threads-tab tab-recall" data-tab="recall" id="tabRecall" style="display:none;">
+          <span class="threads-tab-label">Recall</span>
+          <span class="threads-tab-count" id="recallCount">0</span>
+        </button>
+      </div>
+
+      <div class="all-threads-card">
+        <div class="all-threads-row">
+          <div class="all-threads-titles">
+            <div class="all-threads-title">All threads</div>
+            <div class="all-threads-sub" id="allThreadsSub">Active threads · 0 new replies</div>
+          </div>
+          <div class="all-threads-right">
+            <span class="all-threads-count" id="allThreadsCount">0</span>
+            <button type="button" class="bulk-cancel" id="selectToggleBtn">Select</button>
+          </div>
+        </div>
+        <div class="bulk-action-bar" id="bulkActionBar" style="display:none;">
+          <label class="bulk-select-all"><input type="checkbox" id="tabSelectAll" />Select all</label>
+          <div class="bulk-action-row2">
+            <button type="button" class="bulk-action-btn" id="bulkReadBtn"></button>
+            <button type="button" class="bulk-action-btn" id="bulkSolveBtn"></button>
+          </div>
+        </div>
+      </div>
+
       <div class="threads-search">
         <span>🔍</span>
         <input type="text" id="threadSearch" placeholder="Search username, TID, UID..." autocomplete="off" />
       </div>
 
-      <div class="bulk-action-bar" id="bulkActionBar" style="display:none;">
-        <div class="bulk-action-row1">
-          <span class="bulk-count" id="bulkCount">0</span>
-          <button type="button" class="bulk-cancel" id="bulkCancelBtn">Cancel</button>
-        </div>
-        <div class="bulk-action-row2">
-          <button type="button" class="bulk-action-btn" id="bulkReadBtn"></button>
-          <button type="button" class="bulk-action-btn" id="bulkSolveBtn"></button>
-        </div>
-      </div>
-
-      <div class="threads-section" id="activeSection">
-        <div class="threads-section-title" data-target="activeList"><span><span class="chev">▾</span> Active Threads</span><span class="title-right"><input type="checkbox" class="section-select-all" id="activeSelectAll" title="Select all" /><span class="count" id="activeCount">0</span></span></div>
+      <div class="threads-section" id="activeSection" data-tab-panel="active">
         <div class="thread-list" id="activeList"></div>
       </div>
 
-      <div class="threads-section collapsed" id="solvedSection">
-        <div class="threads-section-title collapsed" data-target="solvedList"><span><span class="chev">▾</span> Solved Chat History</span><span class="title-right"><input type="checkbox" class="section-select-all" id="solvedSelectAll" title="Select all" /><span class="count" id="solvedCount">0</span></span></div>
+      <div class="threads-section" id="solvedSection" data-tab-panel="solved" style="display:none;">
         <div class="thread-list" id="solvedList"></div>
       </div>
 
-      <div class="threads-section recall collapsed" id="recallSection" style="display:none;">
-        <div class="threads-section-title collapsed" data-target="recallList"><span><span class="chev">▾</span> Recall Chat History</span><span class="count" id="recallCount">0</span></div>
+      <div class="threads-section recall" id="recallSection" data-tab-panel="recall" style="display:none;">
         <div class="thread-list" id="recallList"></div>
       </div>
     </aside>
@@ -164,7 +185,13 @@ html[data-theme="light"] {
       // session would silently compute as rank 0 here via `?? 0` below.
       const ROLE_RANK = { agent: 0, senior: 1, admin: 2, superadmin: 3, owner: 4 };
       const isAdmin = (ROLE_RANK[auth.role] ?? 0) >= ROLE_RANK.admin;
-      document.getElementById("recallSection").style.display = isAdmin ? "" : "none";
+      // Only the TAB BUTTON's visibility is decided here — actual panel
+      // visibility (#recallSection's display) is entirely owned by
+      // switchTab() now (data-tab-panel), so this must never also poke
+      // that style directly or it'd show Recall's panel alongside
+      // whichever tab is actually selected.
+      isAdminForRecall = isAdmin;
+      document.getElementById("tabRecall").style.display = isAdmin ? "" : "none";
       loadList();
       if (isAdmin) loadRecallLog();
       polishEmoji();
@@ -279,31 +306,48 @@ html[data-theme="light"] {
     const solvedCount = document.getElementById("solvedCount");
     const main = document.getElementById("threadsMain");
 
-    document.querySelectorAll(".threads-section-title").forEach((el) => {
-      el.addEventListener("click", (e) => {
-        if (e.target.closest(".section-select-all")) return;
-        el.classList.toggle("collapsed");
-        document.getElementById(el.dataset.target).closest(".threads-section").classList.toggle("collapsed");
-      });
-    });
+    // ---- Active/Solved/Recall tabs (2026-08 — replaces the old always-
+    // stacked collapsible sections). Only one panel is visible at a
+    // time; switching tabs also exits Select mode (selection never
+    // spans tabs — simpler than the old two-independent-select-alls
+    // design, and matches how the single "Select all" checkbox below is
+    // scoped to whichever tab is open). Recall has no Select mode at
+    // all (no bulk actions ever applied to it, same as before — its
+    // items don't even render a ⋮ menu, see renderRecallList()).
+    let currentTab = "active";
+    let isAdminForRecall = false; // set in bootDashboard(); gates the Recall tab itself
 
-    document.getElementById("bulkCancelBtn").addEventListener("click", () => {
-      selectMode = false;
+    function switchTab(tab) {
+      if (tab === "recall" && !isAdminForRecall) return;
+      if (selectMode) { selectMode = false; selectedIds.clear(); }
+      openItemMenuId = null;
+      currentTab = tab;
+      document.querySelectorAll(".threads-section[data-tab-panel]").forEach((sec) => {
+        sec.style.display = sec.dataset.tabPanel === tab ? "" : "none";
+      });
+      document.querySelectorAll(".threads-tab").forEach((btn) => {
+        btn.classList.toggle("is-active", btn.dataset.tab === tab);
+      });
+      renderLists();
+      if (tab === "recall") renderRecallList();
+    }
+    document.querySelectorAll(".threads-tab").forEach((btn) => {
+      btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+    });
+    switchTab("active"); // sets the initial panel/tab visual state before any data has loaded
+
+    document.getElementById("selectToggleBtn").addEventListener("click", () => {
+      selectMode = !selectMode;
       selectedIds.clear();
       renderLists();
     });
     document.getElementById("bulkReadBtn").addEventListener("click", runBulkReadToggle);
     document.getElementById("bulkSolveBtn").addEventListener("click", runBulkSolveToggle);
-    document.getElementById("activeSelectAll").addEventListener("click", (e) => e.stopPropagation());
-    document.getElementById("activeSelectAll").addEventListener("change", (e) => {
+    document.getElementById("tabSelectAll").addEventListener("click", (e) => e.stopPropagation());
+    document.getElementById("tabSelectAll").addEventListener("change", (e) => {
       selectMode = true;
-      activeThreads.forEach((t) => (e.target.checked ? selectedIds.add(t.id) : selectedIds.delete(t.id)));
-      renderLists();
-    });
-    document.getElementById("solvedSelectAll").addEventListener("click", (e) => e.stopPropagation());
-    document.getElementById("solvedSelectAll").addEventListener("change", (e) => {
-      selectMode = true;
-      solvedThreads.forEach((t) => (e.target.checked ? selectedIds.add(t.id) : selectedIds.delete(t.id)));
+      const arr = currentTab === "active" ? activeThreads : (currentTab === "solved" ? solvedThreads : []);
+      arr.forEach((t) => (e.target.checked ? selectedIds.add(t.id) : selectedIds.delete(t.id)));
       renderLists();
     });
     // Click anywhere outside an open ⋮ dropdown closes it — the menu and
@@ -356,6 +400,7 @@ html[data-theme="light"] {
           </div>`;
       }).join("");
       polishEmoji();
+      updateAllThreadsCard();
     }
 
     document.getElementById("threadSearch").addEventListener("input", (e) => {
@@ -575,7 +620,6 @@ html[data-theme="light"] {
       const bar = document.getElementById("bulkActionBar");
       if (!selectMode) { bar.style.display = "none"; return; }
       bar.style.display = "flex";
-      document.getElementById("bulkCount").textContent = selectedIds.size;
       const inSelection = [...activeThreads, ...solvedThreads].filter((t) => selectedIds.has(t.id));
       const readBtn = document.getElementById("bulkReadBtn");
       const solveBtn = document.getElementById("bulkSolveBtn");
@@ -595,16 +639,37 @@ html[data-theme="light"] {
       solveBtn.dataset.mode = anyUnsolved ? "solve" : "unsolve";
     }
 
-    // Each section's own header checkbox reflects whether every thread
-    // currently in THAT section (only) is selected — Active and Solved
-    // are independent, matches the feature doc.
-    function syncSectionSelectAll() {
-      const activeAll = document.getElementById("activeSelectAll");
-      const solvedAll = document.getElementById("solvedSelectAll");
-      activeAll.classList.toggle("visible", selectMode);
-      solvedAll.classList.toggle("visible", selectMode);
-      activeAll.checked = activeThreads.length > 0 && activeThreads.every((t) => selectedIds.has(t.id));
-      solvedAll.checked = solvedThreads.length > 0 && solvedThreads.every((t) => selectedIds.has(t.id));
+    // The single "Select all" checkbox (now shared by both tabs instead
+    // of one per section) reflects whether every thread in the CURRENTLY
+    // OPEN tab is selected — Recall never renders this row at all (no
+    // bulk actions there), so this is never called while currentTab is
+    // "recall" in practice, but guards anyway.
+    function syncTabSelectAll() {
+      const cb = document.getElementById("tabSelectAll");
+      const arr = currentTab === "active" ? activeThreads : (currentTab === "solved" ? solvedThreads : []);
+      cb.checked = arr.length > 0 && arr.every((t) => selectedIds.has(t.id));
+    }
+
+    // Drives the "All threads" card's subtitle, count badge, and the
+    // Select/Cancel button label+visibility — recomputed after every
+    // render (renderLists() for Active/Solved, renderRecallList() for
+    // Recall) so it always reflects whichever tab is currently open.
+    function updateAllThreadsCard() {
+      const labelMap = { active: "Active", solved: "Solved", recall: "Recall" };
+      const sub = document.getElementById("allThreadsSub");
+      const countEl = document.getElementById("allThreadsCount");
+      const toggleBtn = document.getElementById("selectToggleBtn");
+      toggleBtn.style.display = currentTab === "recall" ? "none" : "";
+      toggleBtn.textContent = selectMode ? "Cancel" : "Select";
+      if (currentTab === "recall") {
+        sub.textContent = `Recall log · ${recallEntries.length} ${recallEntries.length === 1 ? "entry" : "entries"}`;
+        countEl.textContent = recallEntries.length;
+        return;
+      }
+      const arr = currentTab === "active" ? activeThreads : solvedThreads;
+      const unread = arr.filter((t) => Math.max(0, (t.replyCount || 0) - getSeenCount(t.id)) > 0).length;
+      sub.textContent = `${labelMap[currentTab]} threads · ${unread} new ${unread === 1 ? "reply" : "replies"}`;
+      countEl.textContent = selectMode ? selectedIds.size : arr.length;
     }
 
     function runBulkReadToggle() {
@@ -692,7 +757,8 @@ html[data-theme="light"] {
 
       touchedEls.forEach((el) => polishEmoji(el));
       renderBulkBar();
-      syncSectionSelectAll();
+      syncTabSelectAll();
+      updateAllThreadsCard();
     }
 
     async function loadList(q) {

@@ -147,6 +147,51 @@
           location.href = "/?admin=" + encodeURIComponent(el.dataset.adminMode);
         });
       });
+
+      this._setupMobileToggle(mountEl);
+    },
+
+    // ---- Small-screen drawer (2026-08) ----------------------------------
+    // On a narrow viewport (≤820px, see style.css) this same rendered
+    // nav becomes a fixed-position, off-canvas drawer instead of a
+    // permanent 290px column — a hamburger button (injected into the
+    // page's .topbar-left, since every page that mounts HubNav shares
+    // that exact markup) toggles it open/closed via a single class on
+    // <body>, and a full-screen backdrop closes it on outside-click.
+    // Above 820px none of this applies: the toggle button is hidden by
+    // CSS and .sidebar renders exactly as it always has, in-flow. Only
+    // ever set up once per page load (mount() is only called once per
+    // page in practice, but the id check below makes a second call
+    // harmless instead of injecting a duplicate button/backdrop).
+    _setupMobileToggle(mountEl) {
+      if (document.getElementById("hubNavToggleBtn")) return;
+      const topbarLeft = document.querySelector(".topbar-left");
+      if (!topbarLeft) return;
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.id = "hubNavToggleBtn";
+      btn.className = "hub-nav-toggle";
+      btn.setAttribute("aria-label", "Menu");
+      btn.textContent = "☰";
+      topbarLeft.insertBefore(btn, topbarLeft.firstChild);
+
+      const backdrop = document.createElement("div");
+      backdrop.className = "hub-nav-backdrop";
+      backdrop.id = "hubNavBackdrop";
+      document.body.appendChild(backdrop);
+
+      const close = () => document.body.classList.remove("hubnav-open");
+      btn.addEventListener("click", () => document.body.classList.toggle("hubnav-open"));
+      backdrop.addEventListener("click", close);
+      // Any actual navigation link (or an Account Management sub-item,
+      // which navigates via location.href above) should close the
+      // drawer behind it — but NOT the "Account Management" toggle
+      // itself, which only expands its sub-list in place and would
+      // otherwise immediately close right as it opens.
+      mountEl.querySelectorAll(".sidebar-item:not(.expandable), .sidebar-subitem").forEach((el) => {
+        el.addEventListener("click", close);
+      });
     },
   };
 })();

@@ -645,11 +645,16 @@ export async function appendMessage(env, threadId, message) {
   if (!thread) return null;
   thread.messages.push(message);
   thread.lastActivity = message.ts;
-  // Only genuine, explicit replies ever reach here for non-self messages
-  // (see telegram-webhook.js) — so if one lands on an already-solved
-  // ticket, that's a deliberate "actually, still need to talk about this"
-  // signal, and it's safe to reopen.
-  if (thread.solved && !message.self) {
+  // Any new message on an already-solved ticket is a "still need to talk
+  // about this" signal and gets auto-reopened — whether it's a genuine
+  // incoming reply from Telegram (see telegram-webhook.js) OR the agent
+  // themselves replying from this dashboard to a ticket that was already
+  // marked Solved (2026-08 — replying used to leave `solved: true` in
+  // place, which meant the ticket stayed buried in Solved Chat History
+  // even though there was now a fresh, unread reply on it). No special
+  // case needed for message.self here anymore — either direction reopens
+  // the same way.
+  if (thread.solved) {
     thread.solved = false;
     thread.solvedAt = null;
   }

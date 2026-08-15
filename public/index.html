@@ -1671,23 +1671,18 @@ html[data-theme="light"] {
       // accountCanEditAdminSection() below are untouched), so its
       // checked state here still reflects that same rank-tiered default
       // whenever the account hasn't been individually customized.
-      // Uses .ap-admin-section-checkbox / apEditLevel_announcements — the
-      // exact same class/radio-name pattern the old Account Management
-      // Access box used for this section — so the view/edit pair reads
-      // and writes the same way, just from a new spot in the DOM (see
-      // saveAgentProfileModal's dedicated ap_announceSee lookup, which
-      // no longer relies on being inside .agent-profile-admin-section-list).
-      const announceSeeChecked = accountCanSeeAdminSection(a, "announcements");
-      const announceEditChecked = accountCanEditAdminSection(a, "announcements");
+      //
+      // No separate View only / Can Edit choice here (unlike the old
+      // Account Management Access rendering of this same section) — a
+      // single checkbox now grants both together, matching every other
+      // row in this Topic Access list. saveAgentProfileModal sends the
+      // same boolean for both announcementsView and announcementsEdit.
+      const announceChecked = accountCanSeeAdminSection(a, "announcements");
       const announcementCheck = `
         <label class="agent-profile-module-check">
-          <input type="checkbox" id="ap_announceSee" class="ap-admin-section-checkbox" value="announcements" ${announceSeeChecked ? "checked" : ""} ${canManageAccess ? "" : "disabled"} />
+          <input type="checkbox" id="ap_announceSee" ${announceChecked ? "checked" : ""} ${canManageAccess ? "" : "disabled"} />
           📢 Announcement
-        </label>
-        <div class="agent-profile-edit-level-row" id="ap_announceEditRow" data-for-section="announcements" style="${announceSeeChecked ? "" : "display:none;"}">
-          <label><input type="radio" name="apEditLevel_announcements" value="view" ${announceEditChecked ? "" : "checked"} ${canManageAccess ? "" : "disabled"} /> View only</label>
-          <label><input type="radio" name="apEditLevel_announcements" value="edit" ${announceEditChecked ? "checked" : ""} ${canManageAccess ? "" : "disabled"} /> Can Edit</label>
-        </div>`;
+        </label>`;
 
       // Active Agents — folded directly into the Topic Access list as
       // just another row (not its own collapsible, not even visually
@@ -1800,12 +1795,11 @@ html[data-theme="light"] {
       document.body.appendChild(overlay);
 
       if (canManageAccess) wireAgentProfileBrandPicker();
-      // Unconditional now (not just canManageThisAccountsAdminAccess) —
-      // .ap-admin-section-checkbox also matches the Announcement checkbox
-      // that now lives in Topic Access (see ap_announceSee above), which
-      // renders under the broader canManageAccess gate instead. Harmless
-      // no-op via querySelectorAll when neither box's checkboxes exist.
-      wireAdminSectionEditToggles();
+      // .ap-admin-section-checkbox only matches the Account Management
+      // Access box's own items now — Announcement no longer has a
+      // View only/Can Edit pair to show/hide (see ap_announceSee above),
+      // so this only needs to run when that box exists.
+      if (canManageThisAccountsAdminAccess) wireAdminSectionEditToggles();
       wireAgentProfileCollapsibles();
 
       function close() { overlay.remove(); }
@@ -1898,8 +1892,10 @@ html[data-theme="light"] {
         // Announcement (2026-08) — lives in Topic Access now, so it's
         // read here (inside the same canManageAccess-gated block as the
         // module checkboxes above) rather than from
-        // .agent-profile-admin-section-list below. Sent as its own
-        // announcementsView/announcementsEdit pair, NOT folded into
+        // .agent-profile-admin-section-list below. No View only/Can Edit
+        // split anymore — the single checkbox grants both together, so
+        // announcementsView and announcementsEdit are sent as the same
+        // value. Sent as its own pair, NOT folded into
         // payload.allowedAdminSections — the server merges just this one
         // section in/out of the stored array (see
         // functions/api/admin/accounts.js), so a save here can never
@@ -1908,8 +1904,7 @@ html[data-theme="light"] {
         const announceSee = document.getElementById("ap_announceSee");
         if (announceSee) {
           payload.announcementsView = announceSee.checked;
-          const announceEditRadio = document.querySelector('input[name="apEditLevel_announcements"]:checked');
-          payload.announcementsEdit = announceSee.checked && !!announceEditRadio && announceEditRadio.value === "edit";
+          payload.announcementsEdit = announceSee.checked;
         }
       }
       // Account Management Access — only present in the DOM at all when

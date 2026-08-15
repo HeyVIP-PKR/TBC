@@ -179,6 +179,7 @@ html[data-theme="light"] {
           <div class="sidebar-subitem" id="subIpDepositSheets" style="--sub-accent:#4fa6f533; display:none;"><span class="sub-icon">📊</span> Deposit Sheet Link</div>
           <div class="sidebar-subitem" id="subIpBettingLinks" style="--sub-accent:#c8912f33; display:none;"><span class="sub-icon">🔗</span> Betting Resources Links</div>
           <div class="sidebar-subitem" id="subIpWebLink" style="--sub-accent:#f3c46333; display:none;"><span class="sub-icon">🌐</span> Web Link</div>
+          <div class="sidebar-subitem" id="subIpPromoSheet" style="--sub-accent:#f472b633; display:none;"><span class="sub-icon">📋</span> Promo Code Gsheet</div>
         </div>
       </div>
 
@@ -621,8 +622,9 @@ html[data-theme="light"] {
       { id: "depositSheets", name: "Deposit Sheet Link", icon: "📊" },
       { id: "bettingLinks", name: "Betting Resources Links", icon: "🔗" },
       { id: "webLink", name: "Web Link", icon: "🌐" },
+      { id: "promoCodeSheet", name: "Promo Code Gsheet", icon: "📋" },
     ];
-    const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "bettingLinks", "webLink"];
+    const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "bettingLinks", "webLink", "promoCodeSheet"];
     // Must match defaultSectionsForRank()/defaultEditForRank() in
     // functions/_shared/accounts.js exactly:
     //   agent -> nothing, senior -> createAccount,
@@ -695,6 +697,7 @@ html[data-theme="light"] {
       document.getElementById("subIpDepositSheets").style.display = canSeeAdminSection("depositSheets") ? "flex" : "none";
       document.getElementById("subIpBettingLinks").style.display = canSeeAdminSection("bettingLinks") ? "flex" : "none";
       document.getElementById("subIpWebLink").style.display = canSeeAdminSection("webLink") ? "flex" : "none";
+      document.getElementById("subIpPromoSheet").style.display = canSeeAdminSection("promoCodeSheet") ? "flex" : "none";
 
       const ipToggle = document.getElementById("integrationPortalToggle");
       const ipSubitems = document.getElementById("integrationPortalSubitems");
@@ -707,6 +710,7 @@ html[data-theme="light"] {
       document.getElementById("subIpDepositSheets").addEventListener("click", () => openAcctModal("depositsheets"));
       document.getElementById("subIpBettingLinks").addEventListener("click", () => openAcctModal("bettinglinks"));
       document.getElementById("subIpWebLink").addEventListener("click", () => openAcctModal("weblink"));
+      document.getElementById("subIpPromoSheet").addEventListener("click", () => openAcctModal("promosheet"));
     }
     document.getElementById("acctProfileRoleFilter").addEventListener("change", () => renderAgentProfileTable());
     document.getElementById("acctProfileSearch").addEventListener("input", () => renderAgentProfileTable());
@@ -780,7 +784,7 @@ html[data-theme="light"] {
       acctBody.innerHTML = '<p class="edit-modal-note">Loading…</p>';
       acctBackdrop.classList.add("is-open");
       const modalEl = acctBackdrop.querySelector(".edit-modal");
-      modalEl.classList.toggle("wide", mode === "profile" || mode === "tgroutes" || mode === "depositsheets" || mode === "settings" || mode === "whitelist" || mode === "bettinglinks" || mode === "weblink");
+      modalEl.classList.toggle("wide", mode === "profile" || mode === "tgroutes" || mode === "depositsheets" || mode === "settings" || mode === "whitelist" || mode === "bettinglinks" || mode === "weblink" || mode === "promosheet");
       // "profile", "tgroutes", "depositsheets", "settings", and
       // "whitelist" (IP Access) all use per-row/per-action inline
       // buttons instead of one global footer Save — too many
@@ -900,6 +904,11 @@ html[data-theme="light"] {
       if (mode === "weblink") {
         acctTitle.textContent = "Web Link";
         await loadWebLinks();
+      }
+
+      if (mode === "promosheet") {
+        acctTitle.textContent = "Promo Code Gsheet";
+        await loadPromoSheet();
       }
     }
 
@@ -1331,6 +1340,86 @@ html[data-theme="light"] {
       setAcctNote(clear ? "Cleared." : "Saved.", "ok");
       renderBrandRow();
       renderWebLinks();
+    }
+
+    // ---- Promo Code Gsheet (2026-08) — the ONE shared Google Sheet
+    // promo-search.js reads from (see _shared/promoCodeSheet.js for why
+    // there's no brand dimension here, unlike TG Group/Channel or
+    // Deposit Sheet Link above). Single row, no left brand-sidebar —
+    // just a sheet URL/ID field + comma-separated tab names field, same
+    // as the reference screenshot. Backed by GET/POST
+    // /api/admin/promo-sheet.
+    let acctPromoSheetData = null; // { sheetId, tabNames, isOverride }
+
+    async function loadPromoSheet() {
+      acctBody.innerHTML = '<p class="edit-modal-note">Loading…</p>';
+      const res = await window.AgentAuth.authFetch("/api/admin/promo-sheet");
+      const data = await res.json();
+      if (!data.ok) {
+        acctBody.innerHTML = `<p class="edit-modal-note err">${acctEsc(data.error || "Failed to load.")}</p>`;
+        return;
+      }
+      acctPromoSheetData = data.config;
+      renderPromoSheet();
+    }
+
+    function renderPromoSheet() {
+      if (!acctPromoSheetData) return;
+      const cfg = acctPromoSheetData;
+      const canEdit = canEditAdminSection("promoCodeSheet");
+      const roAttr = canEdit ? "" : "disabled";
+
+      acctBody.innerHTML = `
+        <div class="tgroute-modules">
+          <div class="tgroute-row">
+            <div class="tgroute-mod-name">📋 Promo code search sheet
+              <span class="route-tag${cfg.isOverride ? " custom" : ""}">${cfg.isOverride ? "custom" : "default"}</span>
+            </div>
+            <p class="edit-modal-note">Shared across all teams, not brand specific — searched the same way regardless of which brand is selected on the Promo Code Search page.</p>
+            <div class="tgroute-fields">
+              <input type="text" id="promoSheetUrl" placeholder="Sheet URL e.g. https://docs.google.com/spreadsheets/d/.../edit" value="${acctEsc(cfg.sheetId)}" ${roAttr} autocomplete="off" />
+              <input type="text" id="promoSheetTabs" placeholder="Tab names, comma separated" value="${acctEsc((cfg.tabNames || []).join(", "))}" ${roAttr} autocomplete="off" />
+              ${canEdit ? `<div class="tgroute-row-actions">
+                <button type="button" class="tgroute-action-btn" id="promoSheetSave">Save</button>
+                ${cfg.isOverride ? '<button type="button" class="tgroute-action-btn tgroute-action-secondary" id="promoSheetReset">Reset</button>' : ""}
+              </div>` : ""}
+            </div>
+          </div>
+        </div>
+        ${canEdit ? "" : '<p class="edit-modal-note">View only.</p>'}`;
+
+      document.getElementById("promoSheetSave")?.addEventListener("click", savePromoSheet);
+      document.getElementById("promoSheetReset")?.addEventListener("click", resetPromoSheet);
+    }
+
+    async function savePromoSheet() {
+      const sheetUrlOrId = document.getElementById("promoSheetUrl").value.trim();
+      const tabNames = document.getElementById("promoSheetTabs").value.trim();
+      if (!sheetUrlOrId) return setAcctNote("Sheet URL or ID is required.", "err");
+      if (!tabNames) return setAcctNote("At least one tab name is required.", "err");
+      setAcctNote("Saving…");
+      const res = await window.AgentAuth.authFetch("/api/admin/promo-sheet", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "save", sheetUrlOrId, tabNames }),
+      });
+      const data = await res.json();
+      if (!data.ok) return setAcctNote(data.error || "Save failed.", "err");
+      acctPromoSheetData = data.config;
+      setAcctNote("Saved — takes effect on the next search.", "ok");
+      renderPromoSheet();
+    }
+
+    async function resetPromoSheet() {
+      setAcctNote("Resetting…");
+      const res = await window.AgentAuth.authFetch("/api/admin/promo-sheet", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset" }),
+      });
+      const data = await res.json();
+      if (!data.ok) return setAcctNote(data.error || "Reset failed.", "err");
+      acctPromoSheetData = data.config;
+      setAcctNote("Reset to default.", "ok");
+      renderPromoSheet();
     }
 
     // ---- Settings ----
@@ -2818,7 +2907,7 @@ html[data-theme="light"] {
         // function silently ignored it (fell through the `!(mode in
         // modeToSection)` guard below) instead of opening the modal.
         // Fixed alongside adding "weblink" for the new Web Link panel.
-        bettinglinks: "bettingLinks", weblink: "webLink",
+        bettinglinks: "bettingLinks", weblink: "webLink", promosheet: "promoCodeSheet",
         reset: null, // no permission gate, same as the Reset Password sidebar item
       };
       if (!(mode in modeToSection)) return;

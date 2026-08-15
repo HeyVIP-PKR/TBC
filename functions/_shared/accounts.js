@@ -136,8 +136,15 @@ export function rankOf(role) { return ROLE_RANK[role] ?? ROLE_RANK.agent; }
 // matching POST-body handling in functions/api/admin/accounts.js) —
 // NOT one of EDITABLE_ADMIN_SECTIONS since there's no separate content
 // to view-vs-edit here, just "can see this group or not."
-export const ADMIN_SECTIONS = ["createAccount", "whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements", "bettingLinks", "webLink", "integrationPortal"];
-export const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements", "bettingLinks", "webLink"];
+// "promoCodeSheet" (2026-08) gates the "Promo Code Gsheet" panel under
+// Integration Portal — which Google Sheet/tabs promo-search.js reads
+// from (see _shared/promoCodeSheet.js). Same superadmin-and-above
+// default-fallthrough treatment as its Integration Portal siblings
+// (tgRoutes/depositSheets/bettingLinks/webLink) — not called out in
+// defaultSectionsForRank() below, so it only appears for admin/senior/
+// agent once explicitly granted.
+export const ADMIN_SECTIONS = ["createAccount", "whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements", "bettingLinks", "webLink", "integrationPortal", "promoCodeSheet"];
+export const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements", "bettingLinks", "webLink", "promoCodeSheet"];
 
 function defaultSectionsForRank(rank) {
   if (rank >= ROLE_RANK.superadmin) return "all";

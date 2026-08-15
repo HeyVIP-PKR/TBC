@@ -178,6 +178,43 @@ export function canViewActiveAgents(account) {
   return !!account.canViewActiveAgents;
 }
 
+/**
+ * Add or remove exactly ONE section id from a stored allowedAdminSections/
+ * adminSectionEditAccess value, WITHOUT touching any other section in it.
+ * `effectiveCurrent` must already be resolved to a concrete "all" or array
+ * (i.e. the caller has already applied whatever rank-tiered default
+ * applies when the account has no explicit value — see
+ * effectiveAllowedAdminSections()/effectiveAdminSectionEditAccess() below,
+ * which both callers use). The result is always a concrete array (never
+ * "all"), since "all minus one" can no longer be expressed as "all".
+ *
+ * Added for the 2026-08 move of "announcements" out of the Account
+ * Management Access checklist and into Topic Access (see
+ * public/index.html's Agent Profile modal) — that move lets whoever
+ * manages an account's Topic Access toggle Announcement too, WITHOUT
+ * giving them a way to touch the other 7 (still Owner/delegate-only)
+ * sections. This helper is what makes that a safe single-item
+ * add/remove instead of requiring the caller to submit (and thus be
+ * trusted with) the whole array.
+ */
+export function withSectionToggled(effectiveCurrent, sectionId, on, allSections) {
+  const base = effectiveCurrent === "all" ? allSections.slice() : (Array.isArray(effectiveCurrent) ? effectiveCurrent.slice() : []);
+  const idx = base.indexOf(sectionId);
+  if (on && idx === -1) base.push(sectionId);
+  if (!on && idx !== -1) base.splice(idx, 1);
+  return base;
+}
+
+/** Resolves an account's effective allowedAdminSections ("all"/array), applying the rank-tiered default when not explicitly set. */
+export function effectiveAllowedAdminSections(account) {
+  return account.allowedAdminSections !== undefined ? account.allowedAdminSections : defaultSectionsForRank(rankOf(account.role));
+}
+
+/** Resolves an account's effective adminSectionEditAccess ("all"/array), applying the rank-tiered default when not explicitly set. */
+export function effectiveAdminSectionEditAccess(account) {
+  return account.adminSectionEditAccess !== undefined ? account.adminSectionEditAccess : defaultEditForRank(rankOf(account.role));
+}
+
 // ---- password hashing (PBKDF2 via Web Crypto, available in Workers) ----
 //
 // ITERATION COUNT — lowered this session, see below for why.

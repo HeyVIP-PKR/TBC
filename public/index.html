@@ -586,6 +586,20 @@ html[data-theme="light"] {
     // independently re-checks every one of these on every request (see
     // functions/api/admin/*.js) — a person editing localStorage by hand
     // gains nothing.
+    // "announcements" (2026-08) intentionally NOT in this list anymore —
+    // its checkbox moved out of the Account Management Access checklist
+    // and into the Topic Access list instead (rendered right above
+    // "Active Agents" in openAgentProfileModal, see ap_announceSee below),
+    // per direct business-owner request. The underlying data field is
+    // unchanged (still "announcements" inside allowedAdminSections /
+    // adminSectionEditAccess — see canSeeAdminSection()/
+    // canEditAdminSection() below, both untouched) — only where its
+    // checkbox lives, and who's allowed to flip it, changed. Server-side
+    // authorization for this specific field also relaxed to match: see
+    // functions/api/admin/accounts.js's `announcementsView`/
+    // `announcementsEdit` handling — it's now gated by the same rank
+    // rule as Topic Access itself, not full Account Management Access
+    // delegation.
     const ADMIN_SECTIONS_LIST = [
       { id: "createAccount", name: "Create Account", icon: "➕" },
       { id: "whitelistIp", name: "IP Access", icon: "🌐" },
@@ -593,10 +607,9 @@ html[data-theme="light"] {
       { id: "depositSheets", name: "Deposit Sheet Link", icon: "📊" },
       { id: "settings", name: "Settings", icon: "⚙️" },
       { id: "agentProfile", name: "Agent Profile", icon: "🪪" },
-      { id: "announcements", name: "Announcement", icon: "📢" },
       { id: "bettingLinks", name: "Betting Resources Links", icon: "🔗" },
     ];
-    const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "announcements", "bettingLinks"];
+    const EDITABLE_ADMIN_SECTIONS = ["whitelistIp", "tgRoutes", "depositSheets", "settings", "agentProfile", "bettingLinks"];
     // Must match defaultSectionsForRank()/defaultEditForRank() in
     // functions/_shared/accounts.js exactly:
     //   agent -> nothing, senior -> createAccount,
@@ -1645,6 +1658,37 @@ html[data-theme="light"] {
           <input type="checkbox" class="ap-module-checkbox" value="${acctEsc(m.id)}" ${allModulesSelected || (Array.isArray(a.allowedModules) && a.allowedModules.includes(m.id)) ? "checked" : ""} ${canManageAccess ? "" : "disabled"} />
           ${m.icon || ""} ${acctEsc(m.name)}
         </label>`).join("");
+      // Announcement (2026-08) — moved out of the Account Management
+      // Access checklist into Topic Access, positioned right above
+      // Active Agents, per direct business-owner request. Gated the same
+      // as the rest of Topic Access (canManageAccess — Can-Edit(agentProfile)
+      // + strictly outrank this target), NOT the stricter
+      // canManageThisAccountsAdminAccess the old Account Management
+      // Access box needed — see functions/api/admin/accounts.js for the
+      // matching server-side relaxation. Storage is still the same
+      // "announcements" entry inside allowedAdminSections /
+      // adminSectionEditAccess (accountCanSeeAdminSection()/
+      // accountCanEditAdminSection() below are untouched), so its
+      // checked state here still reflects that same rank-tiered default
+      // whenever the account hasn't been individually customized.
+      // Uses .ap-admin-section-checkbox / apEditLevel_announcements — the
+      // exact same class/radio-name pattern the old Account Management
+      // Access box used for this section — so the view/edit pair reads
+      // and writes the same way, just from a new spot in the DOM (see
+      // saveAgentProfileModal's dedicated ap_announceSee lookup, which
+      // no longer relies on being inside .agent-profile-admin-section-list).
+      const announceSeeChecked = accountCanSeeAdminSection(a, "announcements");
+      const announceEditChecked = accountCanEditAdminSection(a, "announcements");
+      const announcementCheck = `
+        <label class="agent-profile-module-check">
+          <input type="checkbox" id="ap_announceSee" class="ap-admin-section-checkbox" value="announcements" ${announceSeeChecked ? "checked" : ""} ${canManageAccess ? "" : "disabled"} />
+          📢 Announcement
+        </label>
+        <div class="agent-profile-edit-level-row" id="ap_announceEditRow" data-for-section="announcements" style="${announceSeeChecked ? "" : "display:none;"}">
+          <label><input type="radio" name="apEditLevel_announcements" value="view" ${announceEditChecked ? "" : "checked"} ${canManageAccess ? "" : "disabled"} /> View only</label>
+          <label><input type="radio" name="apEditLevel_announcements" value="edit" ${announceEditChecked ? "checked" : ""} ${canManageAccess ? "" : "disabled"} /> Can Edit</label>
+        </div>`;
+
       // Active Agents — folded directly into the Topic Access list as
       // just another row (not its own collapsible, not even visually
       // separated by a divider) per explicit request. Still gated the
@@ -1725,7 +1769,7 @@ html[data-theme="light"] {
               </button>
               <div class="agent-profile-collapsible-body" style="display:none;">
                 ${!canManageAccess ? '<p class="agent-profile-locked-note" style="margin:-4px 0 8px;">(requires outranking this account)</p>' : ""}
-                <div class="agent-profile-module-list">${moduleChecks}${activeAgentsCheck}</div>
+                <div class="agent-profile-module-list">${moduleChecks}${announcementCheck}${activeAgentsCheck}</div>
               </div>
             </div>
 
@@ -1756,7 +1800,12 @@ html[data-theme="light"] {
       document.body.appendChild(overlay);
 
       if (canManageAccess) wireAgentProfileBrandPicker();
-      if (canManageThisAccountsAdminAccess) wireAdminSectionEditToggles();
+      // Unconditional now (not just canManageThisAccountsAdminAccess) —
+      // .ap-admin-section-checkbox also matches the Announcement checkbox
+      // that now lives in Topic Access (see ap_announceSee above), which
+      // renders under the broader canManageAccess gate instead. Harmless
+      // no-op via querySelectorAll when neither box's checkboxes exist.
+      wireAdminSectionEditToggles();
       wireAgentProfileCollapsibles();
 
       function close() { overlay.remove(); }
@@ -1846,6 +1895,22 @@ html[data-theme="light"] {
         const moduleChecks = Array.from(document.querySelectorAll(".agent-profile-module-list input.ap-module-checkbox"));
         const selectedModules = moduleChecks.filter((c) => c.checked).map((c) => c.value);
         payload.allowedModules = selectedModules.length === moduleChecks.length ? "all" : selectedModules;
+        // Announcement (2026-08) — lives in Topic Access now, so it's
+        // read here (inside the same canManageAccess-gated block as the
+        // module checkboxes above) rather than from
+        // .agent-profile-admin-section-list below. Sent as its own
+        // announcementsView/announcementsEdit pair, NOT folded into
+        // payload.allowedAdminSections — the server merges just this one
+        // section in/out of the stored array (see
+        // functions/api/admin/accounts.js), so a save here can never
+        // clobber the other 7 Account Management Access sections even
+        // when this account can't see that box at all.
+        const announceSee = document.getElementById("ap_announceSee");
+        if (announceSee) {
+          payload.announcementsView = announceSee.checked;
+          const announceEditRadio = document.querySelector('input[name="apEditLevel_announcements"]:checked');
+          payload.announcementsEdit = announceSee.checked && !!announceEditRadio && announceEditRadio.value === "edit";
+        }
       }
       // Account Management Access — only present in the DOM at all when
       // openAgentProfileModal() computed canManageThisAccountsAdminAccess

@@ -52,7 +52,7 @@
  *     caller rank >= admin AND (editing themselves OR strictly
  *     outranking the target).
  */
-import { listAccounts, saveAccount, deleteAccount, getAccount, authenticateStaff, anySuperAdminExists, setAccountLocked, ROLE_RANK, rankOf, canSeeAdminSection, canEditAdminSection, canManageOthersAdminAccess } from "../../_shared/accounts.js";
+import { listAccounts, saveAccount, deleteAccount, getAccount, authenticateStaff, anySuperAdminExists, setAccountLocked, ROLE_RANK, rankOf, canSeeAdminSection, canEditAdminSection, canManageOthersAdminAccess, withSectionToggled, effectiveAllowedAdminSections, effectiveAdminSectionEditAccess, ADMIN_SECTIONS, EDITABLE_ADMIN_SECTIONS } from "../../_shared/accounts.js";
 
 // An actor may act on a target only if strictly outranking it — same
 // rank can never manage same rank (this alone is what stops SuperAdmin
@@ -154,6 +154,12 @@ async function handlePost({ request, env }) {
     if (!body.username) return json({ ok: false, error: "Username is required." }, 400);
     const targetUsername = body.username.toLowerCase();
     const existingTarget = await getAccount(env, targetUsername);
+    // Populated inside the "editing existing account" branch below when
+    // this request touches Announcement access; read afterwards by the
+    // saveAccount() call, so declared up here rather than block-scoped
+    // inside that branch.
+    let announcementsAllowedAdminSections;
+    let announcementsAdminSectionEditAccess;
 
     // An owner account, targeted by anyone who doesn't outrank it (i.e.
     // everyone but another owner) — respond exactly as if it didn't
@@ -202,6 +208,37 @@ async function handlePost({ request, env }) {
       const adminSectionEditAccessChanging = body.adminSectionEditAccess !== undefined && JSON.stringify(body.adminSectionEditAccess) !== JSON.stringify(existingTarget.adminSectionEditAccess ?? []);
       if ((adminSectionsChanging || adminSectionEditAccessChanging) && auth.account?.role !== "owner" && !canManage(actorRank, targetRank)) {
         return json({ ok: false, error: "You can only change Account Management Access for accounts ranked below your own." }, 403);
+      }
+
+      // Announcement view/edit — moved (2026-08) out of the Account
+      // Management Access checklist into Topic Access in the UI (see
+      // public/index.html's Agent Profile modal). The underlying storage
+      // is unchanged (still "announcements" inside allowedAdminSections /
+      // adminSectionEditAccess, still read by the same canSeeAdminSection()/
+      // canEditAdminSection() everywhere else) — only WHO can flip it and
+      // HOW it's submitted changed: instead of requiring full
+      // canManageOthersAdminAccess() (Owner/delegate) and a full-array
+      // replace like the other 7 sections, this is a single add/remove
+      // gated by the SAME rank rule Topic Access itself already uses
+      // (Can-Edit(agentProfile) + strictly outrank the target) — matches
+      // "a higher-privilege account can grant this to accounts one rank
+      // below itself" per direct business-owner request, no change to the
+      // rank-comparison logic itself.
+      if (body.announcementsView !== undefined || body.announcementsEdit !== undefined) {
+        const hasAnnounceAuthority = auth.account?.role === "owner" || (canEditAdminSection(auth.account, "agentProfile") && canManage(actorRank, targetRank));
+        if (!hasAnnounceAuthority) {
+          return json({ ok: false, error: "You can only change Announcement access for accounts ranked below your own." }, 403);
+        }
+        // If this same request ALSO carries the full 7-item array (Owner
+        // editing an account with both boxes visible), toggle relative to
+        // THAT submitted value so the two don't clobber each other;
+        // otherwise toggle relative to the target's existing stored value.
+        const seeOn = !!body.announcementsView;
+        const editOn = seeOn && !!body.announcementsEdit; // can't have edit without view
+        const baseSee = body.allowedAdminSections !== undefined ? body.allowedAdminSections : effectiveAllowedAdminSections(existingTarget);
+        const baseEdit = body.adminSectionEditAccess !== undefined ? body.adminSectionEditAccess : effectiveAdminSectionEditAccess(existingTarget);
+        announcementsAllowedAdminSections = withSectionToggled(baseSee, "announcements", seeOn, ADMIN_SECTIONS);
+        announcementsAdminSectionEditAccess = withSectionToggled(baseEdit, "announcements", editOn, EDITABLE_ADMIN_SECTIONS);
       }
 
       if (roleChanging || accessChanging) {
@@ -253,8 +290,14 @@ async function handlePost({ request, env }) {
         allowedModules: body.allowedModules !== undefined ? body.allowedModules : undefined,
         fullName: body.fullName !== undefined ? body.fullName : undefined,
         pid: body.pid !== undefined ? body.pid : undefined,
-        allowedAdminSections: body.allowedAdminSections !== undefined ? body.allowedAdminSections : undefined,
-        adminSectionEditAccess: body.adminSectionEditAccess !== undefined ? body.adminSectionEditAccess : undefined,
+        // The announcements-merge result (if this request touched
+        // Announcement access) takes priority over a raw body.* value —
+        // it was computed FROM body.allowedAdminSections/
+        // adminSectionEditAccess already (see above), so this never loses
+        // a same-request 7-item change, it just folds the single
+        // announcements add/remove into it.
+        allowedAdminSections: announcementsAllowedAdminSections !== undefined ? announcementsAllowedAdminSections : (body.allowedAdminSections !== undefined ? body.allowedAdminSections : undefined),
+        adminSectionEditAccess: announcementsAdminSectionEditAccess !== undefined ? announcementsAdminSectionEditAccess : (body.adminSectionEditAccess !== undefined ? body.adminSectionEditAccess : undefined),
         canManageAdminAccess: body.canManageAdminAccess !== undefined ? body.canManageAdminAccess : undefined,
         canViewActiveAgents: body.canViewActiveAgents !== undefined ? body.canViewActiveAgents : undefined,
       });

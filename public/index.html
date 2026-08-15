@@ -1091,13 +1091,20 @@ html[data-theme="light"] {
 
     // ---- Issue Submission Gsheet (2026-08) — same brand-sidebar +
     // per-module-row layout as TG Group/Channel above, but each row is a
-    // Sheet URL/ID + Tab name pair instead of Chat ID + Topic ID. Covers
-    // the 6 core issue-submission modules (QA, Account Issue, Withdraw
-    // Issue, Risk Issue, Daily Report, Genie Issue) — Promotion Request
-    // is NOT here, it already has its own separate per-(brand,promotion)
-    // sheet system (see _shared/issueSubmissionSheets.js's file header).
-    // Backed by /api/admin/issue-submission-sheets, same override-over-
-    // code-default layering as everywhere else on this page.
+    // Sheet URL/ID + Tab name(s) pair instead of Chat ID + Topic ID.
+    // Covers the 6 core issue-submission modules (QA, Account Issue,
+    // Withdraw Issue, Risk Issue, Daily Report, Genie Issue), PLUS a
+    // separate "Promotion Request" section below them listing every
+    // (brand, promotion type) combo that already exists in
+    // PROMOTION_SHEET_CONFIG for the selected brand — see
+    // _shared/issueSubmissionSheets.js's file header for why Promotion
+    // Request needs its own per-brand-varying list instead of a fixed
+    // module row. Backed by /api/admin/issue-submission-sheets, same
+    // override-over-code-default layering as everywhere else on this
+    // page. Tab name fields accept a comma-separated list — a single
+    // name behaves exactly as before; more than one means "try these in
+    // order against what's actually on the live sheet" (see
+    // resolveWriteTab() server-side).
     let acctIssueSheetsData = null;
     let acctIssueSheetsSelectedBrand = null;
 
@@ -1115,43 +1122,63 @@ html[data-theme="light"] {
       renderIssueSheets();
     }
 
+    // Shared by both the fixed-module rows and the Promotion Request
+    // rows below — `key` distinguishes them for the click handlers
+    // (data-module for the former, data-promotion for the latter).
+    function issueSheetRowHtml({ icon, name, entry, key, isPromotion, canEdit }) {
+      const s = entry || { sheetId: "", tabNames: [], isOverride: false };
+      const roAttr = canEdit ? "" : "disabled";
+      const attr = isPromotion ? `data-promotion="${acctEsc(key)}"` : `data-module="${acctEsc(key)}"`;
+      const saveClass = isPromotion ? "issuepromo-save" : "issuesheet-save";
+      const resetClass = isPromotion ? "issuepromo-reset" : "issuesheet-reset";
+      return `
+        <div class="tgroute-row" ${attr}>
+          <div class="tgroute-mod-name">${icon} ${acctEsc(name)}
+            <span class="route-tag${s.isOverride ? " custom" : ""}">${s.isOverride ? "custom" : "default"}</span>
+          </div>
+          <div class="tgroute-fields">
+            <input type="text" class="issuesheet-url" placeholder="Google Sheet URL or ID" value="${acctEsc(s.sheetId)}" ${roAttr} autocomplete="off" />
+            <input type="text" class="issuesheet-tab" placeholder="Tab name(s), comma separated" value="${acctEsc((s.tabNames || []).join(", "))}" ${roAttr} autocomplete="off" />
+            ${canEdit ? `<div class="tgroute-row-actions">
+              <button type="button" class="tgroute-action-btn ${saveClass}">Save</button>
+              ${s.isOverride ? `<button type="button" class="tgroute-action-btn tgroute-action-secondary ${resetClass}">Reset</button>` : ""}
+            </div>` : ""}
+          </div>
+        </div>`;
+    }
+
     function renderIssueSheets() {
       if (!acctIssueSheetsData) return;
-      const { brands, modules, sheets } = acctIssueSheetsData;
+      const { brands, modules, sheets, promotions } = acctIssueSheetsData;
       const canEdit = canEditAdminSection("issueSubmissionSheet");
-      const roAttr = canEdit ? "" : "disabled";
 
       const brandListHtml = brands.map((b) => `
         <div class="tgroute-brand${b.id === acctIssueSheetsSelectedBrand ? " selected" : ""}" data-brand="${acctEsc(b.id)}">${acctEsc(b.name)}</div>
       `).join("");
 
-      const moduleRowsHtml = modules.map((m) => {
-        const key = `${acctIssueSheetsSelectedBrand}|${m.id}`;
-        const s = sheets[key] || { sheetId: "", tabName: "", isOverride: false };
-        return `
-          <div class="tgroute-row" data-module="${acctEsc(m.id)}">
-            <div class="tgroute-mod-name">${m.emoji} ${acctEsc(m.name)}
-              <span class="route-tag${s.isOverride ? " custom" : ""}">${s.isOverride ? "custom" : "default"}</span>
-            </div>
-            <div class="tgroute-fields">
-              <input type="text" class="issuesheet-url" placeholder="Google Sheet URL or ID" value="${acctEsc(s.sheetId)}" ${roAttr} autocomplete="off" />
-              <input type="text" class="issuesheet-tab" placeholder="Tab name" value="${acctEsc(s.tabName)}" ${roAttr} autocomplete="off" />
-              ${canEdit ? `<div class="tgroute-row-actions">
-                <button type="button" class="tgroute-action-btn issuesheet-save">Save</button>
-                ${s.isOverride ? '<button type="button" class="tgroute-action-btn tgroute-action-secondary issuesheet-reset">Reset</button>' : ""}
-              </div>` : ""}
-            </div>
-          </div>`;
-      }).join("");
+      const moduleRowsHtml = modules.map((m) => issueSheetRowHtml({
+        icon: m.emoji, name: m.name, key: m.id, canEdit,
+        entry: sheets[`${acctIssueSheetsSelectedBrand}|${m.id}`],
+      })).join("");
+
+      const brandPromotions = (promotions && promotions[acctIssueSheetsSelectedBrand]) || [];
+      const promoRowsHtml = brandPromotions.map((p) => issueSheetRowHtml({
+        icon: "🎟️", name: `Promotion Request — ${p.promotion}`, key: p.promotion, isPromotion: true, canEdit,
+        entry: p,
+      })).join("");
+      const promoSectionHtml = brandPromotions.length ? `
+        <hr class="tgroute-divider" />
+        <p class="edit-modal-note tgroute-footnote" style="margin-bottom:4px;">🎟️ Promotion Request — each promotion type this brand already has configured gets its own Sheet/tab, independent of the modules above.</p>
+        ${promoRowsHtml}` : "";
 
       acctBody.innerHTML = `
         <div class="tgroute-layout">
           <div class="tgroute-brands">${brandListHtml}</div>
-          <div class="tgroute-modules">${moduleRowsHtml}</div>
+          <div class="tgroute-modules">${moduleRowsHtml}${promoSectionHtml}</div>
         </div>
         <hr class="tgroute-divider" />
         ${canEdit ? "" : '<p class="edit-modal-note">View only.</p>'}
-        <p class="edit-modal-note tgroute-footnote">Changes apply to the very next form submission — no redeploy needed. "default" rows are still using the brand's usual Sheet + that module's usual tab name; "custom" rows have been pointed at a different Sheet/tab here.</p>`;
+        <p class="edit-modal-note tgroute-footnote">Changes apply to the very next form submission — no redeploy needed. "default" rows are still using the usual Sheet/tab; "custom" rows have been pointed somewhere else here. More than one tab name (comma separated) means "try these in order against what's actually on the sheet."</p>`;
 
       acctBody.querySelectorAll(".tgroute-brand").forEach((el) => {
         el.addEventListener("click", () => {
@@ -1166,18 +1193,24 @@ html[data-theme="light"] {
       acctBody.querySelectorAll(".issuesheet-reset").forEach((btn) => {
         btn.addEventListener("click", () => resetIssueSheetRow(btn.closest(".tgroute-row")));
       });
+      acctBody.querySelectorAll(".issuepromo-save").forEach((btn) => {
+        btn.addEventListener("click", () => savePromotionSheetRow(btn.closest(".tgroute-row")));
+      });
+      acctBody.querySelectorAll(".issuepromo-reset").forEach((btn) => {
+        btn.addEventListener("click", () => resetPromotionSheetRow(btn.closest(".tgroute-row")));
+      });
     }
 
     async function saveIssueSheetRow(row) {
       const moduleId = row.dataset.module;
       const sheetUrlOrId = row.querySelector(".issuesheet-url").value.trim();
-      const tabName = row.querySelector(".issuesheet-tab").value.trim();
+      const tabNames = row.querySelector(".issuesheet-tab").value.trim();
       if (!sheetUrlOrId) return setAcctNote("Sheet URL or ID is required.", "err");
-      if (!tabName) return setAcctNote("Tab name is required.", "err");
+      if (!tabNames) return setAcctNote("At least one tab name is required.", "err");
       setAcctNote("Saving…");
       const res = await window.AgentAuth.authFetch("/api/admin/issue-submission-sheets", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "save", brandId: acctIssueSheetsSelectedBrand, moduleId, sheetUrlOrId, tabName }),
+        body: JSON.stringify({ action: "save", brandId: acctIssueSheetsSelectedBrand, moduleId, sheetUrlOrId, tabNames }),
       });
       const data = await res.json();
       if (!data.ok) return setAcctNote(data.error || "Save failed.", "err");
@@ -1198,6 +1231,47 @@ html[data-theme="light"] {
       acctIssueSheetsData.sheets[`${acctIssueSheetsSelectedBrand}|${moduleId}`] = data.sheet;
       setAcctNote("Reset to default.", "ok");
       renderIssueSheets();
+    }
+
+    // Same as saveIssueSheetRow/resetIssueSheetRow above, but for a
+    // Promotion Request row — sends `promotion` instead of `moduleId`
+    // and updates the `promotions[brand]` array instead of `sheets`.
+    async function savePromotionSheetRow(row) {
+      const promotion = row.dataset.promotion;
+      const sheetUrlOrId = row.querySelector(".issuesheet-url").value.trim();
+      const tabNames = row.querySelector(".issuesheet-tab").value.trim();
+      if (!sheetUrlOrId) return setAcctNote("Sheet URL or ID is required.", "err");
+      if (!tabNames) return setAcctNote("At least one tab name is required.", "err");
+      setAcctNote("Saving…");
+      const res = await window.AgentAuth.authFetch("/api/admin/issue-submission-sheets", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "save", brandId: acctIssueSheetsSelectedBrand, promotion, sheetUrlOrId, tabNames }),
+      });
+      const data = await res.json();
+      if (!data.ok) return setAcctNote(data.error || "Save failed.", "err");
+      updatePromotionRowInPlace(promotion, { promotion, ...data.sheet });
+      setAcctNote("Saved — takes effect on the next submission.", "ok");
+      renderIssueSheets();
+    }
+
+    async function resetPromotionSheetRow(row) {
+      const promotion = row.dataset.promotion;
+      setAcctNote("Resetting…");
+      const res = await window.AgentAuth.authFetch("/api/admin/issue-submission-sheets", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset", brandId: acctIssueSheetsSelectedBrand, promotion }),
+      });
+      const data = await res.json();
+      if (!data.ok) return setAcctNote(data.error || "Reset failed.", "err");
+      updatePromotionRowInPlace(promotion, { promotion, ...data.sheet });
+      setAcctNote("Reset to default.", "ok");
+      renderIssueSheets();
+    }
+
+    function updatePromotionRowInPlace(promotion, updated) {
+      const list = acctIssueSheetsData.promotions[acctIssueSheetsSelectedBrand] || [];
+      const idx = list.findIndex((p) => p.promotion === promotion);
+      if (idx >= 0) list[idx] = updated;
     }
 
     // ---- Deposit Sheet Link (live-editable Google Sheet source, per brand) ----

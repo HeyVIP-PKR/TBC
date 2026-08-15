@@ -4,7 +4,7 @@ import { uploadAttachmentToR2, screenshotUrl } from "../_shared/r2.js";
 import { createThread } from "../_shared/threads.js";
 import { verifyRequest, canSeeBrand, canSeeModule } from "../_shared/accounts.js";
 import { getRouteOverride } from "../_shared/routes.js";
-import { getIssueSheetOverride } from "../_shared/issueSubmissionSheets.js";
+import { getIssueSheetOverride, resolveWriteTab, promotionModuleId } from "../_shared/issueSubmissionSheets.js";
 import { resolveColumnValues, resolveSheetLayout, formatDateDDMMYYYY, buildTicketMessage, buildTitleAndSummary } from "../_shared/messageBuilders.js";
 import { compressImageForTelegram } from "../_shared/telegramImageCompress.js";
 
@@ -177,26 +177,30 @@ async function handleSubmit({ request, env }) {
   let sheetRef = null;
   const promoConfig = moduleId === "promotion_request" ? PROMOTION_SHEET_CONFIG[`${brandId}|${fieldMap.promotion}`] : null;
   // "Issue Submission Gsheet" admin panel (Integration Portal) override —
-  // per brand+module Sheet ID/tab, live from THREADS_KV, falling back to
-  // the hardcoded BRANDS[brandId].sheetId + SHEET_LAYOUT[moduleId].tab
-  // exactly as before when nothing's been overridden. Promotion Request
-  // is deliberately excluded — its sheet is chosen per (brand, promotion
-  // type) via the separate, more granular PROMOTION_SHEET_CONFIG right
-  // above, not a single per-brand default like every other module here.
-  // See _shared/issueSubmissionSheets.js for the full reasoning.
-  const issueSheetOverride = moduleId !== "promotion_request" && RECORD_TO_SHEET[moduleId]
-    ? await getIssueSheetOverride(env, brandId, moduleId)
+  // per brand+module Sheet ID/tab(s), live from THREADS_KV, falling back
+  // to the hardcoded default exactly as before when nothing's been
+  // overridden. Promotion Request (2026-08) reuses this exact same
+  // override layer via a synthetic moduleId (promotionModuleId()) keyed
+  // on the specific promotion type, instead of just brandId+moduleId —
+  // see _shared/issueSubmissionSheets.js's "PROMOTION REQUEST ROWS" file
+  // header note for why.
+  const issueSheetOverride = RECORD_TO_SHEET[moduleId]
+    ? await getIssueSheetOverride(env, brandId, moduleId === "promotion_request" ? promotionModuleId(fieldMap.promotion) : moduleId)
     : null;
-  const effectiveSheetId = issueSheetOverride?.sheetId || brand.sheetId;
+  const effectiveSheetId = issueSheetOverride?.sheetId || (moduleId === "promotion_request" ? promoConfig?.sheetId : brand.sheetId);
   const sheetAttempted = moduleId === "promotion_request"
-    ? !!(RECORD_TO_SHEET[moduleId] && promoConfig)
+    ? !!(RECORD_TO_SHEET[moduleId] && (issueSheetOverride || promoConfig))
     : !!(RECORD_TO_SHEET[moduleId] && effectiveSheetId);
   if (sheetAttempted) {
     try {
       if (moduleId === "promotion_request") {
+        // Only sheetId/tab are ever overridden — startColumn/columns
+        // stay exactly as coded (see the non-promotion branch's own
+        // comment below for the same reasoning).
+        const tab = await resolveWriteTab(env, effectiveSheetId, issueSheetOverride?.tabNames || [promoConfig?.tab]);
         const values = resolveColumnValues(promoConfig.columns, { fieldMap, brand, reporter, screenshotLink, attachmentLinks });
-        const { row } = await appendRowByColumns(env, promoConfig.sheetId, promoConfig.tab, promoConfig.startColumn, values);
-        if (row) sheetRef = { sheetId: promoConfig.sheetId, tab: promoConfig.tab, startColumn: promoConfig.startColumn, columns: promoConfig.columns, row };
+        const { row } = await appendRowByColumns(env, effectiveSheetId, tab, promoConfig.startColumn, values);
+        if (row) sheetRef = { sheetId: effectiveSheetId, tab, startColumn: promoConfig.startColumn, columns: promoConfig.columns, row };
       } else {
         const layoutEntry = SHEET_LAYOUT[moduleId];
         // Only the tab name is ever overridden — startColumn/columns/
@@ -204,7 +208,7 @@ async function handleSubmit({ request, env }) {
         // spreadsheet is still expected to have the SAME column layout,
         // just possibly a different tab name (or a whole different
         // workbook) than the brand's usual one.
-        const effectiveTab = issueSheetOverride?.tabName || layoutEntry?.tab;
+        const effectiveTab = await resolveWriteTab(env, effectiveSheetId, issueSheetOverride?.tabNames || [layoutEntry?.tab]);
         if (layoutEntry && layoutEntry.pairByDate) {
           const values = resolveColumnValues(layoutEntry.columns, { fieldMap, brand, reporter, screenshotLink, attachmentLinks });
           const dateValue = formatDateDDMMYYYY(fieldMap.reportDate || fieldMap.date);

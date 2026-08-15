@@ -4,33 +4,61 @@
  *
  * Same brand x module grid shape as /api/admin/routes (TG Group/
  * Channel) — one row per (brand, issue-submission module) pair, each
- * independently overridable with its own Sheet URL/ID + Tab name.
+ * independently overridable with its own Sheet URL/ID + Tab name(s).
  *
  *   GET
  *     -> { brands: [{id,name}], modules: [{id,name,emoji}],
- *          sheets: { "<brandId>|<moduleId>": {sheetId,tabName,isOverride} } }
+ *          sheets: { "<brandId>|<moduleId>": {sheetId,tabNames,isOverride} },
+ *          promotions: { [brandId]: [{promotion,sheetId,tabNames,isOverride}] } }
  *        `isOverride: true` means it's a live KV override (edited
  *        through this page); `false` means it's still showing the
- *        hardcoded default (BRANDS[brandId].sheetId +
- *        SHEET_LAYOUT[moduleId].tab from _shared/routing.js).
+ *        hardcoded default. `promotions` is Promotion Request's separate
+ *        section — see the file header note in
+ *        _shared/issueSubmissionSheets.js for why it isn't just another
+ *        row in `modules`/`sheets`: each brand has a DIFFERENT list of
+ *        promotion types (from PROMOTION_SHEET_CONFIG), unlike the other
+ *        6 modules which are the same fixed list for every brand.
  *     Requires canSeeAdminSection(..., "issueSubmissionSheet").
  *
- *   POST { action:"save", brandId, moduleId, sheetUrlOrId, tabName } ->
- *     store an override in THREADS_KV. Takes effect on the very next
- *     form submission for that brand+module — no redeploy needed.
- *     Requires canEditAdminSection(..., "issueSubmissionSheet").
+ *   POST { action:"save", brandId, moduleId, sheetUrlOrId, tabNames } ->
+ *     store an override for one of the 6 fixed modules. `tabNames` is a
+ *     comma-separated string (one or more candidate tab names — see
+ *     resolveWriteTab() in _shared/issueSubmissionSheets.js for what
+ *     "more than one" means). Takes effect on the very next form
+ *     submission — no redeploy needed. Requires
+ *     canEditAdminSection(..., "issueSubmissionSheet").
  *
- *   POST { action:"reset", brandId, moduleId } -> delete the override,
- *     reverting that brand+module back to the hardcoded default.
- *     Requires canEditAdminSection(..., "issueSubmissionSheet").
+ *   POST { action:"save", brandId, promotion, sheetUrlOrId, tabNames } ->
+ *     same, but for a Promotion Request row — `promotion` (not
+ *     `moduleId`) selects which one, and must already exist in
+ *     PROMOTION_SHEET_CONFIG for that brand (this page doesn't let you
+ *     invent a brand-new promotion type, only override an existing
+ *     one's Sheet/tab).
+ *
+ *   POST { action:"reset", brandId, moduleId } / { action:"reset",
+ *     brandId, promotion } -> delete the override, reverting back to the
+ *     hardcoded default. Requires canEditAdminSection(...,
+ *     "issueSubmissionSheet").
  *
  * See functions/_shared/issueSubmissionSheets.js for the KV layer, and
  * functions/api/submit.js for where the override is actually consulted
  * at submission time.
  */
 import { authenticateStaff, ROLE_RANK, canSeeAdminSection, canEditAdminSection } from "../../_shared/accounts.js";
-import { getAllIssueSheetOverrides, saveIssueSheetOverride, deleteIssueSheetOverride } from "../../_shared/issueSubmissionSheets.js";
-import { BRANDS, MODULE_META, SHEET_LAYOUT } from "../../_shared/routing.js";
+import { getAllIssueSheetOverrides, saveIssueSheetOverride, deleteIssueSheetOverride, promotionModuleId } from "../../_shared/issueSubmissionSheets.js";
+import { BRANDS, MODULE_META, SHEET_LAYOUT, PROMOTION_SHEET_CONFIG } from "../../_shared/routing.js";
+
+// Every "<brandId>|<promotion>" key in PROMOTION_SHEET_CONFIG, grouped
+// by brandId — computed once at module load (the hardcoded config never
+// changes at runtime), reused by both GET (listing) and POST (validating
+// a save/reset targets a real promotion for that brand).
+const PROMOTIONS_BY_BRAND = {};
+for (const key of Object.keys(PROMOTION_SHEET_CONFIG)) {
+  const sep = key.indexOf("|");
+  const brandId = key.slice(0, sep);
+  const promotion = key.slice(sep + 1);
+  (PROMOTIONS_BY_BRAND[brandId] ||= []).push(promotion);
+}
 
 export async function onRequestGet(context) {
   try {
@@ -49,13 +77,12 @@ async function handleGet({ request, env }) {
   }
 
   const brandIds = Object.keys(BRANDS);
-  // Promotion Request is deliberately excluded from this grid — its
-  // sheet is chosen per (brand, promotion type) via the separate
-  // PROMOTION_SHEET_CONFIG in routing.js, not a single per-brand default
-  // like the other 6 modules. It has no SHEET_LAYOUT entry at all for
-  // that reason — see submit.js's own comment on this same exclusion.
+  // 6 fixed modules — Promotion Request is handled separately below (see
+  // `promotions`), not part of this list — it has no SHEET_LAYOUT entry
+  // at all since its sheet varies per promotion type, not just per brand.
   const moduleIds = Object.keys(SHEET_LAYOUT);
-  const overrides = await getAllIssueSheetOverrides(env, brandIds, moduleIds);
+  const promoModuleIds = brandIds.flatMap((b) => (PROMOTIONS_BY_BRAND[b] || []).map((p) => promotionModuleId(p)));
+  const overrides = await getAllIssueSheetOverrides(env, brandIds, [...moduleIds, ...promoModuleIds]);
 
   const brands = brandIds.map((id) => ({ id, name: BRANDS[id].name }));
   const modules = moduleIds.map((id) => ({ id, name: MODULE_META[id].name, emoji: MODULE_META[id].emoji }));
@@ -66,14 +93,28 @@ async function handleGet({ request, env }) {
       const key = `${brandId}|${moduleId}`;
       const override = overrides[key];
       if (override) {
-        sheets[key] = { sheetId: override.sheetId, tabName: override.tabName, isOverride: true };
+        sheets[key] = { sheetId: override.sheetId, tabNames: override.tabNames, isOverride: true };
       } else {
-        sheets[key] = { sheetId: BRANDS[brandId].sheetId || "", tabName: SHEET_LAYOUT[moduleId]?.tab || "", isOverride: false };
+        sheets[key] = { sheetId: BRANDS[brandId].sheetId || "", tabNames: SHEET_LAYOUT[moduleId]?.tab ? [SHEET_LAYOUT[moduleId].tab] : [], isOverride: false };
       }
     }
   }
 
-  return json({ ok: true, brands, modules, sheets });
+  const promotions = {};
+  for (const brandId of brandIds) {
+    const promoList = PROMOTIONS_BY_BRAND[brandId] || [];
+    if (!promoList.length) continue;
+    promotions[brandId] = promoList.map((promotion) => {
+      const key = `${brandId}|${promotionModuleId(promotion)}`;
+      const override = overrides[key];
+      const config = PROMOTION_SHEET_CONFIG[`${brandId}|${promotion}`];
+      return override
+        ? { promotion, sheetId: override.sheetId, tabNames: override.tabNames, isOverride: true }
+        : { promotion, sheetId: config.sheetId, tabNames: [config.tab], isOverride: false };
+    });
+  }
+
+  return json({ ok: true, brands, modules, sheets, promotions });
 }
 
 export async function onRequestPost(context) {
@@ -99,13 +140,33 @@ async function handlePost({ request, env }) {
     return json({ ok: false, error: "Invalid JSON body." }, 400);
   }
 
-  const { brandId, moduleId } = body || {};
+  const { brandId, promotion } = body || {};
   if (!BRANDS[brandId]) return json({ ok: false, error: `Unknown brand "${brandId}".` }, 400);
-  if (!SHEET_LAYOUT[moduleId]) return json({ ok: false, error: `Unknown or unsupported module "${moduleId}".` }, 400);
+
+  // Two shapes share this endpoint: a fixed-module row (`moduleId`) or a
+  // Promotion Request row (`promotion`) — resolve which one this request
+  // is, and the actual KV moduleId + hardcoded-default sheet/tab to fall
+  // back to on reset, up front, so "save" and "reset" below don't each
+  // need to re-derive it.
+  let moduleId, defaultSheetId, defaultTabNames;
+  if (promotion !== undefined) {
+    if (!PROMOTIONS_BY_BRAND[brandId]?.includes(promotion)) {
+      return json({ ok: false, error: `Unknown promotion "${promotion}" for brand "${brandId}".` }, 400);
+    }
+    const config = PROMOTION_SHEET_CONFIG[`${brandId}|${promotion}`];
+    moduleId = promotionModuleId(promotion);
+    defaultSheetId = config.sheetId;
+    defaultTabNames = [config.tab];
+  } else {
+    moduleId = body.moduleId;
+    if (!SHEET_LAYOUT[moduleId]) return json({ ok: false, error: `Unknown or unsupported module "${moduleId}".` }, 400);
+    defaultSheetId = BRANDS[brandId].sheetId || "";
+    defaultTabNames = SHEET_LAYOUT[moduleId].tab ? [SHEET_LAYOUT[moduleId].tab] : [];
+  }
 
   if (body.action === "save") {
     try {
-      const saved = await saveIssueSheetOverride(env, brandId, moduleId, { sheetUrlOrId: body.sheetUrlOrId, tabName: body.tabName });
+      const saved = await saveIssueSheetOverride(env, brandId, moduleId, { sheetUrlOrId: body.sheetUrlOrId, tabNames: body.tabNames });
       return json({ ok: true, sheet: { ...saved, isOverride: true } });
     } catch (e) {
       return json({ ok: false, error: String(e.message || e) }, 400);
@@ -114,7 +175,7 @@ async function handlePost({ request, env }) {
 
   if (body.action === "reset") {
     await deleteIssueSheetOverride(env, brandId, moduleId);
-    return json({ ok: true, sheet: { sheetId: BRANDS[brandId].sheetId || "", tabName: SHEET_LAYOUT[moduleId]?.tab || "", isOverride: false } });
+    return json({ ok: true, sheet: { sheetId: defaultSheetId, tabNames: defaultTabNames, isOverride: false } });
   }
 
   return json({ ok: false, error: `Unknown action "${body.action}".` }, 400);

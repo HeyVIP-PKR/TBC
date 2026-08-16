@@ -41,7 +41,7 @@
  * if that file's hardcoded default ever changes directly instead of
  * through this admin page.
  */
-import { authenticateStaff, ROLE_RANK, canSeeAdminSection, canEditAdminSection } from "../../_shared/accounts.js";
+import { authenticateStaff, ROLE_RANK, canSeeAdminSection, canEditAdminSection, requestIP } from "../../_shared/accounts.js";
 import {
   PKR_BRANDS,
   getAllDepositSheetOverrides,
@@ -52,6 +52,7 @@ import {
   clearDepositBackupThisMonth,
   rollDepositBackup,
 } from "../../_shared/depositSheets.js";
+import { logActivity } from "../../_shared/activityLog.js";
 
 const MODULE_SLOT = "depositIssue";
 // Only Crickex has a real hardcoded fallback (this was the one working
@@ -112,13 +113,19 @@ export async function onRequestPost(context) {
   }
 }
 
-async function handlePost({ request, env }) {
+async function handlePost({ request, env, waitUntil }) {
   if (!env.THREADS_KV) return json({ ok: false, error: "THREADS_KV is not bound yet." }, 500);
   const auth = await authenticateStaff(request, env, ROLE_RANK.senior);
   if (!auth.ok) return json({ ok: false, error: "Not authorized." }, 401);
   if (!canEditAdminSection(auth.account, "depositSheets")) {
     return json({ ok: false, error: "You don't have Can-Edit access to Deposit Sheet Link." }, 403);
   }
+
+  const ip = requestIP(request);
+  const log = (entry) => {
+    const p = logActivity(env, { category: "Config", agent: auth.account?.username, ip, ...entry });
+    if (waitUntil) waitUntil(p); else p.catch(() => {});
+  };
 
   let body;
   try {
@@ -129,10 +136,12 @@ async function handlePost({ request, env }) {
 
   const brandId = body.brandId;
   if (!PKR_BRANDS.some((b) => b.id === brandId)) return json({ ok: false, error: `Unknown brand "${brandId}".` }, 400);
+  const brandName = PKR_BRANDS.find((b) => b.id === brandId)?.name || brandId;
 
   if (body.action === "save") {
     try {
       const saved = await saveDepositSheetOverride(env, MODULE_SLOT, brandId, { sheetUrlOrId: body.sheetUrlOrId, tabNames: body.tabNames });
+      log({ action: "Gsheet Route Changed", detail: `Deposit Issue — ${brandName}: sheet updated` });
       return json({ ok: true, brandId, sheet: { ...saved, isOverride: true } });
     } catch (e) {
       return json({ ok: false, error: String(e.message || e) }, 400);
@@ -141,6 +150,7 @@ async function handlePost({ request, env }) {
 
   if (body.action === "reset") {
     await deleteDepositSheetOverride(env, MODULE_SLOT, brandId);
+    log({ action: "Gsheet Route Reset", detail: `Deposit Issue — ${brandName} reverted to default` });
     return json({ ok: true, brandId, sheet: { ...defaultFor(brandId), isOverride: false } });
   }
 
@@ -148,6 +158,7 @@ async function handlePost({ request, env }) {
   if (body.action === "saveBackupThisMonth") {
     try {
       const updated = await saveDepositBackupThisMonth(env, brandId, { sheetUrlOrId: body.sheetUrlOrId, tabNames: body.tabNames });
+      log({ action: "Gsheet Route Changed", detail: `Deposit Backup (This Month) — ${brandName}: sheet updated` });
       return json({ ok: true, brandId, backup: updated });
     } catch (e) {
       return json({ ok: false, error: String(e.message || e) }, 400);
@@ -155,10 +166,12 @@ async function handlePost({ request, env }) {
   }
   if (body.action === "clearBackupThisMonth") {
     const updated = await clearDepositBackupThisMonth(env, brandId);
+    log({ action: "Gsheet Route Reset", detail: `Deposit Backup (This Month) — ${brandName} cleared` });
     return json({ ok: true, brandId, backup: updated });
   }
   if (body.action === "rollBackup") {
     const updated = await rollDepositBackup(env, brandId);
+    log({ action: "Gsheet Route Changed", detail: `Deposit Backup — ${brandName}: This Month rolled into Last Month` });
     return json({ ok: true, brandId, backup: updated });
   }
 

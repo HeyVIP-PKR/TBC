@@ -35,7 +35,7 @@ html[data-theme="light"] {
     linear-gradient(160deg, #dbe7fb 0%, #d9cef4 45%, #cdbdf2 75%, #c4b2ee 100%);
 }
 </style>
-<link rel="stylesheet" href="/assets/style.css?v=467b5a4c" />
+<link rel="stylesheet" href="/assets/style.css?v=e506495c" />
 <link rel="stylesheet" href="/assets/toast.css?v=5779b14e" />
 <script src="/assets/toast.js?v=d9d84724"></script>
 <script src="/assets/starfield.js?v=b6e92821" defer></script>
@@ -199,6 +199,17 @@ html[data-theme="light"] {
           <div class="sidebar-subitem" id="subSettings" style="--sub-accent:#f59e0b33; display:none;"><span class="sub-icon">⚙️</span> Settings</div>
           <div class="sidebar-subitem" id="subResetPassword" style="--sub-accent:#f3c46333;"><span class="sub-icon">🔑</span> Reset Password</div>
           <div class="sidebar-subitem" id="subAgentProfile" style="--sub-accent:#34d39933; display:none;"><span class="sub-icon">🪪</span> Agent Profile</div>
+          <!-- Activity Logs (2026-08) — unlike every other item in this
+               group, this does NOT open the Account Management modal
+               (openAcctModal); it has data-route="activity_logs" so
+               spa-shell.js's capture-phase click listener intercepts it
+               and mounts the standalone /activity-logs.html page into
+               #spaMount instead — a big filterable/paginated table
+               doesn't fit well squeezed into a modal. See
+               canViewActivityLogs() in functions/_shared/accounts.js
+               for the (Owner-only-by-default, per-account) permission
+               gating this, computed client-side just below. -->
+          <div class="sidebar-subitem" id="subActivityLogs" data-route="activity_logs" style="--sub-accent:#ef4a7233; display:none;"><span class="sub-icon">🔎</span> Activity Logs</div>
         </div>
       </div>
     </aside>
@@ -276,7 +287,7 @@ html[data-theme="light"] {
 
   <script src="/assets/schemas.js?v=189eea70"></script>
   <script src="/assets/active-agents-modal.js?v=2d846145"></script>
-  <script src="/assets/spa-shell.js?v=6e1e521c"></script>
+  <script src="/assets/spa-shell.js?v=7e195107"></script>
   <script>
     window.initThemeToggle();
     window.initClock();
@@ -671,6 +682,13 @@ html[data-theme="light"] {
     document.getElementById("subWhitelistIp").style.display = canSeeAdminSection("whitelistIp") ? "flex" : "none";
     document.getElementById("subSettings").style.display = canSeeAdminSection("settings") ? "flex" : "none";
     document.getElementById("subAgentProfile").style.display = canSeeAdminSection("agentProfile") ? "flex" : "none";
+    // Activity Logs — NOT part of the allowedAdminSections mechanism
+    // canSeeAdminSection() above mirrors (see the note on the sidebar
+    // markup itself) — gated by the flat canViewActivityLogs field
+    // instead, same client-side-mirrors-server pattern as
+    // canSeeActiveAgents further up this file.
+    const canSeeActivityLogs = authInfo?.role === "owner" || !!authInfo?.canViewActivityLogs;
+    document.getElementById("subActivityLogs").style.display = canSeeActivityLogs ? "flex" : "none";
 
     const acctToggle = document.getElementById("acctMgmtToggle");
     const acctSubitems = document.getElementById("acctMgmtSubitems");
@@ -1976,6 +1994,18 @@ html[data-theme="light"] {
           👥 Active Agents
         </label>` : "";
 
+      // Activity Logs (2026-08) — same Owner-only, never-on-own-profile
+      // treatment as Active Agents directly above, and for the same
+      // reason: canViewActivityLogs() (_shared/accounts.js) is a flat
+      // per-account boolean, NOT part of allowedAdminSections, so it
+      // needs its own dedicated checkbox here rather than riding along
+      // with adminSectionChecksHtml() below.
+      const activityLogsCheck = (authInfo?.role === "owner" && !isSelfProfile) ? `
+        <label class="agent-profile-module-check">
+          <input type="checkbox" id="ap_canViewActivityLogs" ${a.canViewActivityLogs ? "checked" : ""} />
+          🔎 Activity Logs
+        </label>` : "";
+
       // Integration Portal (2026-08) — same single-checkbox-grants-both
       // treatment as Announcement above (storage: the "integrationPortal"
       // entry in allowedAdminSections/adminSectionEditAccess, gated by the
@@ -2067,7 +2097,7 @@ html[data-theme="light"] {
               </button>
               <div class="agent-profile-collapsible-body" style="display:none;">
                 ${!canManageAccess ? '<p class="agent-profile-locked-note" style="margin:-4px 0 8px;">(requires outranking this account)</p>' : ""}
-                <div class="agent-profile-module-list">${moduleChecks}${announcementCheck}${activeAgentsCheck}${integrationPortalCheck}</div>
+                <div class="agent-profile-module-list">${moduleChecks}${announcementCheck}${activeAgentsCheck}${activityLogsCheck}${integrationPortalCheck}</div>
               </div>
             </div>
 
@@ -2258,6 +2288,10 @@ html[data-theme="light"] {
       const activeAgentsToggle = document.getElementById("ap_canViewActiveAgents");
       if (activeAgentsToggle) {
         payload.canViewActiveAgents = activeAgentsToggle.checked;
+      }
+      const activityLogsToggle = document.getElementById("ap_canViewActivityLogs");
+      if (activityLogsToggle) {
+        payload.canViewActivityLogs = activityLogsToggle.checked;
       }
       statusEl.textContent = "Saving…";
       statusEl.className = "edit-details-status";

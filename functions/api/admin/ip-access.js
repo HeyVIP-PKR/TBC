@@ -21,8 +21,9 @@
  * view, just a richer admin page, so it reuses that section rather than
  * inventing a new one an Owner would have to separately grant.
  */
-import { authenticateStaff, ROLE_RANK, canSeeAdminSection, canEditAdminSection, getOffice, saveOffice, listOffices, setAccountLocked } from "../../_shared/accounts.js";
+import { authenticateStaff, ROLE_RANK, canSeeAdminSection, canEditAdminSection, getOffice, saveOffice, listOffices, setAccountLocked, requestIP } from "../../_shared/accounts.js";
 import { getIpAccessDashboard, approveIpRequest, rejectIpRequest, blockIp, unblockIp, addManualIp, removeApprovedIp } from "../../_shared/ipAccess.js";
+import { logActivity } from "../../_shared/activityLog.js";
 
 export async function onRequestGet(context) {
   try {
@@ -50,11 +51,17 @@ export async function onRequestPost(context) {
   }
 }
 
-async function handlePost({ request, env }) {
+async function handlePost({ request, env, waitUntil }) {
   if (!env.THREADS_KV) return json({ ok: false, error: "THREADS_KV is not bound yet." }, 500);
   const auth = await authenticateStaff(request, env, ROLE_RANK.senior);
   if (!auth.ok) return json({ ok: false, error: "Not authorized." }, 401);
   if (!canEditAdminSection(auth.account, "whitelistIp")) return json({ ok: false, error: "You don't have Can-Edit access to IP Access." }, 403);
+
+  const reqIp = requestIP(request);
+  const log = (entry) => {
+    const p = logActivity(env, { category: "Config", ip: reqIp, ...entry });
+    if (waitUntil) waitUntil(p); else p.catch(() => {});
+  };
 
   let body;
   try {
@@ -88,29 +95,35 @@ async function handlePost({ request, env }) {
       case "approve": {
         if (!body.officeId) return json({ ok: false, error: "Missing officeId." }, 400);
         const result = await approveIpRequest(env, { officeId: body.officeId, ip, by, byRole, getOffice, saveOffice, setAccountLocked });
+        log({ action: "IP Approved", agent: by, detail: `${ip} approved for office "${body.officeId}"` });
         return json({ ok: true, office: result.office });
       }
       case "reject": {
         if (!body.officeId) return json({ ok: false, error: "Missing officeId." }, 400);
         await rejectIpRequest(env, { officeId: body.officeId, ip, by, byRole });
+        log({ action: "IP Rejected", agent: by, detail: `${ip} rejected for office "${body.officeId}"` });
         return json({ ok: true });
       }
       case "block": {
         await blockIp(env, { ip, reason: body.reason || "", by, byRole });
+        log({ action: "IP Blocked", agent: by, detail: `${ip}${body.reason ? ` — ${body.reason}` : ""}` });
         return json({ ok: true });
       }
       case "unblock": {
         await unblockIp(env, { ip, by, byRole });
+        log({ action: "IP Unblocked", agent: by, detail: ip });
         return json({ ok: true });
       }
       case "manualAdd": {
         if (!body.officeId) return json({ ok: false, error: "Missing officeId." }, 400);
         const office = await addManualIp(env, { officeId: body.officeId, ip, by, byRole, getOffice, saveOffice });
+        log({ action: "IP Whitelist Changed", agent: by, detail: `${ip} manually added to office "${body.officeId}"` });
         return json({ ok: true, office });
       }
       case "remove": {
         if (!body.officeId) return json({ ok: false, error: "Missing officeId." }, 400);
         await removeApprovedIp(env, { officeId: body.officeId, ip, by, byRole, getOffice, saveOffice });
+        log({ action: "IP Whitelist Changed", agent: by, detail: `${ip} removed from office "${body.officeId}"` });
         return json({ ok: true });
       }
       default:

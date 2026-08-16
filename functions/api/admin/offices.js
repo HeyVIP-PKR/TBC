@@ -21,7 +21,8 @@
  * canSeeAdminSection()/canEditAdminSection() for the per-account
  * Account Management Access layer these checks are built on.
  */
-import { listOffices, saveOffice, deleteOffice, authenticateStaff, ROLE_RANK, canSeeAdminSection, canEditAdminSection } from "../../_shared/accounts.js";
+import { listOffices, saveOffice, deleteOffice, authenticateStaff, ROLE_RANK, canSeeAdminSection, canEditAdminSection, requestIP } from "../../_shared/accounts.js";
+import { logActivity } from "../../_shared/activityLog.js";
 
 export async function onRequestGet(context) {
   try {
@@ -57,13 +58,19 @@ export async function onRequestPost(context) {
   }
 }
 
-async function handlePost({ request, env }) {
+async function handlePost({ request, env, waitUntil }) {
   if (!env.THREADS_KV) return json({ ok: false, error: "THREADS_KV is not bound yet." }, 500);
   const auth = await authenticateStaff(request, env, ROLE_RANK.senior);
   if (!auth.ok) return json({ ok: false, error: "Not authorized." }, 401);
   if (!canEditAdminSection(auth.account, "whitelistIp")) {
     return json({ ok: false, error: "You don't have Can-Edit access to Whitelist IP." }, 403);
   }
+
+  const ip = requestIP(request);
+  const log = (entry) => {
+    const p = logActivity(env, { category: "Config", agent: auth.account?.username || "bootstrap-setup", ip, ...entry });
+    if (waitUntil) waitUntil(p); else p.catch(() => {});
+  };
 
   let body;
   try {
@@ -74,13 +81,16 @@ async function handlePost({ request, env }) {
 
   if (body.action === "save") {
     if (!body.name) return json({ ok: false, error: "Office name is required." }, 400);
+    const isNew = !body.id;
     const office = await saveOffice(env, { id: body.id, name: body.name, allowedIPs: body.allowedIPs || [] });
+    log({ action: "IP Whitelist Changed", detail: `${isNew ? "Created office" : "Updated office"} "${office.name}" — ${(body.allowedIPs || []).length} IP(s) whitelisted` });
     return json({ ok: true, office });
   }
 
   if (body.action === "delete") {
     if (!body.id) return json({ ok: false, error: "Missing office id." }, 400);
     await deleteOffice(env, body.id);
+    log({ action: "Office Deleted", detail: `Deleted office "${body.id}"` });
     return json({ ok: true });
   }
 

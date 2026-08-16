@@ -20,8 +20,9 @@
  * risks hitting Cloudflare Pages Functions' execution time limit even on
  * a large ticket history.
  */
-import { authenticateStaff, ROLE_RANK, canEditAdminSection } from "../../_shared/accounts.js";
+import { authenticateStaff, ROLE_RANK, canEditAdminSection, requestIP } from "../../_shared/accounts.js";
 import { backfillMentionCandidatesPage } from "../../_shared/threads.js";
+import { logActivity } from "../../_shared/activityLog.js";
 
 export async function onRequestPost(context) {
   try {
@@ -31,7 +32,7 @@ export async function onRequestPost(context) {
   }
 }
 
-async function handlePost({ request, env }) {
+async function handlePost({ request, env, waitUntil }) {
   if (!env.THREADS_KV) return json({ ok: false, error: "THREADS_KV is not bound yet." }, 500);
   const auth = await authenticateStaff(request, env, ROLE_RANK.senior);
   if (!auth.ok) return json({ ok: false, error: "Not authorized." }, 401);
@@ -47,7 +48,15 @@ async function handlePost({ request, env }) {
   }
 
   const { scanned, nextCursor } = await backfillMentionCandidatesPage(env, body.cursor || undefined);
-  return json({ ok: true, scanned, done: !nextCursor, cursor: nextCursor || null });
+  const done = !nextCursor;
+  // Only logged once, on the FINAL page — a multi-page backfill run would
+  // otherwise flood the audit trail with one entry per 100-thread page.
+  if (done) {
+    const ip = requestIP(request);
+    const p = logActivity(env, { category: "Config", action: "Mention Backfill Run", agent: auth.account?.username, ip, detail: "Backfilled @ mention candidates across all threads" });
+    if (waitUntil) waitUntil(p); else p.catch(() => {});
+  }
+  return json({ ok: true, scanned, done, cursor: nextCursor || null });
 }
 
 function json(obj, status = 200) {

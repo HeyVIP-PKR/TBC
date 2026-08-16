@@ -23,8 +23,9 @@
  *     the hardcoded default. Requires canEditAdminSection(...,
  *     "promoCodeSheet").
  */
-import { authenticateStaff, ROLE_RANK, canSeeAdminSection, canEditAdminSection } from "../../_shared/accounts.js";
+import { authenticateStaff, ROLE_RANK, canSeeAdminSection, canEditAdminSection, requestIP } from "../../_shared/accounts.js";
 import { getPromoCodeSheet, savePromoCodeSheet, resetPromoCodeSheet } from "../../_shared/promoCodeSheet.js";
+import { logActivity } from "../../_shared/activityLog.js";
 
 export async function onRequestGet(context) {
   try {
@@ -54,13 +55,19 @@ export async function onRequestPost(context) {
   }
 }
 
-async function handlePost({ request, env }) {
+async function handlePost({ request, env, waitUntil }) {
   if (!env.THREADS_KV) return json({ ok: false, error: "THREADS_KV is not bound yet." }, 500);
   const auth = await authenticateStaff(request, env, ROLE_RANK.senior);
   if (!auth.ok) return json({ ok: false, error: "Not authorized." }, 401);
   if (!canEditAdminSection(auth.account, "promoCodeSheet")) {
     return json({ ok: false, error: "You don't have Can-Edit access to Promo Code Gsheet." }, 403);
   }
+
+  const ip = requestIP(request);
+  const log = (entry) => {
+    const p = logActivity(env, { category: "Config", agent: auth.account?.username, ip, ...entry });
+    if (waitUntil) waitUntil(p); else p.catch(() => {});
+  };
 
   let body;
   try {
@@ -72,6 +79,7 @@ async function handlePost({ request, env }) {
   if (body.action === "save") {
     try {
       const config = await savePromoCodeSheet(env, { sheetUrlOrId: body.sheetUrlOrId, tabNames: body.tabNames });
+      log({ action: "Gsheet Route Changed", detail: "Promo Code Gsheet updated" });
       return json({ ok: true, config });
     } catch (e) {
       return json({ ok: false, error: String(e.message || e) }, 400);
@@ -80,6 +88,7 @@ async function handlePost({ request, env }) {
 
   if (body.action === "reset") {
     const config = await resetPromoCodeSheet(env);
+    log({ action: "Gsheet Route Reset", detail: "Promo Code Gsheet reverted to default" });
     return json({ ok: true, config });
   }
 

@@ -17,8 +17,9 @@
  *          saveBettingResources() in _shared/bettingResources.js for why
  *          this is deliberately not per-link)
  */
-import { authenticateStaff, ROLE_RANK, canSeeAdminSection, canEditAdminSection } from "../../_shared/accounts.js";
+import { authenticateStaff, ROLE_RANK, canSeeAdminSection, canEditAdminSection, requestIP } from "../../_shared/accounts.js";
 import { getBettingResources, saveBettingResources } from "../../_shared/bettingResources.js";
+import { logActivity } from "../../_shared/activityLog.js";
 
 export async function onRequestGet(context) {
   try {
@@ -48,7 +49,7 @@ export async function onRequestPost(context) {
   }
 }
 
-async function handlePost({ request, env }) {
+async function handlePost({ request, env, waitUntil }) {
   if (!env.THREADS_KV) return json({ ok: false, error: "THREADS_KV is not bound yet." }, 500);
   const auth = await authenticateStaff(request, env, ROLE_RANK.senior);
   if (!auth.ok) return json({ ok: false, error: "Not authorized." }, 401);
@@ -64,6 +65,9 @@ async function handlePost({ request, env }) {
   }
 
   const config = await saveBettingResources(env, { rules: body.rules, results: body.results }, auth.account?.username || "bootstrap");
+  const ip = requestIP(request);
+  const p = logActivity(env, { category: "Config", action: "Betting Resources Links Changed", agent: auth.account?.username, ip, detail: "Rules/results links updated" });
+  if (waitUntil) waitUntil(p); else p.catch(() => {});
   return json({ ok: true, ...config });
 }
 

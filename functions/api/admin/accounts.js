@@ -52,7 +52,8 @@
  *     caller rank >= admin AND (editing themselves OR strictly
  *     outranking the target).
  */
-import { listAccounts, saveAccount, deleteAccount, getAccount, authenticateStaff, anySuperAdminExists, setAccountLocked, ROLE_RANK, rankOf, canSeeAdminSection, canEditAdminSection, canManageOthersAdminAccess, withSectionToggled, effectiveAllowedAdminSections, effectiveAdminSectionEditAccess, ADMIN_SECTIONS, EDITABLE_ADMIN_SECTIONS } from "../../_shared/accounts.js";
+import { listAccounts, saveAccount, deleteAccount, getAccount, authenticateStaff, anySuperAdminExists, setAccountLocked, ROLE_RANK, rankOf, canSeeAdminSection, canEditAdminSection, canManageOthersAdminAccess, withSectionToggled, effectiveAllowedAdminSections, effectiveAdminSectionEditAccess, ADMIN_SECTIONS, EDITABLE_ADMIN_SECTIONS, requestIP } from "../../_shared/accounts.js";
+import { logActivity } from "../../_shared/activityLog.js";
 
 // An actor may act on a target only if strictly outranking it — same
 // rank can never manage same rank (this alone is what stops SuperAdmin
@@ -99,10 +100,17 @@ export async function onRequestPost(context) {
   }
 }
 
-async function handlePost({ request, env }) {
+async function handlePost({ request, env, waitUntil }) {
   if (!env.THREADS_KV) return json({ ok: false, error: "THREADS_KV is not bound yet." }, 500);
   const auth = await authenticateStaff(request, env, ROLE_RANK.senior);
   if (!auth.ok) return json({ ok: false, error: "Not authorized." }, 401);
+
+  const ip = requestIP(request);
+  const actorName = auth.account ? auth.account.username : "bootstrap-setup";
+  const log = (entry) => {
+    const p = logActivity(env, { category: "Account", agent: actorName, ip, ...entry });
+    if (waitUntil) waitUntil(p); else p.catch(() => {});
+  };
 
   let body;
   try {
@@ -142,6 +150,12 @@ async function handlePost({ request, env }) {
   // canViewActiveAgents() in _shared/accounts.js for the full reasoning.
   if (body.action === "save" && body.canViewActiveAgents !== undefined && auth.account?.role !== "owner") {
     return json({ ok: false, error: "Only the account owner can grant or revoke Active Agents access." }, 403);
+  }
+  // canViewActivityLogs: same flat, per-account, Owner-only treatment as
+  // canViewActiveAgents right above — see canViewActivityLogs() in
+  // _shared/accounts.js.
+  if (body.action === "save" && body.canViewActivityLogs !== undefined && auth.account?.role !== "owner") {
+    return json({ ok: false, error: "Only the account owner can grant or revoke Activity Logs access." }, 403);
   }
 
   // Bootstrap mode (no real account yet) is treated as superadmin-rank
@@ -329,7 +343,30 @@ async function handlePost({ request, env }) {
         adminSectionEditAccess: integrationPortalAdminSectionEditAccess !== undefined ? integrationPortalAdminSectionEditAccess : (announcementsAdminSectionEditAccess !== undefined ? announcementsAdminSectionEditAccess : (body.adminSectionEditAccess !== undefined ? body.adminSectionEditAccess : undefined)),
         canManageAdminAccess: body.canManageAdminAccess !== undefined ? body.canManageAdminAccess : undefined,
         canViewActiveAgents: body.canViewActiveAgents !== undefined ? body.canViewActiveAgents : undefined,
+        canViewActivityLogs: body.canViewActivityLogs !== undefined ? body.canViewActivityLogs : undefined,
       });
+
+      if (!existingTarget) {
+        log({ action: "Account Created", detail: `Created "${targetUsername}" (role: ${account.role})` });
+      } else {
+        const diffs = [];
+        if (body.role !== undefined && body.role !== existingTarget.role) diffs.push(`role: "${existingTarget.role}" → "${account.role}"`);
+        if (body.officeId !== undefined && (body.officeId || null) !== (existingTarget.officeId || null)) diffs.push(`office: "${existingTarget.officeId || "none"}" → "${account.officeId || "none"}"`);
+        if (body.allowedBrands !== undefined && JSON.stringify(body.allowedBrands) !== JSON.stringify(existingTarget.allowedBrands ?? [])) diffs.push(`brands changed`);
+        if (body.allowedModules !== undefined && JSON.stringify(body.allowedModules) !== JSON.stringify(existingTarget.allowedModules ?? "all")) diffs.push(`modules changed`);
+        if (body.password) diffs.push(`password reset by ${actorName}`);
+        if (body.allowedAdminSections !== undefined || announcementsAllowedAdminSections !== undefined || integrationPortalAllowedAdminSections !== undefined) diffs.push(`Account Management Access permissions changed`);
+        if (body.adminSectionEditAccess !== undefined || announcementsAdminSectionEditAccess !== undefined || integrationPortalAdminSectionEditAccess !== undefined) diffs.push(`Can-Edit permissions changed`);
+        if (body.canManageAdminAccess !== undefined && !!body.canManageAdminAccess !== !!existingTarget.canManageAdminAccess) diffs.push(`delegated admin-access management ${body.canManageAdminAccess ? "granted" : "revoked"}`);
+        if (body.canViewActiveAgents !== undefined && !!body.canViewActiveAgents !== !!existingTarget.canViewActiveAgents) diffs.push(`Active Agents access ${body.canViewActiveAgents ? "granted" : "revoked"}`);
+        if (body.canViewActivityLogs !== undefined && !!body.canViewActivityLogs !== !!existingTarget.canViewActivityLogs) diffs.push(`Activity Logs access ${body.canViewActivityLogs ? "granted" : "revoked"}`);
+        if (body.fullName !== undefined && body.fullName !== (existingTarget.fullName || "")) diffs.push(`full name changed`);
+        if (body.pid !== undefined && body.pid !== (existingTarget.pid || "")) diffs.push(`PID changed`);
+        if (diffs.length) {
+          log({ action: diffs.length === 1 && body.password && diffs[0].startsWith("password") ? "Password Reset" : "Account Updated", detail: `"${targetUsername}": ${diffs.join("; ")}` });
+        }
+      }
+
       return json({ ok: true, account });
     } catch (e) {
       return json({ ok: false, error: String(e.message || e) }, 400);
@@ -345,6 +382,7 @@ async function handlePost({ request, env }) {
       return json({ ok: false, error: "You can only delete accounts ranked below your own." }, 403);
     }
     await deleteAccount(env, body.username);
+    log({ action: "Account Deleted", detail: `Deleted "${body.username}"` });
     return json({ ok: true });
   }
 
@@ -368,6 +406,7 @@ async function handlePost({ request, env }) {
     }
     const locked = body.action === "lock";
     const account = await setAccountLocked(env, body.username, locked, locked ? (body.reason || `Manually locked by ${actorUsername}`) : null);
+    log({ action: locked ? "Account Locked" : "Account Unlocked", detail: `"${body.username}"${locked && body.reason ? ` — ${body.reason}` : ""}` });
     return json({ ok: true, account });
   }
 

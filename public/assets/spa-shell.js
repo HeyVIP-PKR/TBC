@@ -75,6 +75,7 @@
     deposit_issue: { url: "/deposit-issue.html", select: ["#imgLightbox", ".subpage-right-col"], title: "Deposit Issue" },
     deposit_backup: { url: "/deposit-backup.html", select: ["#imgLightbox", ".subpage-right-col"], title: "Deposit Backup" },
     form: { url: "/form.html", select: [".subpage-right-col"], title: "Issue Submission" },
+    activity_logs: { url: "/activity-logs.html", select: [".subpage-right-col"], title: "Activity Logs" },
   };
 
   // Scripts the shell (this very page) has already loaded once — never

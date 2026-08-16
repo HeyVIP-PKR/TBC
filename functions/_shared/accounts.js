@@ -213,6 +213,25 @@ export function canViewActiveAgents(account) {
 }
 
 /**
+ * Can `account` see the Activity Logs audit trail (2026-08)? Same
+ * treatment as canViewActiveAgents() directly above, not the rank-tiered
+ * ADMIN_SECTIONS default: a flat, per-account boolean that ONLY Owner can
+ * ever set (enforced in functions/api/admin/accounts.js). No rank gets it
+ * for free — not even SuperAdmin — and there's no rank floor stopping an
+ * Owner from handing it to an Agent either. Deliberately kept OUT of
+ * ADMIN_SECTIONS/EDITABLE_ADMIN_SECTIONS: the rank-tiered default there
+ * would otherwise silently hand every existing SuperAdmin account
+ * visibility into every other agent's audit trail the moment this
+ * shipped, which is exactly the blast radius an audit-log feature should
+ * NOT get by default.
+ */
+export function canViewActivityLogs(account) {
+  if (!account) return false;
+  if (account.role === "owner") return true;
+  return !!account.canViewActivityLogs;
+}
+
+/**
  * Add or remove exactly ONE section id from a stored allowedAdminSections/
  * adminSectionEditAccess value, WITHOUT touching any other section in it.
  * `effectiveCurrent` must already be resolved to a concrete "all" or array
@@ -503,7 +522,7 @@ function stripSecret(account) {
 // `passwordChangedBy` is only meaningful when `password` is also given —
 // the username of whoever triggered the change (their own, for
 // self-service; the admin's, for an admin-driven reset).
-export async function saveAccount(env, { username, password, passwordChangedBy, role, officeId, allowedBrands, allowedModules, fullName, pid, allowedAdminSections, adminSectionEditAccess, canManageAdminAccess, canViewActiveAgents }) {
+export async function saveAccount(env, { username, password, passwordChangedBy, role, officeId, allowedBrands, allowedModules, fullName, pid, allowedAdminSections, adminSectionEditAccess, canManageAdminAccess, canViewActiveAgents, canViewActivityLogs }) {
   const key = username.toLowerCase();
   const existing = await getAccount(env, key);
   let salt = existing?.salt;
@@ -582,6 +601,9 @@ export async function saveAccount(env, { username, password, passwordChangedBy, 
     // patch/merge semantics as canManageAdminAccess: omitted keeps
     // whatever was there, explicit true/false overwrites it.
     canViewActiveAgents: canViewActiveAgents !== undefined ? !!canViewActiveAgents : !!existing?.canViewActiveAgents,
+    // Owner-only flag, see canViewActivityLogs() above — same
+    // patch/merge semantics as canViewActiveAgents just above.
+    canViewActivityLogs: canViewActivityLogs !== undefined ? !!canViewActivityLogs : !!existing?.canViewActivityLogs,
     lastActiveAt: existing?.lastActiveAt || null,
     lastPasswordChange,
     // Lock state is intentionally NOT a parameter of saveAccount() — it's

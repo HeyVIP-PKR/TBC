@@ -31,7 +31,8 @@
  * owner) — small source image (60×60), upscaled to match the others;
  * looks fine at the 24px pill size this actually renders at.
  */
-import { verifyRequest, canEditAdminSection } from "../_shared/accounts.js";
+import { verifyRequest, canEditAdminSection, requestIP } from "../_shared/accounts.js";
+import { logActivity } from "../_shared/activityLog.js";
 
 // PKR market: 3 of the 9 brands (Crickex/Betjili/Mostplay) are the same
 // actual brand/logo as the INR build this was forked from — confirmed by
@@ -82,7 +83,7 @@ export async function onRequestPost(context) {
   }
 }
 
-async function handlePost({ request, env }) {
+async function handlePost({ request, env, waitUntil }) {
   const bucket = env.SCREENSHOTS_BUCKET;
   if (!bucket) return json({ ok: false, error: "Server is missing the SCREENSHOTS_BUCKET R2 binding." }, 500);
 
@@ -108,6 +109,10 @@ async function handlePost({ request, env }) {
 
   config[brand] = entry;
   await bucket.put("brand-config.json", JSON.stringify(config), { httpMetadata: { contentType: "application/json" } });
+
+  const ip = requestIP(request);
+  const p = logActivity(env, { category: "Config", action: "Brand Link Edited", agent: account.username, ip, detail: `"${brand}" web link → ${link || "(cleared)"}` });
+  if (waitUntil) waitUntil(p); else p.catch(() => {});
 
   return json({ ok: true, config });
 }

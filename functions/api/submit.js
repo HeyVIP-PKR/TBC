@@ -2,11 +2,12 @@ import { BRANDS, RECORD_TO_SHEET, MODULE_META, SHEET_LAYOUT, MESSAGE_TEMPLATE, S
 import { appendRowToSheet, appendRowByColumns, writeRowForDate } from "../_shared/googleSheets.js";
 import { uploadAttachmentToR2, screenshotUrl } from "../_shared/r2.js";
 import { createThread } from "../_shared/threads.js";
-import { verifyRequest, canSeeBrand, canSeeModule } from "../_shared/accounts.js";
+import { verifyRequest, canSeeBrand, canSeeModule, requestIP } from "../_shared/accounts.js";
 import { getRouteOverride } from "../_shared/routes.js";
 import { getIssueSheetOverride, resolveWriteTab, promotionModuleId } from "../_shared/issueSubmissionSheets.js";
 import { resolveColumnValues, resolveSheetLayout, formatDateDDMMYYYY, buildTicketMessage, buildTitleAndSummary } from "../_shared/messageBuilders.js";
 import { compressImageForTelegram } from "../_shared/telegramImageCompress.js";
+import { logActivity } from "../_shared/activityLog.js";
 
 const VALID_MODULES = Object.keys(MODULE_META);
 
@@ -24,7 +25,7 @@ export async function onRequestPost(context) {
   }
 }
 
-async function handleSubmit({ request, env }) {
+async function handleSubmit({ request, env, waitUntil }) {
   // The whole hub now requires login (business owner's call — previously
   // only TG Reply Threads did). This is the server-side half of that: the
   // frontend redirect to /login.html is the UX, this is what actually
@@ -296,6 +297,10 @@ async function handleSubmit({ request, env }) {
     attachmentErrors: attachmentErrors.length ? attachmentErrors : undefined,
     r2Errors: r2Errors.length ? r2Errors : undefined,
   };
+
+  const submitIp = requestIP(request);
+  const submitLog = logActivity(env, { category: "Thread", action: "Ticket Created", agent: account.username, ip: submitIp, detail: `${meta?.name || moduleId} — ${brand?.name || brandId}` });
+  if (waitUntil) waitUntil(submitLog); else submitLog.catch(() => {});
   // Overwrite the placeholder from the duplicate-submission guard above
   // with the REAL result, so a duplicate request arriving even a moment
   // late still gets back this exact ticket's info (not "still processing")

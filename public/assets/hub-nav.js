@@ -41,6 +41,15 @@
     return Array.isArray(sections) && sections.includes(sectionId);
   }
 
+  // Activity Logs (2026-08) — flat, per-account, Owner-only-by-default
+  // gate (canViewActivityLogs() in functions/_shared/accounts.js), NOT
+  // part of allowedAdminSections/accountCanSeeAdminSection() above.
+  function accountCanViewActivityLogs(acc) {
+    if (!acc) return false;
+    if (acc.role === "owner") return true;
+    return !!acc.canViewActivityLogs;
+  }
+
   // `mode` values match the argument openAcctModal(mode) expects in
   // index.html exactly — that's the contract this shares with it via
   // the ?admin= query param.
@@ -53,6 +62,15 @@
     { sectionId: null, mode: "reset", label: "Reset Password", icon: "🔑", accent: "#f3c46333" },
     { sectionId: "agentProfile", mode: "profile", label: "Agent Profile", icon: "🪪", accent: "#34d39933" },
   ];
+
+  // Activity Logs (2026-08) — deliberately NOT part of ADMIN_SUBITEMS: it
+  // doesn't open the Account Management modal (`?admin=<mode>`) like
+  // every item above — it's its own standalone page (a big filterable
+  // table, not modal material). Rendered as one more subitem inside the
+  // same Account Management group via `directUrl` instead of `mode` —
+  // see the click-wiring in mount() below for how those two are told
+  // apart.
+  const ACTIVITY_LOGS_ITEM = { directUrl: "/activity-logs.html", label: "Activity Logs", icon: "🔎", accent: "#ef4a7233" };
 
   // Integration Portal (2026-08) — same shape/contract as ADMIN_SUBITEMS
   // above, rendered as its own separate expandable group positioned
@@ -151,7 +169,8 @@
       }
 
       const visibleAdmin = ADMIN_SUBITEMS.filter((it) => it.sectionId === null || isOwner || accountCanSeeAdminSection(authInfo, it.sectionId));
-      if (visibleAdmin.length) {
+      const showActivityLogs = isOwner || accountCanViewActivityLogs(authInfo);
+      if (visibleAdmin.length || showActivityLogs) {
         html += `
           <div class="am-group" id="hubNavAcctGroup">
             <div class="sidebar-item am-toggle expandable" id="hubNavAcctToggle">
@@ -166,6 +185,9 @@
                     `<div class="sidebar-subitem" data-admin-mode="${escapeAttr(it.mode)}" style="--sub-accent:${it.accent};"><span class="sub-icon">${it.icon}</span> ${it.label}</div>`
                 )
                 .join("")}
+              ${showActivityLogs
+                ? `<div class="sidebar-subitem" data-direct-url="${escapeAttr(ACTIVITY_LOGS_ITEM.directUrl)}" style="--sub-accent:${ACTIVITY_LOGS_ITEM.accent};"><span class="sub-icon">${ACTIVITY_LOGS_ITEM.icon}</span> ${ACTIVITY_LOGS_ITEM.label}</div>`
+                : ""}
             </div>
           </div>
         `;
@@ -196,6 +218,11 @@
           // the agent there and let it auto-open the right tab (see the
           // ?admin= handling at the bottom of index.html's script).
           location.href = "/?admin=" + encodeURIComponent(el.dataset.adminMode);
+        });
+      });
+      mountEl.querySelectorAll("[data-direct-url]").forEach((el) => {
+        el.addEventListener("click", () => {
+          location.href = el.dataset.directUrl;
         });
       });
 

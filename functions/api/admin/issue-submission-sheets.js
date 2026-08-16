@@ -44,9 +44,10 @@
  * functions/api/submit.js for where the override is actually consulted
  * at submission time.
  */
-import { authenticateStaff, ROLE_RANK, canSeeAdminSection, canEditAdminSection } from "../../_shared/accounts.js";
+import { authenticateStaff, ROLE_RANK, canSeeAdminSection, canEditAdminSection, requestIP } from "../../_shared/accounts.js";
 import { getAllIssueSheetOverrides, saveIssueSheetOverride, deleteIssueSheetOverride, promotionModuleId } from "../../_shared/issueSubmissionSheets.js";
 import { BRANDS, MODULE_META, SHEET_LAYOUT, PROMOTION_SHEET_CONFIG } from "../../_shared/routing.js";
+import { logActivity } from "../../_shared/activityLog.js";
 
 // Every "<brandId>|<promotion>" key in PROMOTION_SHEET_CONFIG, grouped
 // by brandId — computed once at module load (the hardcoded config never
@@ -125,13 +126,19 @@ export async function onRequestPost(context) {
   }
 }
 
-async function handlePost({ request, env }) {
+async function handlePost({ request, env, waitUntil }) {
   if (!env.THREADS_KV) return json({ ok: false, error: "THREADS_KV is not bound yet." }, 500);
   const auth = await authenticateStaff(request, env, ROLE_RANK.senior);
   if (!auth.ok) return json({ ok: false, error: "Not authorized." }, 401);
   if (!canEditAdminSection(auth.account, "issueSubmissionSheet")) {
     return json({ ok: false, error: "You don't have Can-Edit access to Issue Submission Gsheet." }, 403);
   }
+
+  const ip = requestIP(request);
+  const log = (entry) => {
+    const p = logActivity(env, { category: "Config", agent: auth.account?.username, ip, ...entry });
+    if (waitUntil) waitUntil(p); else p.catch(() => {});
+  };
 
   let body;
   try {
@@ -167,6 +174,8 @@ async function handlePost({ request, env }) {
   if (body.action === "save") {
     try {
       const saved = await saveIssueSheetOverride(env, brandId, moduleId, { sheetUrlOrId: body.sheetUrlOrId, tabNames: body.tabNames });
+      const label = promotion !== undefined ? `Promotion Request (${promotion}) — ${BRANDS[brandId]?.name || brandId}` : `${MODULE_META[moduleId]?.name || moduleId} — ${BRANDS[brandId]?.name || brandId}`;
+      log({ action: "Gsheet Route Changed", detail: `${label}: sheet updated` });
       return json({ ok: true, sheet: { ...saved, isOverride: true } });
     } catch (e) {
       return json({ ok: false, error: String(e.message || e) }, 400);
@@ -175,6 +184,8 @@ async function handlePost({ request, env }) {
 
   if (body.action === "reset") {
     await deleteIssueSheetOverride(env, brandId, moduleId);
+    const label = promotion !== undefined ? `Promotion Request (${promotion}) — ${BRANDS[brandId]?.name || brandId}` : `${MODULE_META[moduleId]?.name || moduleId} — ${BRANDS[brandId]?.name || brandId}`;
+    log({ action: "Gsheet Route Reset", detail: `${label} reverted to default` });
     return json({ ok: true, sheet: { sheetId: defaultSheetId, tabNames: defaultTabNames, isOverride: false } });
   }
 

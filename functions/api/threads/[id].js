@@ -208,7 +208,12 @@ async function handleThreadAction({ request, env, params, waitUntil }) {
       messageIds,
       replyToMessageId: replyToMessageId || null,
     });
-    logThread({ action: "Reply Sent", detail: `"${existingThread.title || id}" (${existingThread.brand})${text ? `: ${text}` : ""}` });
+    // "Reply Sent" was removed from the audit trail (2026-08) — it's
+    // this system's single highest-volume Thread action (every routine
+    // reply from every agent, all day), and it was drowning out the log's
+    // actual purpose. The reply itself is still fully preserved in the
+    // ticket thread; solve/delete/recall/edit stay logged below since
+    // those are the actions worth auditing.
     return json({ ok: true, thread: updated });
   }
 

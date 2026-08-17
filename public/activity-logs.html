@@ -210,9 +210,9 @@ html[data-theme="light"] {
       <div class="actlog-results-head">
         <div class="actlog-results-title"><span class="status-dot"></span> Recent activity</div>
         <div class="actlog-results-right">
-          <select class="ipa-page-size" id="actlogPageSize" style="display:none;">
-            <option value="10">10 / page</option>
-            <option value="20" selected>20 / page</option>
+          <select class="ipa-page-size" id="actlogPageSize" autocomplete="off" style="display:none;">
+            <option value="10" selected>10 / page</option>
+            <option value="20">20 / page</option>
             <option value="30">30 / page</option>
           </select>
           <span class="actlog-found-pill" id="actlogFoundPill"></span>
@@ -259,7 +259,15 @@ html[data-theme="light"] {
 
     let allEntries = [];
     let actlogPage = 1;
-    let actlogPageSize = 20; // 10 / 20 / 30
+    let actlogPageSize = 10; // 10 / 20 / 30 — matches this project's own ipa-page-size default (see IP Access page)
+
+    // Belt-and-suspenders against Chrome/Firefox's own "restore this
+    // control's value across a plain refresh" behavior — that's a
+    // browser feature independent of autocomplete="off" support (which
+    // isn't 100% consistent for <select> across browsers/versions), so
+    // force it back to the real default on every load regardless of
+    // whatever the browser tried to restore it to.
+    pageSizeSelect.value = "10";
 
     function debounce(fn, ms) {
       let t;

@@ -2,12 +2,11 @@ import { BRANDS, RECORD_TO_SHEET, MODULE_META, SHEET_LAYOUT, MESSAGE_TEMPLATE, S
 import { appendRowToSheet, appendRowByColumns, writeRowForDate } from "../_shared/googleSheets.js";
 import { uploadAttachmentToR2, screenshotUrl } from "../_shared/r2.js";
 import { createThread } from "../_shared/threads.js";
-import { verifyRequest, canSeeBrand, canSeeModule, requestIP } from "../_shared/accounts.js";
+import { verifyRequest, canSeeBrand, canSeeModule } from "../_shared/accounts.js";
 import { getRouteOverride } from "../_shared/routes.js";
 import { getIssueSheetOverride, resolveWriteTab, promotionModuleId } from "../_shared/issueSubmissionSheets.js";
 import { resolveColumnValues, resolveSheetLayout, formatDateDDMMYYYY, buildTicketMessage, buildTitleAndSummary } from "../_shared/messageBuilders.js";
 import { compressImageForTelegram } from "../_shared/telegramImageCompress.js";
-import { logActivity } from "../_shared/activityLog.js";
 
 const VALID_MODULES = Object.keys(MODULE_META);
 
@@ -287,6 +286,14 @@ async function handleSubmit({ request, env, waitUntil }) {
     }
   }
 
+  // "Ticket Created" activity-log entries were removed (2026-08) — this
+  // is the single highest-volume action in the whole system (every
+  // routine issue submission), and it was drowning out the audit
+  // trail's actual purpose (auth/account/config changes, and the
+  // meaningful thread actions: solve/delete/recall/edit — see logThread
+  // calls in functions/api/threads/[id].js). Ticket creation itself is
+  // already fully tracked via the ticket/thread record itself, so
+  // nothing is lost by not duplicating it into Activity Logs too.
   const finalResponse = {
     ok: true,
     telegramMessageId: tgResult.messageId,
@@ -298,9 +305,6 @@ async function handleSubmit({ request, env, waitUntil }) {
     r2Errors: r2Errors.length ? r2Errors : undefined,
   };
 
-  const submitIp = requestIP(request);
-  const submitLog = logActivity(env, { category: "Thread", action: "Ticket Created", agent: account.username, ip: submitIp, detail: `${meta?.name || moduleId} — ${brand?.name || brandId}` });
-  if (waitUntil) waitUntil(submitLog); else submitLog.catch(() => {});
   // Overwrite the placeholder from the duplicate-submission guard above
   // with the REAL result, so a duplicate request arriving even a moment
   // late still gets back this exact ticket's info (not "still processing")

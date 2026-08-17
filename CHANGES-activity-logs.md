@@ -70,13 +70,19 @@ profile fields), delete, lock/unlock. `functions/api/account/
 change-password.js`: self-service password changes.
 
 **Thread** — `functions/api/threads/[id].js`: solve/unsolve, delete,
-reply, editRoot, editDetails (field-sync), recallRoot, editReply,
-recallReply — editRoot/editReply/editDetails/recallRoot/recallReply all
-log the before→after text (or the recalled text), matching the spec's
-"改前 → 改后" behavior. `functions/api/submit.js`: new ticket creation
-(logged once per real submission — the idempotency/dedupe guard returns
-a cached response before this point on a genuine retry, so a retried
-submit never double-logs).
+editRoot, editDetails (field-sync), recallRoot, editReply, recallReply —
+these log the before→after text (or the recalled text), matching the
+spec's "改前 → 改后" behavior.
+
+`Ticket Created` (`functions/api/submit.js`) and `Reply Sent`
+(`functions/api/threads/[id].js`) were both logged initially, then
+**removed** shortly after launch (2026-08): they were this system's two
+highest-volume actions by a wide margin — every routine issue
+submission and every routine reply, from every agent, all day — and
+they drowned out the log's actual purpose (auth/account/config changes,
+and the Thread actions actually worth auditing: solve/delete/recall/
+edit). Both actions remain fully tracked in the ticket/thread record
+itself; nothing is lost by not duplicating them into Activity Logs.
 
 **Config** — TG routing (`admin/routes.js`, incl. the Security Alerts
 row), Gsheet routing (`admin/deposit-sheets.js` incl. Deposit Backup

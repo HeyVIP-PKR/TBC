@@ -1995,11 +1995,16 @@ html[data-theme="light"] {
         </label>` : "";
 
       // Activity Logs (2026-08) — same Owner-only, never-on-own-profile
-      // treatment as Active Agents directly above, and for the same
-      // reason: canViewActivityLogs() (_shared/accounts.js) is a flat
-      // per-account boolean, NOT part of allowedAdminSections, so it
-      // needs its own dedicated checkbox here rather than riding along
-      // with adminSectionChecksHtml() below.
+      // treatment as Active Agents above, and for the same reason:
+      // canViewActivityLogs() (_shared/accounts.js) is a flat per-account
+      // boolean, NOT part of allowedAdminSections, so it needs its own
+      // dedicated checkbox rather than riding along with
+      // adminSectionChecksHtml() below. Rendered inside the "Account
+      // Management Access" collapsible (with adminSectionChecks and the
+      // delegation toggle) rather than the "Topic Access" one above —
+      // it's an admin-panel permission, not a ticket-topic permission,
+      // so it belongs with the other admin-access controls even though
+      // its storage mechanism differs from theirs.
       const activityLogsCheck = (authInfo?.role === "owner" && !isSelfProfile) ? `
         <label class="agent-profile-module-check">
           <input type="checkbox" id="ap_canViewActivityLogs" ${a.canViewActivityLogs ? "checked" : ""} />
@@ -2097,7 +2102,7 @@ html[data-theme="light"] {
               </button>
               <div class="agent-profile-collapsible-body" style="display:none;">
                 ${!canManageAccess ? '<p class="agent-profile-locked-note" style="margin:-4px 0 8px;">(requires outranking this account)</p>' : ""}
-                <div class="agent-profile-module-list">${moduleChecks}${announcementCheck}${activeAgentsCheck}${activityLogsCheck}${integrationPortalCheck}</div>
+                <div class="agent-profile-module-list">${moduleChecks}${announcementCheck}${activeAgentsCheck}${integrationPortalCheck}</div>
               </div>
             </div>
 
@@ -2109,6 +2114,9 @@ html[data-theme="light"] {
               </button>
               <div class="agent-profile-collapsible-body" style="display:none;">
                 <div class="agent-profile-admin-section-list">${adminSectionChecks}</div>
+                ${activityLogsCheck ? `
+                <hr class="agent-profile-divider" />
+                ${activityLogsCheck}` : ""}
                 ${showDelegationToggle ? `
                 <hr class="agent-profile-divider" />
                 <label class="agent-profile-module-check">

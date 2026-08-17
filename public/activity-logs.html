@@ -105,7 +105,14 @@ html[data-theme="light"] {
   .actlog-table th, .actlog-table td {
     white-space: nowrap; padding: 10px 10px; vertical-align: top;
     border-top: 1px solid var(--border);
+    /* Vertical divider between every column — both header and body
+       cells, so the line runs unbroken from the header straight down
+       through each row. Dropped on the last column (IP) since a
+       trailing divider against the card's own edge looks like a stray
+       line rather than a separator. */
+    border-right: 1px solid var(--border);
   }
+  .actlog-table th:last-child, .actlog-table td:last-child { border-right: none; }
   .actlog-table th {
     text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.03em;
     color: var(--ink-soft); font-weight: 700; background: var(--field-bg);
@@ -364,6 +371,7 @@ html[data-theme="light"] {
       if (refreshBtn.disabled) return; // prevent double-click stacking
       refreshBtn.classList.add("is-refreshing");
       refreshBtn.disabled = true;
+      refreshBtn.textContent = "⏳ Loading…"; // red + label change, no rotation
       const startedAt = Date.now();
       const MIN_VISIBLE_MS = 400; // a fast response still shows the red state briefly, so it never looks like nothing happened
       try {
@@ -395,6 +403,7 @@ html[data-theme="light"] {
         if (elapsed < MIN_VISIBLE_MS) await new Promise((r) => setTimeout(r, MIN_VISIBLE_MS - elapsed));
         refreshBtn.classList.remove("is-refreshing");
         refreshBtn.disabled = false;
+        refreshBtn.textContent = "↻ Refresh";
       }
     }
 

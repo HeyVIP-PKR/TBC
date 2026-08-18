@@ -52,7 +52,8 @@
  *     caller rank >= admin AND (editing themselves OR strictly
  *     outranking the target).
  */
-import { listAccounts, saveAccount, deleteAccount, getAccount, authenticateStaff, anySuperAdminExists, setAccountLocked, ROLE_RANK, rankOf, canSeeAdminSection, canEditAdminSection, canManageOthersAdminAccess } from "../../_shared/accounts.js";
+import { listAccounts, saveAccount, deleteAccount, getAccount, authenticateStaff, anySuperAdminExists, setAccountLocked, ROLE_RANK, rankOf, canSeeAdminSection, canEditAdminSection, canManageOthersAdminAccess, withSectionToggled, effectiveAllowedAdminSections, effectiveAdminSectionEditAccess, ADMIN_SECTIONS, EDITABLE_ADMIN_SECTIONS, requestIP } from "../../_shared/accounts.js";
+import { logActivity } from "../../_shared/activityLog.js";
 
 // An actor may act on a target only if strictly outranking it — same
 // rank can never manage same rank (this alone is what stops SuperAdmin
@@ -99,10 +100,17 @@ export async function onRequestPost(context) {
   }
 }
 
-async function handlePost({ request, env }) {
+async function handlePost({ request, env, waitUntil }) {
   if (!env.THREADS_KV) return json({ ok: false, error: "THREADS_KV is not bound yet." }, 500);
   const auth = await authenticateStaff(request, env, ROLE_RANK.senior);
   if (!auth.ok) return json({ ok: false, error: "Not authorized." }, 401);
+
+  const ip = requestIP(request);
+  const actorName = auth.account ? auth.account.username : "bootstrap-setup";
+  const log = (entry) => {
+    const p = logActivity(env, { category: "Account", agent: actorName, ip, ...entry });
+    if (waitUntil) waitUntil(p); else p.catch(() => {});
+  };
 
   let body;
   try {
@@ -143,6 +151,12 @@ async function handlePost({ request, env }) {
   if (body.action === "save" && body.canViewActiveAgents !== undefined && auth.account?.role !== "owner") {
     return json({ ok: false, error: "Only the account owner can grant or revoke Active Agents access." }, 403);
   }
+  // canViewActivityLogs: same flat, per-account, Owner-only treatment as
+  // canViewActiveAgents right above — see canViewActivityLogs() in
+  // _shared/accounts.js.
+  if (body.action === "save" && body.canViewActivityLogs !== undefined && auth.account?.role !== "owner") {
+    return json({ ok: false, error: "Only the account owner can grant or revoke Activity Logs access." }, 403);
+  }
 
   // Bootstrap mode (no real account yet) is treated as superadmin-rank
   // for this one-time setup call — same trust level BRAND_EDIT_PASSWORD
@@ -154,6 +168,17 @@ async function handlePost({ request, env }) {
     if (!body.username) return json({ ok: false, error: "Username is required." }, 400);
     const targetUsername = body.username.toLowerCase();
     const existingTarget = await getAccount(env, targetUsername);
+    // Populated inside the "editing existing account" branch below when
+    // this request touches Announcement access; read afterwards by the
+    // saveAccount() call, so declared up here rather than block-scoped
+    // inside that branch.
+    let announcementsAllowedAdminSections;
+    let announcementsAdminSectionEditAccess;
+    // Same pattern as the announcements pair above, for the
+    // "Integration Portal" Topic Access checkbox (2026-08) — see the
+    // "integrationPortal" section note in _shared/accounts.js.
+    let integrationPortalAllowedAdminSections;
+    let integrationPortalAdminSectionEditAccess;
 
     // An owner account, targeted by anyone who doesn't outrank it (i.e.
     // everyone but another owner) — respond exactly as if it didn't
@@ -202,6 +227,61 @@ async function handlePost({ request, env }) {
       const adminSectionEditAccessChanging = body.adminSectionEditAccess !== undefined && JSON.stringify(body.adminSectionEditAccess) !== JSON.stringify(existingTarget.adminSectionEditAccess ?? []);
       if ((adminSectionsChanging || adminSectionEditAccessChanging) && auth.account?.role !== "owner" && !canManage(actorRank, targetRank)) {
         return json({ ok: false, error: "You can only change Account Management Access for accounts ranked below your own." }, 403);
+      }
+
+      // Announcement view/edit — moved (2026-08) out of the Account
+      // Management Access checklist into Topic Access in the UI (see
+      // public/index.html's Agent Profile modal). The underlying storage
+      // is unchanged (still "announcements" inside allowedAdminSections /
+      // adminSectionEditAccess, still read by the same canSeeAdminSection()/
+      // canEditAdminSection() everywhere else) — only WHO can flip it and
+      // HOW it's submitted changed: instead of requiring full
+      // canManageOthersAdminAccess() (Owner/delegate) and a full-array
+      // replace like the other 7 sections, this is a single add/remove
+      // gated by the SAME rank rule Topic Access itself already uses
+      // (Can-Edit(agentProfile) + strictly outrank the target) — matches
+      // "a higher-privilege account can grant this to accounts one rank
+      // below itself" per direct business-owner request, no change to the
+      // rank-comparison logic itself.
+      if (body.announcementsView !== undefined || body.announcementsEdit !== undefined) {
+        const hasAnnounceAuthority = auth.account?.role === "owner" || (canEditAdminSection(auth.account, "agentProfile") && canManage(actorRank, targetRank));
+        if (!hasAnnounceAuthority) {
+          return json({ ok: false, error: "You can only change Announcement access for accounts ranked below your own." }, 403);
+        }
+        // If this same request ALSO carries the full 7-item array (Owner
+        // editing an account with both boxes visible), toggle relative to
+        // THAT submitted value so the two don't clobber each other;
+        // otherwise toggle relative to the target's existing stored value.
+        const seeOn = !!body.announcementsView;
+        const editOn = seeOn && !!body.announcementsEdit; // can't have edit without view
+        const baseSee = body.allowedAdminSections !== undefined ? body.allowedAdminSections : effectiveAllowedAdminSections(existingTarget);
+        const baseEdit = body.adminSectionEditAccess !== undefined ? body.adminSectionEditAccess : effectiveAdminSectionEditAccess(existingTarget);
+        announcementsAllowedAdminSections = withSectionToggled(baseSee, "announcements", seeOn, ADMIN_SECTIONS);
+        announcementsAdminSectionEditAccess = withSectionToggled(baseEdit, "announcements", editOn, EDITABLE_ADMIN_SECTIONS);
+      }
+
+      // Integration Portal visibility (2026-08) — same single add/remove
+      // pattern and same authority rule as Announcement directly above
+      // (Can-Edit(agentProfile) + strictly outrank the target, or
+      // Owner), NOT the stricter canManageOthersAdminAccess() the
+      // Integration Portal ACCESS sub-items (tgRoutes/depositSheets/
+      // bettingLinks/webLink) require — this only toggles whether the
+      // group shows up at all, not what's inside it. If this request
+      // ALSO carries the full array (Owner editing with both boxes
+      // visible, possibly alongside an announcements toggle in the same
+      // request), chain off whatever the announcements block already
+      // computed so none of the three ever clobber each other.
+      if (body.integrationPortalView !== undefined || body.integrationPortalEdit !== undefined) {
+        const hasIntegrationPortalAuthority = auth.account?.role === "owner" || (canEditAdminSection(auth.account, "agentProfile") && canManage(actorRank, targetRank));
+        if (!hasIntegrationPortalAuthority) {
+          return json({ ok: false, error: "You can only change Integration Portal access for accounts ranked below your own." }, 403);
+        }
+        const seeOn = !!body.integrationPortalView;
+        const editOn = seeOn && !!body.integrationPortalEdit;
+        const baseSee = announcementsAllowedAdminSections !== undefined ? announcementsAllowedAdminSections : (body.allowedAdminSections !== undefined ? body.allowedAdminSections : effectiveAllowedAdminSections(existingTarget));
+        const baseEdit = announcementsAdminSectionEditAccess !== undefined ? announcementsAdminSectionEditAccess : (body.adminSectionEditAccess !== undefined ? body.adminSectionEditAccess : effectiveAdminSectionEditAccess(existingTarget));
+        integrationPortalAllowedAdminSections = withSectionToggled(baseSee, "integrationPortal", seeOn, ADMIN_SECTIONS);
+        integrationPortalAdminSectionEditAccess = withSectionToggled(baseEdit, "integrationPortal", editOn, EDITABLE_ADMIN_SECTIONS);
       }
 
       if (roleChanging || accessChanging) {
@@ -253,11 +333,40 @@ async function handlePost({ request, env }) {
         allowedModules: body.allowedModules !== undefined ? body.allowedModules : undefined,
         fullName: body.fullName !== undefined ? body.fullName : undefined,
         pid: body.pid !== undefined ? body.pid : undefined,
-        allowedAdminSections: body.allowedAdminSections !== undefined ? body.allowedAdminSections : undefined,
-        adminSectionEditAccess: body.adminSectionEditAccess !== undefined ? body.adminSectionEditAccess : undefined,
+        // The announcements-merge result (if this request touched
+        // Announcement access) takes priority over a raw body.* value —
+        // it was computed FROM body.allowedAdminSections/
+        // adminSectionEditAccess already (see above), so this never loses
+        // a same-request 7-item change, it just folds the single
+        // announcements add/remove into it.
+        allowedAdminSections: integrationPortalAllowedAdminSections !== undefined ? integrationPortalAllowedAdminSections : (announcementsAllowedAdminSections !== undefined ? announcementsAllowedAdminSections : (body.allowedAdminSections !== undefined ? body.allowedAdminSections : undefined)),
+        adminSectionEditAccess: integrationPortalAdminSectionEditAccess !== undefined ? integrationPortalAdminSectionEditAccess : (announcementsAdminSectionEditAccess !== undefined ? announcementsAdminSectionEditAccess : (body.adminSectionEditAccess !== undefined ? body.adminSectionEditAccess : undefined)),
         canManageAdminAccess: body.canManageAdminAccess !== undefined ? body.canManageAdminAccess : undefined,
         canViewActiveAgents: body.canViewActiveAgents !== undefined ? body.canViewActiveAgents : undefined,
+        canViewActivityLogs: body.canViewActivityLogs !== undefined ? body.canViewActivityLogs : undefined,
       });
+
+      if (!existingTarget) {
+        log({ action: "Account Created", detail: `Created "${targetUsername}" (role: ${account.role})` });
+      } else {
+        const diffs = [];
+        if (body.role !== undefined && body.role !== existingTarget.role) diffs.push(`role: "${existingTarget.role}" → "${account.role}"`);
+        if (body.officeId !== undefined && (body.officeId || null) !== (existingTarget.officeId || null)) diffs.push(`office: "${existingTarget.officeId || "none"}" → "${account.officeId || "none"}"`);
+        if (body.allowedBrands !== undefined && JSON.stringify(body.allowedBrands) !== JSON.stringify(existingTarget.allowedBrands ?? [])) diffs.push(`brands changed`);
+        if (body.allowedModules !== undefined && JSON.stringify(body.allowedModules) !== JSON.stringify(existingTarget.allowedModules ?? "all")) diffs.push(`modules changed`);
+        if (body.password) diffs.push(`password reset by ${actorName}`);
+        if (body.allowedAdminSections !== undefined || announcementsAllowedAdminSections !== undefined || integrationPortalAllowedAdminSections !== undefined) diffs.push(`Account Management Access permissions changed`);
+        if (body.adminSectionEditAccess !== undefined || announcementsAdminSectionEditAccess !== undefined || integrationPortalAdminSectionEditAccess !== undefined) diffs.push(`Can-Edit permissions changed`);
+        if (body.canManageAdminAccess !== undefined && !!body.canManageAdminAccess !== !!existingTarget.canManageAdminAccess) diffs.push(`delegated admin-access management ${body.canManageAdminAccess ? "granted" : "revoked"}`);
+        if (body.canViewActiveAgents !== undefined && !!body.canViewActiveAgents !== !!existingTarget.canViewActiveAgents) diffs.push(`Active Agents access ${body.canViewActiveAgents ? "granted" : "revoked"}`);
+        if (body.canViewActivityLogs !== undefined && !!body.canViewActivityLogs !== !!existingTarget.canViewActivityLogs) diffs.push(`Activity Logs access ${body.canViewActivityLogs ? "granted" : "revoked"}`);
+        if (body.fullName !== undefined && body.fullName !== (existingTarget.fullName || "")) diffs.push(`full name changed`);
+        if (body.pid !== undefined && body.pid !== (existingTarget.pid || "")) diffs.push(`PID changed`);
+        if (diffs.length) {
+          log({ action: diffs.length === 1 && body.password && diffs[0].startsWith("password") ? "Password Reset" : "Account Updated", detail: `"${targetUsername}": ${diffs.join("; ")}` });
+        }
+      }
+
       return json({ ok: true, account });
     } catch (e) {
       return json({ ok: false, error: String(e.message || e) }, 400);
@@ -273,6 +382,7 @@ async function handlePost({ request, env }) {
       return json({ ok: false, error: "You can only delete accounts ranked below your own." }, 403);
     }
     await deleteAccount(env, body.username);
+    log({ action: "Account Deleted", detail: `Deleted "${body.username}"` });
     return json({ ok: true });
   }
 
@@ -296,6 +406,7 @@ async function handlePost({ request, env }) {
     }
     const locked = body.action === "lock";
     const account = await setAccountLocked(env, body.username, locked, locked ? (body.reason || `Manually locked by ${actorUsername}`) : null);
+    log({ action: locked ? "Account Locked" : "Account Unlocked", detail: `"${body.username}"${locked && body.reason ? ` — ${body.reason}` : ""}` });
     return json({ ok: true, account });
   }
 

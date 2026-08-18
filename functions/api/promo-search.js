@@ -15,12 +15,21 @@
  * Whoever's sheet is configured must share it (Viewer is enough) with
  * the service account: reward-form-writer@fifth-trainer-500806-e7.iam.gserviceaccount.com
  *
- * Column layout (same across all tabs below, columns A-N, header in row 1,
- * data starts row 2):
- *   A Brand | B Bonus Code | C Promo Code | D Deposit Range | E Bonus % |
- *   F Per Spin Value | G Max Bonus | H Wager | I Max Withdraw |
- *   J Expired Day | K Products | L Excluded Products/GAMES |
- *   M Under Group/Affiliate/VIP Level | N Expired On
+ * COLUMNS ARE FOUND BY HEADER TEXT, NOT BY FIXED LETTER. This sheet is
+ * hand-maintained by several ops/support teams across 11 tabs, and in
+ * practice every tab has broken the "same fixed column order everywhere"
+ * assumption at some point (a missing column shifting everything after it,
+ * a repeated header row mid-data, vertically merged brand cells, a whole
+ * new column inserted, etc). See PROMO_CODE_LOGIC_NOTES.md in the repo
+ * root for the full write-up of the failure modes and the fix, and
+ * _shared/dynamicSheetColumns.js for the (project-agnostic) mapper this
+ * file uses. Expected field labels, in their usual left-to-right order:
+ *   Brand | Bonus Code | Promo Code | Deposit Range | Bonus % |
+ *   Per Spin Value | Max Bonus | Wager | Max Withdraw | Expired Day |
+ *   Products | Excluded Products/GAMES | Under Group/Affiliate/VIP Level |
+ *   Expired On
+ * The exact column each of these lands in is re-detected per tab, per
+ * request, from that tab's own header row — never assumed.
  *
  * "Start On" has no source column yet in this sheet — always returned as
  * "" until one exists; the frontend shows it as a dash.
@@ -28,10 +37,39 @@
 import { batchGetValues, getSheetTabTitles } from "../_shared/googleSheets.js";
 import { verifyRequest } from "../_shared/accounts.js";
 import { getPromoCodeSheet } from "../_shared/promoCodeSheet.js";
+import { createColumnMapper } from "../_shared/dynamicSheetColumns.js";
 
-// A2:N1000 is still a fixed code constant, not part of the "Promo Code
-// Gsheet" admin override — see _shared/promoCodeSheet.js's file header.
-const PROMO_CODE_RANGE = "A2:N1000";
+// Wide on purpose (see file header): under-reading is the dangerous
+// failure mode (a real column silently falls outside the range and
+// every field after it goes missing with no error), over-reading a few
+// blank columns costs nothing. Starts at row 1, not row 2 — the header
+// row itself has to be read so it can be located and parsed; which row
+// it's actually on is auto-detected per tab, not assumed to be row 1.
+const PROMO_CODE_RANGE = "A1:Z1000";
+
+const promoColumnMapper = createColumnMapper({
+  fields: [
+    ["brand", /brand/],
+    ["bonusCode", /bonus\s*code/],
+    ["promoCode", /promo\s*code/],
+    ["depositRange", /deposit\s*range/],
+    ["bonusPercent", /bonus\s*%|bonus\s*percent/],
+    ["perSpinValue", /per\s*spin\s*value/],
+    ["maxBonus", /max\s*bonus/, /^max\s*bonus$/],
+    ["wager", /wager/, /^wager$/],
+    ["maxWithdraw", /max\s*withdraw/, /^max\s*withdraw$/],
+    ["expiredDay", /expired\s*day/, /^expired\s*day$/],
+    ["products", /products/],
+    ["excluded", /excluded/],
+    ["groupVip", /vip/],
+    ["expiredOn", /expired\s*on/, /^expired\s*on$/],
+  ],
+  // Promo Code is the row's identity — a row with no Promo Code isn't a
+  // real entry (blank spacer row, or an artifact of a merged cell) and
+  // must never inherit one from forward-filling a merge above it.
+  requiredField: "promoCode",
+  identityFields: ["promoCode"],
+});
 
 function sheetEditUrl(sheetId) {
   return `https://docs.google.com/spreadsheets/d/${sheetId}/edit`;
@@ -135,10 +173,18 @@ async function handleSearch({ request, env }) {
 
   const groups = [];
   tabsToQuery.forEach(({ real }, i) => {
-    const rows = (valueRanges[i] && valueRanges[i].values) || [];
+    const rawRows = (valueRanges[i] && valueRanges[i].values) || [];
+    // Finds this tab's own header row (not assumed to be row 1), maps
+    // field -> column index from that row's actual text, drops any
+    // mid-data repeated header rows, and forward-fills vertically merged
+    // cells (except Promo Code, the identity field) — see
+    // _shared/dynamicSheetColumns.js and PROMO_CODE_LOGIC_NOTES.md.
+    const { colMap, dataRows } = promoColumnMapper.prepare(rawRows, { width: 26 });
+    const col = (field, row) => promoColumnMapper.col(colMap, field, row);
+
     const matches = [];
-    for (const row of rows) {
-      const promoCode = (row[2] || "").trim();
+    for (const row of dataRows) {
+      const promoCode = col("promoCode", row);
       if (!promoCode) continue;
       const upperCode = promoCode.toUpperCase();
       // Contains match, not exact — e.g. searching "1500" should surface
@@ -146,19 +192,19 @@ async function handleSearch({ request, env }) {
       // substring of the code counts as a hit.
       if (!needles.some((n) => upperCode.includes(n))) continue;
       matches.push({
-        brand: row[0] || "",
-        bonusCode: row[1] || "",
+        brand: col("brand", row),
+        bonusCode: col("bonusCode", row),
         promoCode,
-        depositRange: row[3] || "",
-        maxBonus: row[6] || "",
-        wager: row[7] || "",
-        maxWithdraw: row[8] || "",
-        expiredDay: row[9] || "",
-        products: row[10] || "",
-        excluded: row[11] || "",
-        groupVip: row[12] || "",
+        depositRange: col("depositRange", row),
+        maxBonus: col("maxBonus", row),
+        wager: col("wager", row),
+        maxWithdraw: col("maxWithdraw", row),
+        expiredDay: col("expiredDay", row),
+        products: col("products", row),
+        excluded: col("excluded", row),
+        groupVip: col("groupVip", row),
         startOn: "", // no source column yet — see file header
-        expiredOn: row[13] || "",
+        expiredOn: col("expiredOn", row),
       });
     }
     if (matches.length) groups.push({ tab: real, count: matches.length, matches });

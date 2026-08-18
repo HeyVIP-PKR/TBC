@@ -116,7 +116,15 @@ async function handleThreadAction({ request, env, params, waitUntil }) {
   if (action === "solve" || action === "unsolve") {
     const thread = await setSolved(env, id, action === "solve");
     if (!thread) return json({ ok: false, error: "Not found." }, 404);
-    logThread({ action: action === "solve" ? "Solved" : "Reopened", detail: `"${thread.title || id}" (${thread.brand})` });
+    // "Solved" was removed from the audit trail (2026-08) — same reasoning
+    // as "Ticket Created" and "Reply Sent" above: it's a routine, very
+    // high-volume Thread action (every ticket, every day) that was
+    // drowning out the log's actual purpose. "Reopened" stays logged —
+    // it's rare and worth auditing (a solved ticket coming back open is
+    // exactly the kind of thing this trail exists to catch). The solved
+    // state itself is still fully preserved on the ticket/thread record,
+    // so nothing is lost by not duplicating it into Activity Logs too.
+    if (action === "unsolve") logThread({ action: "Reopened", detail: `"${thread.title || id}" (${thread.brand})` });
     return json({ ok: true, thread });
   }
 

@@ -64,11 +64,38 @@ export async function onRequestPost({ request, env }) {
 
   try {
     await handleUpdate(env, update);
-  } catch {
-    // Swallow errors — a broken reply-sync should never make Telegram think
-    // the webhook is unhealthy and start retrying/backing off.
+  } catch (e) {
+    // Still swallow — a broken reply-sync should never make Telegram think
+    // the webhook is unhealthy and start retrying/backing off — but log it
+    // (visible in Cloudflare's Real-time Logs / `wrangler pages deployment
+    // tail`) instead of vanishing silently, so a real bug leaves a trace
+    // instead of just "a reply didn't show up" with nothing to go on.
+    console.error("telegram-webhook handleUpdate failed:", e && e.stack || e);
   }
   return new Response("ok");
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// KV writes propagate globally with, per Cloudflare's docs, "usually fast
+// but up to 60 seconds in the worst case" — so a reply that arrives within
+// moments of the ticket being posted can hit an edge node that hasn't yet
+// seen the msgid: pointer createThread() just wrote. A few short retries
+// covers that window without meaningfully delaying the (rare) case where
+// the reply genuinely doesn't match anything we're tracking. Logged either
+// way, so a real "not tracking this" case is now distinguishable from a
+// timing miss instead of both looking identical (silent, permanent drop).
+const THREAD_LOOKUP_RETRY_DELAYS_MS = [250, 500, 1000];
+
+async function findThreadIdWithRetry(env, chatId, messageId) {
+  let threadId = await findThreadIdByMessage(env, chatId, messageId);
+  for (let i = 0; !threadId && i < THREAD_LOOKUP_RETRY_DELAYS_MS.length; i++) {
+    await sleep(THREAD_LOOKUP_RETRY_DELAYS_MS[i]);
+    threadId = await findThreadIdByMessage(env, chatId, messageId);
+  }
+  return threadId;
 }
 
 async function handleUpdate(env, update) {
@@ -84,8 +111,14 @@ async function handleUpdate(env, update) {
   const isGenuineReply = replyTarget && !isAutoTopicReply;
   if (!isGenuineReply) return; // Not a deliberate reply — ignore, don't guess.
 
-  const threadId = await findThreadIdByMessage(env, msg.chat.id, replyTarget.message_id);
-  if (!threadId) return; // Reply to something we're not tracking.
+  const threadId = await findThreadIdWithRetry(env, msg.chat.id, replyTarget.message_id);
+  if (!threadId) {
+    console.error(
+      "telegram-webhook: no thread found for reply",
+      JSON.stringify({ chatId: msg.chat.id, repliedToMessageId: replyTarget.message_id, fromMessageId: msg.message_id })
+    );
+    return; // Reply to something we're not tracking (or a lookup that never resolved even after retries).
+  }
 
   const name = [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(" ") || "Unknown";
 
@@ -174,7 +207,7 @@ async function handleEditedMessage(env, msg) {
   const hasContent = msg.text || msg.caption || attachmentFileId;
   if (!hasContent) return; // nothing left to show at all — ignore
 
-  const threadId = await findThreadIdByMessage(env, msg.chat.id, msg.message_id);
+  const threadId = await findThreadIdWithRetry(env, msg.chat.id, msg.message_id);
   if (!threadId) return; // editing something we're not tracking — ignore, don't guess
 
   const text = msg.text || msg.caption || (attachmentFileId ? `📎 ${attachmentName}` : "");

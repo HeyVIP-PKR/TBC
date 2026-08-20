@@ -1,0 +1,39 @@
+name = "pkr-issue-hub"
+pages_build_output_dir = "public"
+
+# NOTE: as of the Telegram photo-compression feature, this project has a
+# package.json dependency (@cf-wasm/photon) that needs `npm install` to
+# run before Functions get bundled. Cloudflare Pages' Wrangler config
+# has no [build] key to declare that here (that's Workers-only) — the
+# Build command has to be set in the dashboard instead:
+# Workers & Pages -> this project -> Settings -> Builds & deployments ->
+# Build command = "npm install", Build output directory = "public".
+# See README.md for the full explanation.
+
+# PKR market — brand new bucket, must NOT reuse the INR build's
+# "inr-issuescreenshot" bucket (would mix PKR and INR ticket screenshots
+# together). Created under the HeyVIP-PKR Cloudflare account.
+[[r2_buckets]]
+binding = "SCREENSHOTS_BUCKET"
+bucket_name = "pkr-issuescreenshot"
+
+# TG Reply Threads feature. PKR market — brand new namespace, must NOT
+# reuse the INR build's "inr-ticket-threads" namespace (would mix PKR and
+# INR tickets/accounts/routing overrides together in one KV store). Created
+# under the HeyVIP-PKR Cloudflare account.
+[[kv_namespaces]]
+binding = "THREADS_KV"
+id = "c8ca68f7781a4f1b88d0997af023aec7"
+
+[vars]
+# Non-secret local defaults for `wrangler pages dev`. Real deployments set
+# TELEGRAM_BOT_TOKEN as an encrypted secret in the Cloudflare dashboard —
+# do NOT put the real token here or commit it.
+
+# Optional — "who set this announcement" audit trail (see
+# functions/_shared/announcements.js). Leave unset and the Sheet log
+# simply no-ops; the Announcement feature itself works fine without it,
+# this only affects the record-keeping side. ANNOUNCEMENT_LOG_TAB
+# defaults to "Log" if omitted.
+# ANNOUNCEMENT_LOG_SHEET_ID = "<the Sheet's ID from its URL>"
+# ANNOUNCEMENT_LOG_TAB = "Log"

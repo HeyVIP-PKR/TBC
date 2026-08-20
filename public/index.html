@@ -35,7 +35,7 @@ html[data-theme="light"] {
     linear-gradient(160deg, #dbe7fb 0%, #d9cef4 45%, #cdbdf2 75%, #c4b2ee 100%);
 }
 </style>
-<link rel="stylesheet" href="/assets/style.css?v=e506495c" />
+<link rel="stylesheet" href="/assets/style.css?v=d90eceb8" />
 <link rel="stylesheet" href="/assets/toast.css?v=5779b14e" />
 <script src="/assets/toast.js?v=d9d84724"></script>
 <script src="/assets/starfield.js?v=b6e92821" defer></script>
@@ -2398,7 +2398,8 @@ html[data-theme="light"] {
       } else {
         const results = acctBettingLinksData.results || [];
         const cardsHtml = results.map((link, i) => `
-          <div class="br-result-row" data-idx="${i}">
+          <div class="br-result-row" data-idx="${i}" ${canEdit ? 'draggable="true"' : ""}>
+            ${canEdit && results.length > 1 ? '<span class="br-drag-handle" title="Drag to reorder">⠿</span>' : ""}
             <div class="field br-icon-field"><label>Icon</label><input type="text" class="bl-result-icon" value="${acctEsc(link.icon || "🔗")}" maxlength="8" ${roAttr} autocomplete="off" /></div>
             <div class="field"><label>Name</label><input type="text" class="bl-result-name" value="${acctEsc(link.name)}" placeholder="e.g. Fotmob Football" ${roAttr} autocomplete="off" /></div>
             <div class="field"><label>URL</label><input type="text" class="bl-result-url" value="${acctEsc(link.url)}" placeholder="https://..." ${roAttr} autocomplete="off" /></div>
@@ -2408,7 +2409,7 @@ html[data-theme="light"] {
           <div id="blResultsList" class="br-result-list">${cardsHtml}</div>
           ${canEdit ? '<button type="button" class="br-add-link-btn" id="blAddLinkBtn">+ Add link</button>' : ""}
           ${!results.length ? '<p class="edit-modal-note">No links yet.</p>' : ""}
-          <p class="edit-modal-note">Powers the "HeyVIP Betting Rules" home card — left panel is a single link, right panel is the link list. Click Save (bottom) to publish changes to both sections at once.</p>`;
+          <p class="edit-modal-note">Powers the "HeyVIP Betting Rules" home card — left panel is a single link, right panel is the link list. Drag ⠿ to reorder — the order here is the order shown on the home page. Click Save (bottom) to publish changes to both sections at once.</p>`;
       }
 
       acctBody.innerHTML = `
@@ -2438,6 +2439,43 @@ html[data-theme="light"] {
             syncBettingLinksFormIntoData();
             const idx = Number(btn.closest(".br-result-row").dataset.idx);
             acctBettingLinksData.results = acctBettingLinksData.results.filter((_, i) => i !== idx);
+            renderBettingLinks();
+          });
+        });
+
+        // Drag-to-reorder — the array order here is exactly the order
+        // betting-resources.html renders (no separate sort field), so
+        // reordering the rows and saving is the whole feature. Sync the
+        // live form into acctBettingLinksData first so an in-progress
+        // edit in another row isn't lost by the splice/re-render.
+        let blDragSrcIdx = null;
+        acctBody.querySelectorAll(".br-result-row").forEach((row) => {
+          row.addEventListener("dragstart", (e) => {
+            blDragSrcIdx = Number(row.dataset.idx);
+            row.classList.add("dragging");
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", String(blDragSrcIdx));
+          });
+          row.addEventListener("dragend", () => {
+            row.classList.remove("dragging");
+            acctBody.querySelectorAll(".br-result-row.drag-over").forEach((r) => r.classList.remove("drag-over"));
+          });
+          row.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            if (Number(row.dataset.idx) !== blDragSrcIdx) row.classList.add("drag-over");
+          });
+          row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
+          row.addEventListener("drop", (e) => {
+            e.preventDefault();
+            row.classList.remove("drag-over");
+            const targetIdx = Number(row.dataset.idx);
+            if (blDragSrcIdx === null || targetIdx === blDragSrcIdx) return;
+            syncBettingLinksFormIntoData();
+            const list = acctBettingLinksData.results;
+            const [moved] = list.splice(blDragSrcIdx, 1);
+            list.splice(targetIdx, 0, moved);
+            blDragSrcIdx = null;
             renderBettingLinks();
           });
         });

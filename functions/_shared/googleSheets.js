@@ -147,7 +147,7 @@ export async function writeRowForDate(env, sheetId, tab, { leftBlock, rightBlock
   const scanEndColumn = columnLetter(columnIndex(rightBlock.startColumn) + rightBlock.width - 1);
   const scanRange = `${tab}!${leftBlock.startColumn}2:${scanEndColumn}1000`;
   const getUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(scanRange)}`;
-  const getRes = await fetch(getUrl, { headers: { Authorization: `Bearer ${token}` } });
+  const getRes = await fetchWithRetry(getUrl, { headers: { Authorization: `Bearer ${token}` } });
   if (!getRes.ok) throw new Error(`Sheets read failed (${getRes.status}): ${await getRes.text()}`);
   const data = await getRes.json();
   const rows = data.values || [];
@@ -175,7 +175,7 @@ export async function writeRowForDate(env, sheetId, tab, { leftBlock, rightBlock
   const writeRange = `${tab}!${activeBlock.startColumn}${targetRow}:${endColumn}${targetRow}`;
 
   const putUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(writeRange)}?valueInputOption=RAW`;
-  const putRes = await fetch(putUrl, {
+  const putRes = await fetchWithRetry(putUrl, {
     method: "PUT",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ values: [values] }),
@@ -194,7 +194,7 @@ export async function writeRowForDate(env, sheetId, tab, { leftBlock, rightBlock
 export async function getSheetTabTitles(env, sheetId) {
   const token = await getAccessToken(env);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties.title`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetchWithRetry(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`Sheets metadata read failed (${res.status}): ${await res.text()}`);
   const data = await res.json();
   return (data.sheets || []).map((s) => s.properties.title);
@@ -211,7 +211,7 @@ export async function batchGetValues(env, sheetId, ranges) {
   const token = await getAccessToken(env);
   const params = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join("&");
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values:batchGet?${params}&valueRenderOption=FORMATTED_VALUE`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetchWithRetry(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`Sheets batchGet failed (${res.status}): ${await res.text()}`);
   const data = await res.json();
   return data.valueRanges || [];
@@ -242,7 +242,7 @@ export async function getNextSequenceValue(env, sheetId, tab, column) {
   const token = await getAccessToken(env);
   const range = `${tab}!${column}2:${column}100000`;
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetchWithRetry(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`Sheets read failed (${res.status}): ${await res.text()}`);
   const data = await res.json();
   const rows = data.values || [];
@@ -294,13 +294,13 @@ export async function appendRowToSheet(env, sheetId, tabName, row) {
 }
 
 async function ensureTabWithHeaders(token, sheetId, tabName, headers) {
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`, {
+  await fetchWithRetry(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ requests: [{ addSheet: { properties: { title: tabName } } }] }),
   }).catch(() => {}); // ignore — a parallel request may have already created it
 
-  await fetch(
+  await fetchWithRetry(
     `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(tabName)}!A1?valueInputOption=RAW`,
     {
       method: "PUT",
@@ -311,11 +311,49 @@ async function ensureTabWithHeaders(token, sheetId, tabName, headers) {
 }
 
 function sheetsFetch(url, token, body, method = "POST") {
-  return fetch(url, {
+  return fetchWithRetry(url, {
     method,
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+/**
+ * Wraps fetch() with retries for TRANSIENT Google API failures — 429 (rate
+ * limit), 500/502/503/504 (Google-side hiccups, incl. the "The service is
+ * currently unavailable" / UNAVAILABLE error Sheets occasionally throws
+ * under load), and network-level throws (DNS blip, connection reset).
+ * Non-transient failures (400 bad range, 403 not shared with the service
+ * account, 404 missing sheet, etc.) are returned as-is on the first try —
+ * retrying those would just waste time since they'll never succeed.
+ *
+ * Backoff is exponential with jitter (~400ms, ~1000ms, ~2400ms) capped at
+ * 4 attempts total, which comfortably rides out the handful-of-seconds
+ * blips Google's status page usually reports for these 503s without
+ * making a real outage take much longer to surface to the caller.
+ */
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
+
+async function fetchWithRetry(url, options, { attempts = 4, baseDelayMs = 400 } = {}) {
+  let lastErr;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) {
+      const delay = baseDelayMs * 2 ** (attempt - 1) * (0.75 + Math.random() * 0.5);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+    try {
+      const res = await fetch(url, options);
+      if (res.ok || !RETRYABLE_STATUSES.has(res.status) || attempt === attempts - 1) {
+        return res;
+      }
+      lastErr = res; // retryable status but not the last attempt — try again
+    } catch (e) {
+      lastErr = e;
+      if (attempt === attempts - 1) throw e;
+      // otherwise fall through and retry on the next loop iteration
+    }
+  }
+  return lastErr;
 }
 
 function pemToArrayBuffer(pem) {

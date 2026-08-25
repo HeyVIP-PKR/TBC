@@ -1,23 +1,27 @@
 /**
  * POST /api/deposit-backup/search
  *
- * Deposit Backup — read-only search across one brand's "This Month" and
- * "Last Month" backup sheets (see functions/_shared/depositSheets.js for
- * how those two are stored/rotated). Deliberately modeled on Deposit
- * Issue's search.js (same auth gate, same tab-resolution/caching, same
- * per-brand access control, same "no All-Brand search — pick a brand
- * first" scaling guard), with three differences:
+ * Deposit Backup — read-only search across one brand's "This Month"
+ * backup sheet (see functions/_shared/depositSheets.js for how it's
+ * stored). Deliberately modeled on Deposit Issue's search.js (same auth
+ * gate, same tab-resolution/caching, same per-brand access control, same
+ * "no All-Brand search — pick a brand first" scaling guard), with two
+ * differences:
  *
  *   1. No update endpoint — this module is read-only by design (see
  *      PROJECT_STATUS.md decision). Results still include the CS-facing
  *      columns (CS PIC, Status CS, etc.) for reference, just not editable.
- *   2. Two sheets per brand instead of one — "This Month" and "Last
- *      Month" are searched together by default (per business owner's
- *      request), each tagged with which one a result came from.
- *   3. No hardcoded default sheet for any brand — Deposit Backup has no
+ *   2. No hardcoded default sheet for any brand — Deposit Backup has no
  *      Crickex-style bootstrap default; every brand starts unconfigured
  *      until a link is saved via the "Deposit Sheet Link" admin page's
- *      Deposit Backup rows.
+ *      Deposit Backup row.
+ *
+ * Used to also search a "Last Month" sheet alongside This Month —
+ * removed 2026-08 per direct business-owner request, along with the
+ * "Last Month" row everywhere else it was surfaced. The `month`/
+ * `monthLabel` fields on each result and the `missingMonths` response
+ * field are kept (still useful/self-describing) but will only ever be
+ * `"thisMonth"` / `["thisMonth"]` now.
  *
  * Column layout confirmed identical to Deposit Issue's own sheet (same
  * A–W layout, same header order) from the real "CXPKR ~ July 2026-BACK-UP"
@@ -59,7 +63,7 @@ const COLS = {
   remark: "W",
 };
 const LAST_COL = "W";
-const MAX_RESULTS = 500; // global cap across This Month + Last Month combined
+const MAX_RESULTS = 500; // global cap across This Month's tabs
 
 function normalizeTabName(name) {
   return String(name).normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
@@ -158,7 +162,6 @@ async function handleSearch({ request, env }) {
   const backup = await getDepositBackup(env, requestedBrand);
   const months = [];
   if (backup.thisMonth) months.push({ key: "thisMonth", label: "This Month", sheetId: backup.thisMonth.sheetId, tabNames: backup.thisMonth.tabNames });
-  if (backup.lastMonth) months.push({ key: "lastMonth", label: "Last Month", sheetId: backup.lastMonth.sheetId, tabNames: backup.lastMonth.tabNames });
 
   if (!months.length) {
     return json({ ok: true, results: [], notConfigured: true, brand: requestedBrand });
@@ -249,9 +252,9 @@ async function handleSearch({ request, env }) {
     }
   }
 
-  // Newest first — This Month and Last Month (and Success/Trx error
-  // within each) get interleaved by actual transaction time instead of
-  // staying grouped by sheet/tab order.
+  // Newest first — Success/Trx error tabs within This Month get
+  // interleaved by actual transaction time instead of staying grouped
+  // by tab order.
   results.sort((a, b) => b._sortTs - a._sortTs);
   results.forEach((r) => { delete r._sortTs; });
 
@@ -259,11 +262,9 @@ async function handleSearch({ request, env }) {
     ok: true,
     results,
     tabWarnings: tabWarnings.length ? tabWarnings : undefined,
-    // Which of This Month / Last Month simply isn't linked yet (not an
-    // error — perfectly normal early in a month, or before onboarding).
-    missingMonths: ["thisMonth", "lastMonth"].filter((k) => !months.some((m) => m.key === k)).length
-      ? ["thisMonth", "lastMonth"].filter((k) => !months.some((m) => m.key === k))
-      : undefined,
+    // Whether This Month simply isn't linked yet (not an error —
+    // perfectly normal before onboarding).
+    missingMonths: months.some((m) => m.key === "thisMonth") ? undefined : ["thisMonth"],
   });
 }
 

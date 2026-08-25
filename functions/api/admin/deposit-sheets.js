@@ -7,8 +7,7 @@
  *   GET
  *     -> { ok: true, brands: [{id,name}],
  *          sheets: { [brandId]: { sheetId, tabNames, isOverride } },
- *          backup: { [brandId]: { thisMonth: {sheetId,tabNames}|null,
- *                                  lastMonth: {sheetId,tabNames}|null } } }
+ *          backup: { [brandId]: { thisMonth: {sheetId,tabNames}|null } } }
  *        `isOverride: true` means it's a live KV override (edited through
  *        this page); `false` means it's still showing the hardcoded
  *        default (only "crickex" has one baked into search.js right now —
@@ -24,17 +23,13 @@
  *     that brand back to its hardcoded default (empty, for every brand
  *     except crickex). Requires canEditAdminSection(..., "depositSheets").
  *
- *   Deposit Backup — "This Month" / "Last Month" rotation. Only This
- *   Month is ever directly editable; Last Month is read-only in the UI
- *   and only changes via the rollover action. See depositSheets.js for
- *   the full reasoning.
+ *   Deposit Backup — "This Month" only (the old "Last Month" half and
+ *   its rollover action were removed 2026-08 per direct business-owner
+ *   request — see depositSheets.js for the full reasoning).
  *   POST { action:"saveBackupThisMonth", brandId, sheetUrlOrId, tabNames }
- *     -> overwrites This Month only, leaves Last Month untouched.
+ *     -> overwrites This Month.
  *   POST { action:"clearBackupThisMonth", brandId }
- *     -> clears This Month only (no hardcoded default to fall back to).
- *   POST { action:"rollBackup", brandId }
- *     -> This Month becomes the new Last Month (discarding whatever was
- *        there), This Month is cleared out ready for the new link.
+ *     -> clears This Month (no hardcoded default to fall back to).
  *
  * MODULE_SLOT / DEFAULT_CRICKEX below are hand-copied from
  * functions/api/deposit-issue/search.js's own constants — keep in sync
@@ -50,7 +45,6 @@ import {
   getDepositBackup,
   saveDepositBackupThisMonth,
   clearDepositBackupThisMonth,
-  rollDepositBackup,
 } from "../../_shared/depositSheets.js";
 import { logActivity } from "../../_shared/activityLog.js";
 
@@ -93,10 +87,10 @@ async function handleGet({ request, env }) {
       : { ...defaultFor(brandId), isOverride: false };
   }
 
-  // Deposit Backup: This Month / Last Month, no hardcoded default for
-  // any brand (unlike Deposit Issue's Crickex fallback) — every brand
-  // starts fully empty until someone saves a link. Fetched in parallel
-  // (not one brand at a time) — same reason getAllDepositSheetOverrides()
+  // Deposit Backup: This Month only, no hardcoded default for any brand
+  // (unlike Deposit Issue's Crickex fallback) — every brand starts fully
+  // empty until someone saves a link. Fetched in parallel (not one brand
+  // at a time) — same reason getAllDepositSheetOverrides()
   // above does too: 9 sequential KV round-trips is what was making this
   // modal noticeably slow to open.
   const backupEntries = await Promise.all(brandIds.map(async (brandId) => [brandId, await getDepositBackup(env, brandId)]));
@@ -169,12 +163,6 @@ async function handlePost({ request, env, waitUntil }) {
     log({ action: "Gsheet Route Reset", detail: `Deposit Backup (This Month) — ${brandName} cleared` });
     return json({ ok: true, brandId, backup: updated });
   }
-  if (body.action === "rollBackup") {
-    const updated = await rollDepositBackup(env, brandId);
-    log({ action: "Gsheet Route Changed", detail: `Deposit Backup — ${brandName}: This Month rolled into Last Month` });
-    return json({ ok: true, brandId, backup: updated });
-  }
-
   return json({ ok: false, error: `Unknown action "${body.action}".` }, 400);
 }
 

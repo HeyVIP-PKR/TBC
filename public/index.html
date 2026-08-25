@@ -1324,7 +1324,7 @@ html[data-theme="light"] {
       `).join("");
 
       const slot = sheets[acctDepositSheetsSelectedBrand] || { sheetId: "", tabNames: [], isOverride: false };
-      const bkp = backup[acctDepositSheetsSelectedBrand] || { thisMonth: null, lastMonth: null };
+      const bkp = backup[acctDepositSheetsSelectedBrand] || { thisMonth: null };
       const thisMonth = bkp.thisMonth;
 
       acctBody.innerHTML = `
@@ -1437,7 +1437,7 @@ html[data-theme="light"] {
 
     async function clearDepositBackupThisMonth(row) {
       const brandId = row.dataset.brand;
-      if (!confirm("Clear This Month's backup sheet link? Last Month is not affected.")) return;
+      if (!confirm("Clear This Month's backup sheet link?")) return;
       setAcctNote("Clearing…");
       const res = await window.AgentAuth.authFetch("/api/admin/deposit-sheets", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -1450,13 +1450,14 @@ html[data-theme="light"] {
       renderDepositSheets();
     }
 
-    // rollDepositBackup() ("Transfer from This Month" -> Last Month)
-    // removed 2026-08 alongside the "Deposit Backup — Last month" row
-    // itself, per direct business-owner request. Last Month's data (if
-    // any brand had one configured) is untouched in KV/deposit-backup/
-    // search.js — it still gets searched alongside This Month on
-    // /deposit-backup.html exactly as before, it just can no longer be
-    // viewed, cleared, or refreshed from this admin panel going forward.
+    // The "Deposit Backup — Last month" row (and its "Transfer from This
+    // Month" rollover action) was removed here in 2026-08, per direct
+    // business-owner request. It's now removed end-to-end: KV no longer
+    // stores a lastMonth half, deposit-backup/search.js only ever reads
+    // This Month, and /deposit-backup.html's brand directory and results
+    // only ever show This Month. Any old lastMonth data left over from
+    // before this change is simply unreachable now, not deleted —
+    // harmless, since nothing reads that field anymore.
 
     // ---- Web Link (2026-08) — the URL each brand's pill on the Home
     // page's marquee row (#brandRow) opens when clicked. This USED TO

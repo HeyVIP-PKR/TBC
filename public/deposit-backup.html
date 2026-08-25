@@ -281,7 +281,7 @@ html[data-theme="light"] {
         <span class="header-icon">💻</span>
         <div>
           <div class="dep-header-title">Deposit Backup</div>
-          <div class="dep-header-sub">Search across This Month + Last Month backup sheets (read-only)</div>
+          <div class="dep-header-sub">Search across This Month's backup sheet (read-only)</div>
         </div>
       </div>
       <a href="#" id="openSheetBtn" class="dep-open-sheet is-hidden" target="_blank" rel="noopener">📄 Open Sheet</a>
@@ -304,7 +304,7 @@ html[data-theme="light"] {
         <textarea id="depQ" placeholder="Enter Transaction ID, Reference, Username, or Agent Number..." rows="1"></textarea>
         <button class="dep-search-btn" id="depBtn"><span>🔍</span><span>Search</span></button>
       </div>
-      <div class="dep-hint">Searches Transaction ID, Reference, Username, and Agent Number across This Month + Last Month. Separate multiple terms with <span class="kw">comma</span> — e.g. DGT4UBWVNM, ABC123, XYZ789</div>
+      <div class="dep-hint">Searches Transaction ID, Reference, Username, and Agent Number across This Month. Separate multiple terms with <span class="kw">comma</span> — e.g. DGT4UBWVNM, ABC123, XYZ789</div>
       <div class="dep-chips" id="depChips"></div>
     </div>
 
@@ -461,14 +461,14 @@ html[data-theme="light"] {
   // be individually stripped out.
   function syncEditPanelHeight() {}
 
-  // Deposit Backup's month pill: green-tinted "This Month" vs a muted
-  // "Last Month" — distinct from the blue brand/tab pill so a result's
-  // recency is visible at a glance, not just readable in the tab name.
-  // Brand itself isn't repeated per-card since it's already fixed by the
-  // brand dropdown above (searching is always one brand at a time).
+  // Deposit Backup's month pill — green-tinted "This Month", distinct
+  // from the blue brand/tab pill so it's visible at a glance, not just
+  // readable in the tab name. Brand itself isn't repeated per-card since
+  // it's already fixed by the brand dropdown above (searching is always
+  // one brand at a time). Only "This Month" exists now — the "Last
+  // Month" half was removed 2026-08 per direct business-owner request.
   function monthPill(r) {
-    var cls = r.month === 'thisMonth' ? 'dep-p-green' : 'dep-py';
-    return '<span class="dep-pill ' + cls + '">' + escapeHtml(r.monthLabel || '') + '</span>';
+    return '<span class="dep-pill dep-p-green">' + escapeHtml(r.monthLabel || '') + '</span>';
   }
 
   function showDep(data) {
@@ -562,8 +562,9 @@ html[data-theme="light"] {
 
   // "All Brands" is a directory, not a search — see doDep()'s guard
   // below for why actual searching is blocked in this mode. Fetches
-  // each accessible brand's This Month / Last Month sheet IDs once and
-  // renders a card per brand with up to two "Open Sheet" links.
+  // each accessible brand's This Month sheet ID once and renders a card
+  // per brand with an "Open Sheet" link. (Used to also show a "Last
+  // Month" link — removed 2026-08 per direct business-owner request.)
   async function showBrandDirectory() {
     gi('depLbl').textContent = 'All Brands';
     gi('depRes').innerHTML = '<div class="dep-state">Loading brand sheets…</div>';
@@ -581,7 +582,7 @@ html[data-theme="light"] {
         }
         return '<div class="dep-dir-row">'
           + '<div class="dep-dir-left">'+logo+'<span class="dep-dir-name">'+escapeHtml(b.name)+' Deposit Backup</span></div>'
-          + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+openLink('This Month', b.thisMonthSheetId)+openLink('Last Month', b.lastMonthSheetId)+'</div>'
+          + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+openLink('This Month', b.thisMonthSheetId)+'</div>'
           + '</div>';
       }).join('');
     } catch (e) {
@@ -608,7 +609,7 @@ html[data-theme="light"] {
       btn.disabled = false;
       if (!data.ok) { gi('depRes').innerHTML = '<div class="dep-state err">'+escapeHtml(data.error||'Search failed.')+'</div>'; return; }
       if (data.notConfigured) {
-        gi('depRes').innerHTML = '<div class="dep-state">This brand doesn\u2019t have a This Month or Last Month backup sheet linked yet. Add it in Account Management \u2192 Deposit Sheet Link.</div>';
+        gi('depRes').innerHTML = '<div class="dep-state">This brand doesn\u2019t have a This Month backup sheet linked yet. Add it in Account Management \u2192 Deposit Sheet Link.</div>';
         return;
       }
       var warningHtml = (data.tabWarnings || []).map(function (w) {
@@ -619,8 +620,7 @@ html[data-theme="light"] {
         return '<div class="dep-tab-warning">' + head + '</div>';
       }).join('');
       if (data.missingMonths && data.missingMonths.length) {
-        var labels = data.missingMonths.map(function(k){ return k === 'thisMonth' ? 'This Month' : 'Last Month'; });
-        warningHtml += '<div class="dep-tab-warning">\u2139\ufe0f Not searched (no sheet linked yet): ' + labels.map(escapeHtml).join(', ') + '</div>';
+        warningHtml += '<div class="dep-tab-warning">\u2139\ufe0f Not searched (no sheet linked yet): This Month</div>';
       }
       showDep(data.results || []);
       if (warningHtml) gi('depRes').innerHTML = warningHtml + gi('depRes').innerHTML;
